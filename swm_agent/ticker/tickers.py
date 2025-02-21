@@ -1,4 +1,4 @@
-from ticker.ticker import Ticker
+from .ticker import Ticker
 
 
 class PolymarketTicker(Ticker):
@@ -7,4 +7,4 @@ class PolymarketTicker(Ticker):
 
     @property
     def symbol(self) -> str:
-        return "TEST"
+        return 'TEST'

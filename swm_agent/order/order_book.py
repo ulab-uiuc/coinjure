@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List
 
 
 @dataclass
@@ -8,13 +7,15 @@ class Level:
     price: Decimal
     size: Decimal
 
-class OrderBook:
-    def __init__(self):
-        self.asks: List[Level] = []
-        self.bids: List[Level] = []
 
-    def update(self, asks: List[Level], bids: List[Level]):
-        pass
+class OrderBook:
+    def __init__(self) -> None:
+        self.asks: list[Level] = []
+        self.bids: list[Level] = []
+
+    def update(self, asks: list[Level], bids: list[Level]) -> None:
+        self.asks = asks
+        self.bids = bids
 
     @property
     def best_ask(self) -> Level | None:
@@ -26,10 +27,10 @@ class OrderBook:
         """Get the best bid"""
         return self.bids[0] if self.bids else None
 
-    def get_asks(self, depth: int | None = None) -> List[Level]:
+    def get_asks(self, depth: int | None = None) -> list[Level]:
         """Get asks"""
         return self.asks[:depth] if depth else self.asks
 
-    def get_bids(self, depth: int | None = None) -> List[Level]:
+    def get_bids(self, depth: int | None = None) -> list[Level]:
         """Get bids"""
         return self.bids[:depth] if depth else self.bids

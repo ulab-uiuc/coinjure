@@ -1,7 +1,6 @@
-from typing import List
-
-from data.data_source import DataSource
 from events.events import Event
+
+from ..data_source import DataSource
 
 
 class HistoricalDataSource(DataSource):
@@ -10,11 +9,11 @@ class HistoricalDataSource(DataSource):
         self.events = self._load_events()
         self.index = 0
 
-    def _load_events(self) -> List[Event]:
-        events = []
+    def _load_events(self) -> list[Event]:
+        events: list[Event] = []
         return events
 
-    async def get_next_event(self):
+    async def get_next_event(self) -> Event | None:
         if self.index < len(self.events):
             event = self.events[self.index]
             self.index += 1

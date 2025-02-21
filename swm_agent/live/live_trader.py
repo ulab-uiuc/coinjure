@@ -1,7 +1,7 @@
 import asyncio
 
 
-async def run_live_trading():
+async def run_live_trading() -> None:
     pass
 
 

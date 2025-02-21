@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List
 
 from trader.types import Trade
 
@@ -16,13 +15,14 @@ class TradeStats:
     max_drawdown: Decimal
     sharpe_ratio: Decimal
 
-class PerformanceAnalyzer:
-    def __init__(self):
-        self.trades: List[Trade] = []
 
-    def add_trade(self, trade: Trade):
+class PerformanceAnalyzer:
+    def __init__(self) -> None:
+        self.trades: list[Trade] = []
+
+    def add_trade(self, trade: Trade) -> None:
         self.trades.append(trade)
         self._update_metrics()
 
-    def _update_metrics(self):
+    def _update_metrics(self) -> None:
         pass

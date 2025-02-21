@@ -1,4 +1,4 @@
-from data.data_source import DataSource
+from ..data_source import DataSource
 
 
 class LiveDataSource(DataSource):
