@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "python-project-template"
+name = "swm-agent"
 version = "0.0.1"
-description = "A template for python-based research project"
+description = "Trading agent on polymarket based on social world model."
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
 license = "Apache 2.0 License"
 readme = "README.md"
