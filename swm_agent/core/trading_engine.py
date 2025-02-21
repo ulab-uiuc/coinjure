@@ -6,9 +6,10 @@ from trader.trader import Trader
 
 class TradingEngine:
     def __init__(self,
-                 data_source: DataSource,
-                 strategy: Strategy,
-                 trader: Trader):
+        data_source: DataSource,
+        strategy: Strategy,
+        trader: Trader
+    ) -> None:
         self.data_source = data_source
         self.strategy = strategy
         self.trader = trader

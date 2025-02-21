@@ -6,13 +6,13 @@ from ticker.ticker import Ticker
 
 
 class MarketDataManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.order_books: Dict[Ticker, OrderBook] = {}
 
-    def update_order_book(self, ticker: Ticker, order_book: OrderBook):
+    def update_order_book(self, ticker: Ticker, order_book: OrderBook) -> None:
         self.order_books[ticker] = order_book
 
-    def process_orderbook_event(self, event: OrderBookEvent):
+    def process_orderbook_event(self, event: OrderBookEvent) -> None:
         """Update order book"""
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()

@@ -2,7 +2,7 @@ from ticker.ticker import Ticker
 
 
 class PolymarketTicker(Ticker):
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     @property
