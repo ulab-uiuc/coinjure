@@ -21,7 +21,9 @@ repos:
     rev: v0.3.0
     hooks:
       - id: ruff
-        args: [--fix]
+        args:
+          - --fix
+          - --select=I
       - id: ruff-format
 
   - repo: https://github.com/commitizen-tools/commitizen
