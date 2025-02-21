@@ -1,13 +1,13 @@
 from data.data_source import DataSource
+from events.events import OrderBookEvent
 from strategy.strategy import Strategy
 from trader.trader import Trader
-from data.market_data_manager import MarketDataManager
-from events.events import OrderBookEvent
+
 
 class TradingEngine:
-    def __init__(self, 
-                 data_source: DataSource, 
-                 strategy: Strategy, 
+    def __init__(self,
+                 data_source: DataSource,
+                 strategy: Strategy,
                  trader: Trader):
         self.data_source = data_source
         self.strategy = strategy

@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Dict
+
 from ticker.ticker import Ticker
 from trader.types import TradeSide
+
 
 class RiskManager(ABC):
     @abstractmethod
@@ -12,4 +13,4 @@ class RiskManager(ABC):
 
 class NoRiskManager(RiskManager):
     async def check_trade(self, ticker: Ticker, side: TradeSide, quantity: Decimal, price: Decimal) -> bool:
-        return True 
+        return True

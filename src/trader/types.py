@@ -1,8 +1,10 @@
-from enum import Enum
-from decimal import Decimal
 from dataclasses import dataclass
+from decimal import Decimal
+from enum import Enum
 from typing import List
+
 from ticker.ticker import Ticker
+
 
 class TradeSide(Enum):
     BUY = "buy"

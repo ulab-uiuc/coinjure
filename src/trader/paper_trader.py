@@ -1,17 +1,24 @@
-from decimal import Decimal
 import random
-from dataclasses import dataclass
-from typing import List, Dict
+from decimal import Decimal
+from typing import List
 
-from trader.trader import Trader
-from trader.types import TradeSide, Trade, PlaceOrderResult, OrderStatus, OrderFailureReason, Fill
-from ticker.ticker import Ticker
 from data.market_data_manager import MarketDataManager
-from risk.risk_manager import RiskManager
 from position.position_manager import PositionManager
+from risk.risk_manager import RiskManager
+from ticker.ticker import Ticker
+from trader.trader import Trader
+from trader.types import (
+    Fill,
+    OrderFailureReason,
+    OrderStatus,
+    PlaceOrderResult,
+    Trade,
+    TradeSide,
+)
+
 
 class PaperTrader(Trader):
-    def __init__(self, 
+    def __init__(self,
                  market_data: MarketDataManager,
                  risk_manager: RiskManager,
                  position_manager: PositionManager,
@@ -31,33 +38,33 @@ class PaperTrader(Trader):
             None if no fill
         """
         levels = self.market_data.get_asks(ticker) if side == TradeSide.BUY else self.market_data.get_bids(ticker)
-        
+
         # Calculate available liquidity within our price limit
         available_liquidity = Decimal('0')
         for level in levels:
             if (side == TradeSide.BUY and level.price <= limit_price) or \
                (side == TradeSide.SELL and level.price >= limit_price):
                 available_liquidity += level.size
-            
+
         # Simulate that not all liquidity is actually available
         fill_rate = Decimal(str(random.uniform(self.min_fill_rate, self.max_fill_rate)))
         available_liquidity *= fill_rate
-        
+
         # Calculate how much we can fill
         filled_qty = min(quantity, available_liquidity)
         if filled_qty == Decimal('0'):
             return None
-            
+
         # Pessimistic fill it at the limit price
         fills: List[Fill] = []
         fills.append(Fill(
             price=limit_price,
             quantity=filled_qty
         ))
-        
+
         remaining = quantity - filled_qty
         commission = filled_qty * limit_price * self.commission_rate
-        
+
         return Trade(
             side=side,
             ticker=ticker,
@@ -76,7 +83,7 @@ class PaperTrader(Trader):
                 status=OrderStatus.REJECTED,
                 failure_reason=OrderFailureReason.INVALID_ORDER
             )
-        
+
         # Don't allow short selling
         if side == TradeSide.SELL:
             position = self.position_manager.get_position(ticker)
@@ -85,7 +92,7 @@ class PaperTrader(Trader):
                     status=OrderStatus.REJECTED,
                     failure_reason=OrderFailureReason.INVALID_ORDER
                 )
-        
+
         # TODO: check if we have enough cash
 
         # Check risk limits
@@ -97,7 +104,7 @@ class PaperTrader(Trader):
 
         # Execute order
         trade = self._simulate_execution(side, ticker, limit_price, quantity)
-        
+
         # No fill
         if trade is None:
             return PlaceOrderResult(
@@ -115,7 +122,7 @@ class PaperTrader(Trader):
 
         # Store trade
         self.trades.append(trade)
-        
+
         if trade.filled_quantity == quantity:
             return PlaceOrderResult(
                 status=OrderStatus.FILLED,
@@ -126,4 +133,3 @@ class PaperTrader(Trader):
                 status=OrderStatus.PARTIALLY_FILLED,
                 trade=trade
             )
-                

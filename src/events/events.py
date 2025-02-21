@@ -1,6 +1,9 @@
 from abc import ABC
 from decimal import Decimal
+
 from ticker.ticker import Ticker
+
+
 class Event(ABC):
     pass
 

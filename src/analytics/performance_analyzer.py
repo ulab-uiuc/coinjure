@@ -1,8 +1,9 @@
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import List
-from dataclasses import dataclass
-from datetime import datetime
+
 from trader.types import Trade
+
 
 @dataclass
 class TradeStats:
@@ -18,10 +19,10 @@ class TradeStats:
 class PerformanceAnalyzer:
     def __init__(self):
         self.trades: List[Trade] = []
-        
+
     def add_trade(self, trade: Trade):
         self.trades.append(trade)
         self._update_metrics()
-        
+
     def _update_metrics(self):
         pass

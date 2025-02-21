@@ -1,6 +1,8 @@
 from typing import List
+
 from data.data_source import DataSource
 from events.events import Event
+
 
 class HistoricalDataSource(DataSource):
     def __init__(self, history_file: str):

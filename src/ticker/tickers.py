@@ -1,5 +1,6 @@
 from ticker.ticker import Ticker
 
+
 class PolymarketTicker(Ticker):
     def __init__(self):
         pass
