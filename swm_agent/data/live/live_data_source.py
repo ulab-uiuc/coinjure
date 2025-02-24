@@ -16,7 +16,6 @@ class LiveDataSource(DataSource):
     ):
         self.event_cache_file = event_cache_file
         self.polling_interval = polling_interval
-        self.current_offset = 0
         self.processed_event_ids = set()
         self.event_queue = asyncio.Queue()
 
@@ -30,12 +29,11 @@ class LiveDataSource(DataSource):
     async def _fetch_events(self):
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'https://gamma-api.polymarket.com/events?offset={self.current_offset}&limit=100'
+                f'https://gamma-api.polymarket.com/events?active=true&closed=false&limit=100'
             )
 
             if response.status_code == 200:
                 events = response.json()
-                self.current_offset += len(events)
                 return events
             return []
 
