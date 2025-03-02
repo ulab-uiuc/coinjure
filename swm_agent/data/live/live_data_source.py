@@ -1,10 +1,12 @@
 import asyncio
 import json
 import os
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set
 
+import feedparser
 import httpx
 from py_clob_client.client import ClobClient
 
@@ -476,6 +478,249 @@ class LiveNewsDataSource(DataSource):
     async def start(self) -> None:
         asyncio.create_task(self._poll_data())
 
+    async def get_next_event(self) -> Optional[NewsEvent]:
+        try:
+            return await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            return None
+        
+
+class LiveRSSNewsDataSource(DataSource):
+    cache_file: str
+    polling_interval: float
+    max_articles_per_poll: int
+    languages: List[str]
+    categories: List[str]
+    processed_article_ids: Set[str]
+    event_queue: asyncio.Queue
+
+    RSS_FEEDS = {
+        'https://feeds.content.dowjones.io/public/rss/RSSOpinion': ['opinion'],
+        'https://feeds.content.dowjones.io/public/rss/RSSWorldNews': ['world'],
+        'https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness': ['business'],
+        'https://feeds.content.dowjones.io/public/rss/RSSMarketsMain': ['finance'],
+        'https://feeds.content.dowjones.io/public/rss/RSSWSJD': ['technology'],
+        'https://feeds.content.dowjones.io/public/rss/RSSLifestyle': ['lifestyle'],
+        'https://feeds.content.dowjones.io/public/rss/RSSUSnews': ['us'],
+        'https://feeds.content.dowjones.io/public/rss/socialpoliticsfeed': ['politics'],
+        'https://feeds.content.dowjones.io/public/rss/socialeconomyfeed': ['economy'],
+        'https://feeds.content.dowjones.io/public/rss/RSSArtsCulture': ['arts'],
+        'https://feeds.content.dowjones.io/public/rss/latestnewsrealestate': ['real estate'],
+        'https://feeds.content.dowjones.io/public/rss/RSSPersonalFinance': ['personal finance'],
+        'https://feeds.content.dowjones.io/public/rss/socialhealth': ['health'],
+        'https://feeds.content.dowjones.io/public/rss/RSSStyle': ['style'],
+        'https://feeds.content.dowjones.io/public/rss/rsssportsfeed': ['sports'],
+    }
+    
+    def __init__(
+        self,
+        cache_file: str = 'rss_news_cache.jsonl',
+        polling_interval: float = 300.0,
+        max_articles_per_poll: int = 10,
+        categories: List[str] = None,
+    ):
+        self.cache_file = cache_file
+        self.polling_interval = polling_interval
+        self.max_articles_per_poll = max_articles_per_poll
+        self.languages = ['en-us']
+        self.categories = categories or []
+        feedparser.CACHE_DIRECTORY = None
+        feedparser._check_cache = lambda *args, **kwargs: None
+        self.processed_article_ids = set()
+        self.event_queue = asyncio.Queue()
+        self._load_processed_articles()
+    
+    def _load_processed_articles(self) -> None:
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        article = json.loads(line.strip())
+                        if 'uuid' in article:
+                            self.processed_article_ids.add(article['uuid'])
+            except Exception as e:
+                print(f'Error loading article cache: {e}')
+    
+    def _save_article(self, article: Dict[str, Any]) -> None:
+        try:
+            with open(self.cache_file, 'a', encoding='utf-8') as f:
+                json.dump(article, f, ensure_ascii=False)
+                f.write('\n')
+        except Exception as e:
+            print(f'Error saving article: {e}')
+    
+    def _extract_image_url(self, entry) -> str:
+        if 'media_content' in entry:
+            for media in entry.get('media_content', []):
+                if isinstance(media, dict) and 'url' in media:
+                    return media.get('url', '')
+        if 'media_thumbnail' in entry:
+            for media in entry.get('media_thumbnail', []):
+                if isinstance(media, dict) and 'url' in media:
+                    return media.get('url', '')
+        return ''
+    
+    def _create_news_event(self, entry, feed_title, tags) -> NewsEvent:
+        title = entry.get('title', 'No title')
+
+        description = entry.get('description', '')
+
+        if not description and 'summary' in entry:
+            description = entry.get('summary', '')
+
+        link = entry.get('link', '')
+
+        guid = entry.get('guid', '')
+        if isinstance(guid, dict):
+            guid = guid.get('value', '')
+        if not guid:
+            guid = link
+        if not guid:
+            guid = str(uuid.uuid4())
+
+        published_at = datetime.now(timezone.utc)
+        if 'pubDate' in entry:
+            try:
+                pub_date_str = entry.get('pubDate', '')
+                published_at = datetime.strptime(
+                    pub_date_str, '%a, %d %b %Y %H:%M:%S %Z'
+                ).replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing date '{entry.get('pubDate', '')}': {e}")
+        authors = []
+        if 'author' in entry:
+            authors.append(entry.get('author', ''))
+        if 'dc_creator' in entry:
+            if isinstance(entry.get('dc_creator', []), list):
+                authors.extend(entry.get('dc_creator', []))
+            else:
+                authors.append(entry.get('dc_creator', ''))
+        news_content = f'{title}: {description}' if description else title
+        image_url = self._extract_image_url(entry)
+        return NewsEvent(
+            news=news_content,
+            title=title,
+            source=feed_title,
+            url=link,
+            published_at=published_at,
+            categories=tags,
+            description=description,
+            image_url=image_url,
+            uuid=guid,
+            event_id=guid,
+        )
+    
+    async def _retry_on_error(
+        self, func, *args, retries: int = 3, delay: int = 2, **kwargs
+    ) -> Any:
+        for attempt in range(retries):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                print(f'Attempt {attempt + 1} failed: {e}')
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+    
+    async def _fetch_rss_feeds(self) -> List[Dict[str, Any]]:
+        results = []
+        processed_count = 0
+
+        for feed_url, tags in self.RSS_FEEDS.items():
+            if processed_count >= self.max_articles_per_poll:
+                break
+
+            try:
+                print(f'Fetching {feed_url}')
+                feed = feedparser.parse(feed_url)
+
+                if not feed or not hasattr(feed, 'entries'):
+                    print(f'Feed from {feed_url} is invalid')
+                    continue
+
+                feed_title = "Unknown Source"
+                if hasattr(feed, 'feed') and hasattr(feed.feed, 'title'):
+                    feed_title = feed.feed.title
+
+                if self.categories and not any(cat in tags for cat in self.categories):
+                    continue
+
+                for entry in feed.entries:
+                    if processed_count >= self.max_articles_per_poll:
+                        break
+
+                    guid = entry.get('guid', '')
+                    if isinstance(guid, dict):
+                        guid = guid.get('value', '')
+                    if not guid:
+                        guid = entry.get('link', '')
+                    if not guid:
+                        guid = str(uuid.uuid4())
+
+                    if guid in self.processed_article_ids:
+                        print(f'Skipping processed article: {guid}')
+                        continue
+
+                    results.append((entry, feed_title, tags))
+                    processed_count += 1
+
+            except Exception as e:
+                print(f'Error fetching feed {feed_url}: {e}')
+                import traceback
+                traceback.print_exc()
+        return results
+    
+    async def _poll_data(self) -> None:
+        while True:
+            try:
+
+                news_items = await self._retry_on_error(self._fetch_rss_feeds)
+
+                for entry, feed_title, tags in news_items:
+                    try:
+                        guid = entry.get('guid', '')
+                        if isinstance(guid, dict):
+                            guid = guid.get('value', '')
+                        if not guid:
+                            guid = entry.get('link', '')
+                        if not guid:
+                            guid = str(uuid.uuid4())
+
+                        article = {
+                            'uuid': guid,
+                            'title': entry.get('title', 'No title'),
+                            'description': entry.get('description', ''),
+                            'link': entry.get('link', ''),
+                            'pubDate': entry.get('pubDate', ''),
+                            'source': feed_title,
+                            'categories': tags,
+                            'image_url': self._extract_image_url(entry),
+                        }
+
+                        event = self._create_news_event(entry, feed_title, tags)
+
+                        await self.event_queue.put(event)
+
+                        self.processed_article_ids.add(guid)
+                        self._save_article(article)
+                    except Exception as e:
+                        print(f'Error processing article: {e}')
+                        import traceback
+                        traceback.print_exc()
+                        continue
+
+            except Exception as e:
+                print(f'Error in polling loop: {e}')
+                import traceback
+                traceback.print_exc()
+
+            print(f'Sleeping for {self.polling_interval} seconds')
+            await asyncio.sleep(self.polling_interval)
+    
+    async def start(self) -> None:
+        asyncio.create_task(self._poll_data())
+    
     async def get_next_event(self) -> Optional[NewsEvent]:
         try:
             return await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
