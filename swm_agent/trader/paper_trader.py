@@ -9,7 +9,7 @@ from data.market_data_manager import MarketDataManager
 
 from .trader import Trader
 from .types import (
-    Fill,
+    Order,
     OrderFailureReason,
     OrderStatus,
     PlaceOrderResult,
@@ -29,19 +29,15 @@ class PaperTrader(Trader):
         commission_rate: Decimal,
     ):
         super().__init__(market_data, risk_manager, position_manager)
-        self.trades: list[Trade] = []
+        self.orders: list[Order] = []
         self.min_fill_rate = min_fill_rate
         self.max_fill_rate = max_fill_rate
         self.commission_rate = commission_rate
 
     def _simulate_execution(
         self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
-    ) -> Trade | None:
-        """Simulate order execution based on current market data
-        Returns:
-            Trade if there is any fill
-            None if no fill
-        """
+    ) -> Order:
+        """Simulate order execution based on current market data"""
         levels = (
             self.market_data.get_asks(ticker)
             if side == TradeSide.BUY
@@ -67,22 +63,42 @@ class PaperTrader(Trader):
         # Calculate how much we can fill
         filled_qty = min(quantity, available_liquidity)
         if filled_qty == Decimal('0.0'):
-            return None
+            return Order(
+                status=OrderStatus.PLACED,
+                side=side,
+                ticker=ticker,
+                limit_price=limit_price,
+                filled_quantity=Decimal('0.0'),
+                average_price=Decimal('0.0'),
+                trades=[],
+                remaining=quantity,
+                commission=Decimal('0.0'),
+            )
 
         # Pessimistic fill it at the limit price
-        fills: list[Fill] = []
-        fills.append(Fill(price=limit_price, quantity=filled_qty))
+        trades: list[Trade] = [
+            Trade(
+                side=side,
+                ticker=ticker,
+                price=limit_price,
+                quantity=filled_qty,
+                commission=filled_qty * limit_price * self.commission_rate,
+            )
+        ]
 
         remaining = quantity - filled_qty
-        commission = filled_qty * limit_price * self.commission_rate
+        commission = sum(trade.commission for trade in trades)
 
-        return Trade(
+        return Order(
+            status=OrderStatus.FILLED
+            if remaining == Decimal('0.0')
+            else OrderStatus.PARTIALLY_FILLED,
             side=side,
             ticker=ticker,
             limit_price=limit_price,
             filled_quantity=filled_qty,
             average_price=limit_price,
-            fills=fills,
+            trades=trades,
             remaining=remaining,
             commission=commission,
         )
@@ -93,7 +109,7 @@ class PaperTrader(Trader):
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
             return PlaceOrderResult(
-                status=OrderStatus.REJECTED,
+                order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
             )
 
@@ -102,43 +118,37 @@ class PaperTrader(Trader):
             position = self.position_manager.get_position(ticker)
             if position is None or position.quantity < quantity:
                 return PlaceOrderResult(
-                    status=OrderStatus.REJECTED,
+                    order=None,
                     failure_reason=OrderFailureReason.INVALID_ORDER,
                 )
 
-        # TODO: check if we have enough cash
+        # Check if we have enough cash
+        if side == TradeSide.BUY:
+            cash_position = self.position_manager.get_position(ticker.collateral)
+            cash_required = quantity * limit_price * (1 + self.commission_rate)
+            if cash_position is None or cash_position.quantity < cash_required:
+                return PlaceOrderResult(
+                    order=None,
+                    failure_reason=OrderFailureReason.INSUFFICIENT_CASH,
+                )
 
         # Check risk limits
         if not self.risk_manager.check_trade(
             ticker.symbol, side, quantity, limit_price
         ):
             return PlaceOrderResult(
-                status=OrderStatus.REJECTED,
+                order=None,
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,
             )
 
         # Execute order
-        trade = self._simulate_execution(side, ticker, limit_price, quantity)
-
-        # No fill
-        if trade is None:
-            return PlaceOrderResult(status=OrderStatus.PLACED, trade=None)
+        order = self._simulate_execution(side, ticker, limit_price, quantity)
 
         # Update position
-        self.position_manager.update_position(
-            ticker,
-            trade.filled_quantity if side == TradeSide.BUY else -trade.filled_quantity,
-            trade.average_price,
-        )
-        # TODO: Update cash balance
+        for trade in order.trades:
+            self.position_manager.apply_trade(trade)
 
-        # Store trade
-        self.trades.append(trade)
+        # Store order
+        self.orders.append(order)
 
-        if trade.filled_quantity == quantity:
-            return PlaceOrderResult(status=OrderStatus.FILLED, trade=trade)
-        else:
-            return PlaceOrderResult(
-                status=OrderStatus.PARTIALLY_FILLED,
-                trade=trade,
-            )
+        return PlaceOrderResult(order=order)
