@@ -22,6 +22,7 @@ class Ticker(ABC):
         """The ticker of the collateral currency"""
         pass
 
+
 @dataclass
 class PolyMarketTicker(Ticker):
     def __init__(
@@ -47,7 +48,7 @@ class PolyMarketTicker(Ticker):
     def name(self) -> str:
         """The name of the ticker"""
         return self._name
-    
+
     @property
     def collateral(self) -> 'Ticker':
         """The ticker of the collateral currency"""
@@ -89,10 +90,13 @@ class CashTicker(Ticker):
     def name(self) -> str:
         """The name of the cash ticker"""
         return self._name
-    
+
     @property
     def collateral(self) -> 'Ticker':
         """The ticker of the collateral currency"""
-        raise NotImplementedError("Cash tickers do not have a collateral ticker")
+        raise NotImplementedError('Cash tickers do not have a collateral ticker')
 
-CashTicker.POLYMARKET_USDC = CashTicker(symbol="PolyMarket_USDC", name="PolyMarket USDC")
+
+CashTicker.POLYMARKET_USDC = CashTicker(
+    symbol='PolyMarket_USDC', name='PolyMarket USDC'
+)

@@ -9,11 +9,11 @@ from data.market_data_manager import MarketDataManager
 
 from .trader import Trader
 from .types import (
-    Trade,
+    Order,
     OrderFailureReason,
     OrderStatus,
     PlaceOrderResult,
-    Order,
+    Trade,
     TradeSide,
 )
 
@@ -90,7 +90,9 @@ class PaperTrader(Trader):
         commission = sum(trade.commission for trade in trades)
 
         return Order(
-            status=OrderStatus.FILLED if remaining == Decimal('0.0') else OrderStatus.PARTIALLY_FILLED,
+            status=OrderStatus.FILLED
+            if remaining == Decimal('0.0')
+            else OrderStatus.PARTIALLY_FILLED,
             side=side,
             ticker=ticker,
             limit_price=limit_price,

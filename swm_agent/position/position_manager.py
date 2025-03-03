@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
-from ticker.ticker import Ticker, CashTicker
+from ticker.ticker import CashTicker, Ticker
 from trader.types import Trade
+
 from data.market_data_manager import MarketDataManager
 
 
@@ -63,14 +64,16 @@ class PositionManager:
             pos.average_cost = Decimal('0')
         elif new_quantity > 0 and quantity > 0:
             # Update cost basis for buying
-            total_cost = (current_quantity * pos.average_cost) + (quantity * price) + commission
+            total_cost = (
+                (current_quantity * pos.average_cost) + (quantity * price) + commission
+            )
             pos.average_cost = total_cost / new_quantity
 
         pos.quantity = new_quantity
 
         # Update the corresponding collateral position
         self.positions[collateral.symbol].quantity -= price * quantity + commission
-    
+
         return pos
 
     def get_position(self, ticker: Ticker) -> Position | None:
@@ -83,10 +86,10 @@ class PositionManager:
         """Calculate unrealized PnL for a ticker"""
         if ticker.symbol not in self.positions:
             return Decimal('0')
-            
+
         if isinstance(ticker, CashTicker):
             return Decimal('0')
-            
+
         position = self.positions[ticker.symbol]
         current_price = market_data.get_best_bid(ticker)
         unrealized_pnl = (current_price - position.average_cost) * position.quantity
@@ -125,39 +128,41 @@ class PositionManager:
         return self.get_total_realized_pnl() + self.get_total_unrealized_pnl(
             market_data
         )
-        
+
     def get_cash_positions(self) -> list[Position]:
         """Get all cash positions"""
         return [
-            pos for pos in self.positions.values() 
-            if isinstance(pos.ticker, CashTicker)
+            pos for pos in self.positions.values() if isinstance(pos.ticker, CashTicker)
         ]
-        
+
     def get_non_cash_positions(self) -> list[Position]:
         """Get all non-cash positions"""
         return [
-            pos for pos in self.positions.values() 
+            pos
+            for pos in self.positions.values()
             if not isinstance(pos.ticker, CashTicker)
         ]
 
     def get_portfolio_value(self, market_data: MarketDataManager) -> dict[str, Decimal]:
         """Get portfolio value by collateral currencies
-        
+
         Returns:
-            A dictionary where the keys are CashTicker symbols and 
+            A dictionary where the keys are CashTicker symbols and
             the values are the total portfolio value in that collateral currency
         """
         portfolio_value: dict[str, Decimal] = {}
-        
+
         for cash_pos in self.get_cash_positions():
             portfolio_value[cash_pos.ticker.symbol] = cash_pos.quantity
-        
+
         for pos in self.get_non_cash_positions():
             collateral = pos.ticker.collateral
-            
+
             current_price = market_data.get_best_bid(pos.ticker)
             position_value = pos.quantity * current_price
-            
-            portfolio_value[collateral.symbol] = portfolio_value.get(collateral.symbol, Decimal('0')) + position_value
-        
+
+            portfolio_value[collateral.symbol] = (
+                portfolio_value.get(collateral.symbol, Decimal('0')) + position_value
+            )
+
         return portfolio_value
