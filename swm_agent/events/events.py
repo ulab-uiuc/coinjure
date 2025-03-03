@@ -45,6 +45,7 @@ class NewsEvent(Event):
     image_url: str
     uuid: str
     event_id: str
+    ticker: PolyMarketTicker
 
     def __init__(
         self,
@@ -58,6 +59,7 @@ class NewsEvent(Event):
         image_url: str = '',
         uuid: str = '',
         event_id: str = '',
+        ticker: PolyMarketTicker = None,
     ):
         self.news = news
         self.title = title
@@ -69,6 +71,7 @@ class NewsEvent(Event):
         self.image_url = image_url
         self.uuid = uuid
         self.event_id = event_id
+        self.ticker = ticker
 
     def trigger(self) -> None:
         pass
