@@ -1,11 +1,10 @@
 import random
 from decimal import Decimal
 
-from position.position_manager import PositionManager
-from risk.risk_manager import RiskManager
-from ticker.ticker import Ticker
-
-from data.market_data_manager import MarketDataManager
+from swm_agent.data.market_data_manager import MarketDataManager
+from swm_agent.position.position_manager import PositionManager
+from swm_agent.risk.risk_manager import RiskManager
+from swm_agent.ticker.ticker import Ticker
 
 from .trader import Trader
 from .types import (

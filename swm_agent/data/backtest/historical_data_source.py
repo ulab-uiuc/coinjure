@@ -1,4 +1,4 @@
-from events.events import Event
+from swm_agent.events.events import Event
 
 from ..data_source import DataSource
 

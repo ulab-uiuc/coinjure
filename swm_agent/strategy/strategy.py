@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
-from events.events import Event
-from trader.trader import Trader
+from swm_agent.events.events import Event
+from swm_agent.trader.trader import Trader
 
 
 class Strategy(ABC):
