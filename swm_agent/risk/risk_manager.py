@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
-from ticker.ticker import Ticker
-from trader.types import TradeSide
+from swm_agent.ticker.ticker import Ticker
+from swm_agent.trader.types import TradeSide
 
 
 class RiskManager(ABC):

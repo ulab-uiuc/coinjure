@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from trader.types import Trade
+from swm_agent.trader.types import Trade
 
 
 @dataclass

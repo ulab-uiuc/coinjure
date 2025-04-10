@@ -2,10 +2,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
-from ticker.ticker import CashTicker, Ticker
-from trader.types import Trade
-
-from data.market_data_manager import MarketDataManager
+from swm_agent.data.market_data_manager import MarketDataManager
+from swm_agent.ticker.ticker import CashTicker, Ticker
+from swm_agent.trader.types import Trade
 
 
 @dataclass
