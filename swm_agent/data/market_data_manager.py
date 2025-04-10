@@ -1,6 +1,6 @@
-from events.events import OrderBookEvent
-from order.order_book import Level, OrderBook
-from ticker.ticker import Ticker
+from swm_agent.events.events import OrderBookEvent
+from swm_agent.order.order_book import Level, OrderBook
+from swm_agent.ticker.ticker import Ticker
 
 
 class MarketDataManager:

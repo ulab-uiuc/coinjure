@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from ..ticker.ticker import PolyMarketTicker
+from swm_agent.ticker.ticker import PolyMarketTicker
 
 
 class Event(ABC):

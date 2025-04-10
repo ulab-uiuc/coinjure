@@ -1,8 +1,7 @@
-from events.events import OrderBookEvent
-from strategy.strategy import Strategy
-from trader.trader import Trader
-
-from data.data_source import DataSource
+from swm_agent.data.data_source import DataSource
+from swm_agent.events.events import OrderBookEvent
+from swm_agent.strategy.strategy import Strategy
+from swm_agent.trader.trader import Trader
 
 
 class TradingEngine:

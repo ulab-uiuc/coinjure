@@ -1,16 +1,15 @@
 import asyncio
 from decimal import Decimal
 
-from core.trading_engine import TradingEngine
-from position.position_manager import Position, PositionManager
-from risk.risk_manager import NoRiskManager
-from strategy.simple_strategy import SimpleStrategy
-from strategy.strategy import Strategy
-from ticker.ticker import CashTicker
-from trader.paper_trader import PaperTrader
-
-from data.backtest.historical_data_source import HistoricalDataSource
-from data.market_data_manager import MarketDataManager
+from swm_agent.core.trading_engine import TradingEngine
+from swm_agent.data.backtest.historical_data_source import HistoricalDataSource
+from swm_agent.data.market_data_manager import MarketDataManager
+from swm_agent.position.position_manager import Position, PositionManager
+from swm_agent.risk.risk_manager import NoRiskManager
+from swm_agent.strategy.simple_strategy import SimpleStrategy
+from swm_agent.strategy.strategy import Strategy
+from swm_agent.ticker.ticker import CashTicker
+from swm_agent.trader.paper_trader import PaperTrader
 
 
 async def run_backtest(
