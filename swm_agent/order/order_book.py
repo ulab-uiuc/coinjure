@@ -7,6 +7,12 @@ class Level:
     price: Decimal
     size: Decimal
 
+    def __str__(self) -> str:
+        return f'{self.price}@{self.size}'
+
+    def __repr__(self) -> str:
+        return f"Level(price=Decimal('{self.price}'), size=Decimal('{self.size}'))"
+
 
 class OrderBook:
     def __init__(self) -> None:
@@ -16,6 +22,14 @@ class OrderBook:
     def update(self, asks: list[Level], bids: list[Level]) -> None:
         self.asks = asks
         self.bids = bids
+
+    def __str__(self) -> str:
+        best_bid = self.best_bid
+        best_ask = self.best_ask
+        return f'OrderBook(best_bid={best_bid}, best_ask={best_ask})'
+
+    def __repr__(self) -> str:
+        return f'OrderBook(asks={self.asks}, bids={self.bids})'
 
     @property
     def best_ask(self) -> Level | None:
