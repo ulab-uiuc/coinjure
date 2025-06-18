@@ -11,6 +11,14 @@ class Event(ABC):
     def trigger(self) -> None:
         pass
 
+    @abstractmethod
+    def __str__(self) -> str:
+        pass
+
+    @abstractmethod
+    def __repr__(self) -> str:
+        pass
+
 
 class OrderBookEvent(Event):
     ticker: PolyMarketTicker
@@ -32,6 +40,12 @@ class OrderBookEvent(Event):
 
     def trigger(self) -> None:
         pass
+
+    def __str__(self) -> str:
+        return f'OrderBookEvent: ticker={self.ticker.symbol}, price={self.price}, size={self.size}, size_delta={self.size_delta}'
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 class NewsEvent(Event):
@@ -75,3 +89,32 @@ class NewsEvent(Event):
 
     def trigger(self) -> None:
         pass
+
+    def __str__(self) -> str:
+        ticker_str = f'{self.ticker.symbol}' if self.ticker else 'None'
+        content = f"{self.news[:100]}{'...' if len(self.news) > 100 else ''}"
+        return f'NewsEvent: ticker={ticker_str}, title={self.title}, source={self.source}\n  Content: {content}'
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+class PriceChangeEvent(Event):
+    def __init__(
+        self,
+        ticker: PolyMarketTicker,
+        price: Decimal,
+        timestamp: datetime = None,
+    ):
+        self.ticker = ticker
+        self.price = price
+        self.timestamp = timestamp or datetime.now()
+
+    def trigger(self) -> None:
+        pass
+
+    def __str__(self) -> str:
+        return f'PriceChangeEvent: ticker={self.ticker.symbol}, price={self.price}, timestamp={self.timestamp}'
+
+    def __repr__(self) -> str:
+        return self.__str__()

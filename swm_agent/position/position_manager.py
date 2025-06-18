@@ -4,7 +4,7 @@ from typing import Optional
 
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.ticker.ticker import CashTicker, Ticker
-from swm_agent.trader.types import Trade
+from swm_agent.trader.types import Trade, TradeSide
 
 
 @dataclass
@@ -31,7 +31,7 @@ class PositionManager:
             The updated position for the ticker being traded
         """
         ticker = trade.ticker
-        quantity = trade.quantity
+        quantity = trade.quantity if trade.side == TradeSide.BUY else -trade.quantity
         price = trade.price
         collateral = ticker.collateral
         commission = trade.commission
