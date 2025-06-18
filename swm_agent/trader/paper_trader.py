@@ -62,6 +62,7 @@ class PaperTrader(Trader):
         # Calculate how much we can fill
         filled_qty = min(quantity, available_liquidity)
         if filled_qty == Decimal('0.0'):
+            # TODO: record orders for future matching
             return Order(
                 status=OrderStatus.PLACED,
                 side=side,
@@ -132,7 +133,7 @@ class PaperTrader(Trader):
                 )
 
         # Check risk limits
-        if not self.risk_manager.check_trade(
+        if not await self.risk_manager.check_trade(
             ticker.symbol, side, quantity, limit_price
         ):
             return PlaceOrderResult(
