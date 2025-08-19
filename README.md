@@ -1,170 +1,253 @@
-# Open-Source Research Project in Python: A Template
+# SWM Agent: Social World Model Trading Agent
 
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3109/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
-<a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 [![bear-ified](https://raw.githubusercontent.com/beartype/beartype-assets/main/badge/bear-ified.svg)](https://beartype.readthedocs.io)
-[![Github Action](https://github.com/ulab-uiuc/python-project-template/actions/workflows/pytest.yml/badge.svg?branch=main)]()
 
 > [!NOTE]
-> This repo is continously updating with more tools. Any contribution is welcome.
+> This repository is continuously updating with more features and improvements. Any contribution is welcome.
 
-## ✨ Motivation
+## 🎯 Project Overview
 
-To ensure high standards in engineering projects, we offer a standardized template specifically designed for open-source Python research projects. This template is an excellent choice if you:
+**SWM Agent** is an intelligent trading agent designed for Polymarket prediction markets, built on the concept of Social World Models. The agent combines real-time market data, news sentiment analysis, and machine learning to make automated trading decisions.
 
-1. Want to facilitate seamless collaboration and extension of your project by other researchers.
-2. Aim to bridge communication gaps among collaborators effectively.
-3. Seek to make rapid iterations with assurance that small code modifications won’t disrupt the overall project.
-4. Wish to reduce the frequency of frustrating runtime errors during experiments.
+### Key Features
 
-## 🔨 Continuous Integration (CI) Workflow
+- **Real-time Market Integration**: Connects to Polymarket's CLOB (Central Limit Order Book) API for live trading
+- **News Sentiment Analysis**: Integrates with news APIs to analyze market-moving events
+- **LLM-Powered Decision Making**: Uses Large Language Models to analyze news and make trading decisions
+- **Risk Management**: Built-in risk management and position tracking
+- **Backtesting Framework**: Historical data testing capabilities
+- **Paper Trading**: Safe simulation mode for strategy testing
 
-Here's a clearer and more straightforward guideline of the steps for working with your codebase. If working in a small group or working on a simple project, some of the steps can be skipped.
+## 🏗️ Architecture
 
-1. **Create Issue**
-
-   Before starting, open a new issue in the repository detailing what you plan to implement. Assign the issue to yourself.
-
-2. **Sync Repo**
-
-   Update your local repository to match the latest version of the remote repository.
-
-3. **Create Branch**
-
-   Create a new branch for your task. Name it appropriately based on the type of task, such as `feature/feature-name`, `bug/bug-name`, or `exp/exp-name`.
-
-4. **Implement Code**
-
-   Work on your task and make necessary changes to the codebase.
-
-5. **Test Locally**
-
-   Run tests using tools like mypy, pytest, and pre-commit. Ensure all tests pass before proceeding.
-
-6. **Change Commit**
-
-   Add and commit your changes to the branch, then push the branch to the repository.
-
-7. **Create PR**
-
-   Open a Pull Request (PR) for the branch you've pushed.
-
-8. **Link PR to Issue**
-
-   In your PR, include "Closes #ISSUE_NUM" to link it to the original issue.
-
-9. **Pass Continuous Integration**
-
-   Ensure all GitHub Actions checks pass. If they fail, revise your code based on the errors reported.
-
-10. **Review PR Checklist**
-
-    Verify that all items in the PR checklist are completed, such as updating documentation or adding package requirements.
-
-11. **Ask for Code Review**
-
-    Invite a colleague to review your PR. One approved, Use the "Squash and Merge" option to merge your PR, ensuring a clean commit history.
-
-12. **Troubleshooting**
-
-    If you break down the commit history or main branch, contact the repository owner for assistance with `rebase` or other needed actions.
-
-## 💼 Template Structure
-
-The current project template supports the final package release of our codebase.
+The project follows a modular, event-driven architecture with clear separation of concerns:
 
 ```
-Template/
-│
-├── .github/                  # Contains GitHub related files like workflows
-├── docs/                     # Documentation for the project
-├── src/                      # Main package directory
-├── stubs/                    # Type stubs for static typing (for mypy strict mode)
-├── tests/                    # Test scripts and resources
-│
-├── .gitignore                # Specifies untracked files to ignore
-├── .pre-commit-config.yaml   # Configurations for pre-commit hooks
-├── poetry.lock               # Lock file generated by poetry for dependencies
-├── pyproject.toml            # Project metadata and tool configurations
+SWM Agent
+├── Core Trading Engine
+├── Data Sources (Live & Historical)
+├── Strategy Layer (LLM-based decisions)
+├── Risk & Position Management
+├── Market Data Processing
+└── Analytics & Performance Tracking
 ```
 
-## ❓ Issue & Pull Request
+## 📁 Project Structure
 
-An issue typically describes a new feature (`feature`), fixing an old bug (`bug`), launching a group of experiments (`exp`), or refactoring part of the code (`refactor`). Using different issue templates for different issues.
+### Core Components
 
-A PR typically implements the content mentioned in one issue.
+#### `swm_agent/core/`
+- **`trading_engine.py`**: Main orchestration engine that coordinates data flow, strategy execution, and trading operations
 
-Notice about the development:
+#### `swm_agent/strategy/`
+- **`strategy.py`**: Abstract base class for all trading strategies
+- **`simple_strategy.py`**: LLM-powered strategy that analyzes news events and makes trading decisions
+- **`test_strategy.py`**: Testing strategy implementation
 
-1. When creating an issue, assign the responsible member for fixing that if possible
-2. When creating a PR, make sure you uses `feature/feature-name`, `bug/bug-name`, `exp/exp-name` for its branch
-3. When finishing one PR, make sure all the github action is passed and all the checks are done.
-4. When merging one PR, make sure using `squash and merge` instead of `merge a pull request`.
-5. Avoid making any direct commit to the `main` branch and try to avoid any `--force` push to any branch unless you are pretty sure about that.
+#### `swm_agent/trader/`
+- **`trader.py`**: Abstract base class for trading interfaces
+- **`polymarket_trader.py`**: Concrete implementation for Polymarket CLOB trading
+- **`paper_trader.py`**: Simulation trader for testing strategies without real money
+- **`types.py`**: Trading-related data types and enums
 
-## 👷 Type Checking
+#### `swm_agent/data/`
+- **`data_source.py`**: Abstract base class for data sources
+- **`market_data_manager.py`**: Manages market data processing and storage
+- **`backtest/`**: Historical data sources for backtesting
+- **`live/`**: Real-time data sources for live trading
 
-- Tools
+#### `swm_agent/events/`
+- **`events.py`**: Event system for market data and news events
+  - `OrderBookEvent`: Market order book updates
+  - `NewsEvent`: News articles and sentiment data
+  - `PriceChangeEvent`: Price movement events
 
-  - static type checking (`mypy`)
+#### `swm_agent/analytics/`
+- **`performance_analyzer.py`**: Trading performance analysis and metrics
 
-  - dynamic type checking (`beartype`)
+#### `swm_agent/backtest/`
+- **`backtester.py`**: Historical strategy testing framework
 
-- Guidelines
-  - Run `mypy --strict ./` under the root of the current repo to test the static type.
+#### `swm_agent/risk/`
+- **`risk_manager.py`**: Risk management and position sizing
 
-## 🏅️ Unit Testing
+#### `swm_agent/position/`
+- **`position_manager.py`**: Position tracking and management
 
-- Tools
+#### `swm_agent/order/`
+- **`order_book.py`**: Order book management and analysis
 
-  - testing code components based on testing function (`pytest`)
+#### `swm_agent/ticker/`
+- **`ticker.py`**: Market ticker and symbol management
 
-- Guidelines
-  - Run `pytest` under the root of the current repo to check unit test results.
+#### `swm_agent/live/`
+- **`live_trader.py`**: Live trading execution engine
 
-## 🧐 Code Spell Checking
+### Scripts
 
-- Tools
+#### `scripts/`
+- **`get_live_news_data.py`**: Script to test and collect live news data
+- **`get_live_polymarket_data.py`**: Script to test and collect live Polymarket data
 
-  - code spell checking (`codespell`)
+## 🚀 Quick Start
 
-- Guidelines
-  - Commonly need to ignore part of the files in the repository like `/data`.
+### Prerequisites
 
-## 🪝 Pre-commit Hook
+- Python 3.10+
+- Polymarket API credentials
+- News API key (optional, for news sentiment analysis)
 
-- Tools
+### Installation
 
-  - code formatting (`prettier`)
+```bash
+# Clone the repository
+git clone https://github.com/ulab-uiuc/swm-agent.git
+cd swm-agent
 
-  - import package sorting (`isort`)
+# Install dependencies using Poetry
+pip install poetry
+poetry install
 
-  - ipynb output clear (`nbstripout`)
+# Or using pip
+pip install -e .
+```
 
-  - code bug checking and formatting (`ruff`)
+### Environment Setup
 
-- Guidelines
+```bash
+# Set up environment variables
+export POLYMARKET_PRIVATE_KEY="your_private_key"
+export NEWS_API_KEY="your_news_api_key"  # Optional
+```
 
-  - Run `python -m pip install pre-commit` to install `pre-commit`
+### Basic Usage
 
-  - Run `pre-commit install` to allow hooking pre-commit with any `git commit` commands.
+```python
+from swm_agent.core.trading_engine import TradingEngine
+from swm_agent.strategy.simple_strategy import SimpleStrategy
+from swm_agent.trader.polymarket_trader import PolymarketTrader
+from swm_agent.data.live.live_data_source import LivePolyMarketDataSource
 
-## 🧑‍💼 Dependency Management
+# Create components
+data_source = LivePolyMarketDataSource()
+strategy = SimpleStrategy()
+trader = PolymarketTrader(wallet_private_key="your_key")
 
-- Tools
+# Initialize trading engine
+engine = TradingEngine(data_source, strategy, trader)
 
-  - We utilize `poetry` to support the dependency requirements. Dependency for different usage of the repo can be defined separately in `pyproject.toml`.
+# Start trading
+await engine.start()
+```
 
-- Guidelines
+### Testing Data Sources
 
-  - Run `pip install poetry` to finish the installation of poetry.
+```bash
+# Test news data collection
+python scripts/get_live_news_data.py --api-token YOUR_TOKEN --duration 300
 
-  - Create `conda environment` with a specified Python version
+# Test Polymarket data collection
+python scripts/get_live_polymarket_data.py --duration 300
+```
 
-  - Run `poetry install` to install required dependencies.
+## 🔧 Configuration
 
-## ❤️ Contribution
+The agent supports various configuration options:
 
-I welcome all kinds of contributions, e.g. adding more tools, better practices, and discussion on trade-offs.
+- **Trading Parameters**: Position sizes, confidence thresholds
+- **Risk Management**: Stop losses, position limits
+- **Data Sources**: API endpoints, polling intervals
+- **LLM Configuration**: Model selection, API keys
+
+## 📊 Strategy Overview
+
+### Simple Strategy (LLM-Powered)
+
+The default strategy uses Large Language Models to:
+
+1. **Analyze News Events**: Process incoming news articles for market sentiment
+2. **Generate Trading Signals**: Determine buy/sell/hold decisions with confidence scores
+3. **Execute Trades**: Place orders based on LLM analysis when confidence exceeds threshold
+
+### Custom Strategies
+
+Implement custom strategies by extending the `Strategy` base class:
+
+```python
+from swm_agent.strategy.strategy import Strategy
+from swm_agent.events.events import Event
+from swm_agent.trader.trader import Trader
+
+class MyCustomStrategy(Strategy):
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        # Your custom logic here
+        pass
+```
+
+## 🛡️ Risk Management
+
+The agent includes comprehensive risk management:
+
+- **Position Limits**: Maximum position sizes per market
+- **Stop Losses**: Automatic position closure on adverse moves
+- **Portfolio Limits**: Overall exposure controls
+- **Order Validation**: Pre-trade risk checks
+
+## 📈 Performance Analytics
+
+Track trading performance with built-in analytics:
+
+- **P&L Tracking**: Real-time profit/loss monitoring
+- **Sharpe Ratio**: Risk-adjusted returns
+- **Drawdown Analysis**: Maximum drawdown tracking
+- **Trade Statistics**: Win rate, average trade size
+
+## 🧪 Testing
+
+### Unit Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test modules
+pytest tests/strategy/
+pytest tests/trader/
+```
+
+### Backtesting
+
+```bash
+# Run backtest with historical data
+python -m swm_agent.backtest.backtester
+```
+
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+# Install development dependencies
+poetry install --with dev
+
+# Set up pre-commit hooks
+pre-commit install
+
+# Run linting
+ruff check .
+ruff format .
+```
+
+## 📄 License
+
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
+
+## ⚠️ Disclaimer
+
+This software is for educational and research purposes. Trading involves substantial risk of loss and is not suitable for all investors. Past performance does not guarantee future results.
