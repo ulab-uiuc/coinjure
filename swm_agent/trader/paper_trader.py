@@ -133,9 +133,7 @@ class PaperTrader(Trader):
                 )
 
         # Check risk limits
-        if not await self.risk_manager.check_trade(
-            ticker.symbol, side, quantity, limit_price
-        ):
+        if not await self.risk_manager.check_trade(ticker, side, quantity, limit_price):
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,
