@@ -90,7 +90,10 @@ class PositionManager:
             return Decimal('0')
 
         position = self.positions[ticker.symbol]
-        current_price = market_data.get_best_bid(ticker)
+        best_bid = market_data.get_best_bid(ticker)
+        if best_bid is None:
+            return Decimal('0')
+        current_price = best_bid.price
         unrealized_pnl = (current_price - position.average_cost) * position.quantity
         return unrealized_pnl
 
@@ -157,7 +160,10 @@ class PositionManager:
         for pos in self.get_non_cash_positions():
             collateral = pos.ticker.collateral
 
-            current_price = market_data.get_best_bid(pos.ticker)
+            best_bid = market_data.get_best_bid(pos.ticker)
+            if best_bid is None:
+                continue
+            current_price = best_bid.price
             position_value = pos.quantity * current_price
 
             portfolio_value[collateral.symbol] = (
