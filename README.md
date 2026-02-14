@@ -372,6 +372,34 @@ class MomentumStrategy(Strategy):
         self.last_prices[symbol] = price
 ```
 
+### CLI Monitoring
+
+Monitor your trading activities in real-time with the built-in CLI dashboard:
+
+```bash
+# Display current portfolio snapshot
+swm-agent monitor
+
+# Live monitoring with auto-refresh
+swm-agent monitor --watch
+
+# Custom refresh rate (1 second)
+swm-agent monitor --watch --refresh 1.0
+
+# Run the demo
+python examples/demo_monitor.py --watch
+```
+
+The monitor displays:
+
+- **Portfolio Summary**: Total value, cash positions, realized/unrealized P&L
+- **Active Positions**: Open positions with current prices and P&L breakdown
+- **Recent Orders**: Order history with status and fill details
+- **Market Snapshot**: Real-time bid/ask spreads
+- **Statistics**: Success rate, order counts, session runtime
+
+For detailed usage and integration instructions, see [CLI Monitoring Documentation](docs/CLI_MONITORING.md).
+
 ## 🔧 Configuration
 
 The agent supports various configuration options:
