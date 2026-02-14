@@ -20,6 +20,7 @@
 - **Risk Management**: Built-in risk management and position tracking
 - **Backtesting Framework**: Historical data testing capabilities
 - **Paper Trading**: Safe simulation mode for strategy testing
+- **CLI Monitoring**: Real-time terminal dashboard for monitoring trades, positions, and portfolio P&L
 
 ## 🏗️ Architecture
 
@@ -40,55 +41,68 @@ SWM Agent
 ### Core Components
 
 #### `swm_agent/core/`
+
 - **`trading_engine.py`**: Main orchestration engine that coordinates data flow, strategy execution, and trading operations
 
 #### `swm_agent/strategy/`
+
 - **`strategy.py`**: Abstract base class for all trading strategies
 - **`simple_strategy.py`**: LLM-powered strategy that analyzes news events and makes trading decisions
 - **`test_strategy.py`**: Testing strategy implementation
 
 #### `swm_agent/trader/`
+
 - **`trader.py`**: Abstract base class for trading interfaces
 - **`polymarket_trader.py`**: Concrete implementation for Polymarket CLOB trading
 - **`paper_trader.py`**: Simulation trader for testing strategies without real money
 - **`types.py`**: Trading-related data types and enums
 
 #### `swm_agent/data/`
+
 - **`data_source.py`**: Abstract base class for data sources
 - **`market_data_manager.py`**: Manages market data processing and storage
 - **`backtest/`**: Historical data sources for backtesting
 - **`live/`**: Real-time data sources for live trading
 
 #### `swm_agent/events/`
+
 - **`events.py`**: Event system for market data and news events
   - `OrderBookEvent`: Market order book updates
   - `NewsEvent`: News articles and sentiment data
   - `PriceChangeEvent`: Price movement events
 
 #### `swm_agent/analytics/`
+
 - **`performance_analyzer.py`**: Trading performance analysis and metrics
 
 #### `swm_agent/backtest/`
+
 - **`backtester.py`**: Historical strategy testing framework
 
 #### `swm_agent/risk/`
+
 - **`risk_manager.py`**: Risk management and position sizing
 
 #### `swm_agent/position/`
+
 - **`position_manager.py`**: Position tracking and management
 
 #### `swm_agent/order/`
+
 - **`order_book.py`**: Order book management and analysis
 
 #### `swm_agent/ticker/`
+
 - **`ticker.py`**: Market ticker and symbol management
 
 #### `swm_agent/live/`
+
 - **`live_trader.py`**: Live trading execution engine
 
 ### Scripts
 
 #### `scripts/`
+
 - **`get_live_news_data.py`**: Script to test and collect live news data
 - **`get_live_polymarket_data.py`**: Script to test and collect live Polymarket data
 
@@ -152,6 +166,34 @@ python scripts/get_live_news_data.py --api-token YOUR_TOKEN --duration 300
 # Test Polymarket data collection
 python scripts/get_live_polymarket_data.py --duration 300
 ```
+
+### CLI Monitoring
+
+Monitor your trading activities in real-time with the built-in CLI dashboard:
+
+```bash
+# Display current portfolio snapshot
+swm-agent monitor
+
+# Live monitoring with auto-refresh
+swm-agent monitor --watch
+
+# Custom refresh rate (1 second)
+swm-agent monitor --watch --refresh 1.0
+
+# Run the demo
+python examples/demo_monitor.py --watch
+```
+
+The monitor displays:
+
+- **Portfolio Summary**: Total value, cash positions, realized/unrealized P&L
+- **Active Positions**: Open positions with current prices and P&L breakdown
+- **Recent Orders**: Order history with status and fill details
+- **Market Snapshot**: Real-time bid/ask spreads
+- **Statistics**: Success rate, order counts, session runtime
+
+For detailed usage and integration instructions, see [CLI Monitoring Documentation](docs/CLI_MONITORING.md).
 
 ## 🔧 Configuration
 
@@ -224,7 +266,6 @@ pytest tests/trader/
 # Run backtest with historical data
 python -m swm_agent.backtest.backtester
 ```
-
 
 ## 🤝 Contributing
 
