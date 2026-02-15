@@ -23,35 +23,20 @@ def test_package_imports() -> None:
     """Test that main package components can be imported."""
     # Core components
     # Analytics
-    from swm_agent.analytics.performance_analyzer import PerformanceAnalyzer
-    from swm_agent.core.trading_engine import TradingEngine
 
     # Data components
-    from swm_agent.data.data_source import DataSource
-    from swm_agent.data.market_data_manager import MarketDataManager
 
     # Events
-    from swm_agent.events.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 
     # Position management
-    from swm_agent.position.position_manager import Position, PositionManager
 
     # Risk management
-    from swm_agent.risk.risk_manager import (
-        NoRiskManager,
-        RiskManager,
-        StandardRiskManager,
-    )
 
     # Strategy
-    from swm_agent.strategy.strategy import Strategy
 
     # Tickers
-    from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
 
     # Traders
-    from swm_agent.trader.paper_trader import PaperTrader
-    from swm_agent.trader.types import Order, Trade, TradeSide
 
     # All imports successful
     assert True

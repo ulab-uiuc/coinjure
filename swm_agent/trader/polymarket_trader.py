@@ -1,6 +1,6 @@
 import asyncio
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any
 
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType
@@ -55,7 +55,7 @@ class PolymarketTrader(Trader):
 
     async def _submit_fok_order(
         self, side: TradeSide, ticker: PolyMarketTicker, price: Decimal, size: Decimal
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if not ticker.token_id:
             raise ValueError('Ticker must have a valid token_id')
 
@@ -73,12 +73,12 @@ class PolymarketTrader(Trader):
 
         return response
 
-    async def _get_order_status(self, order_id: str) -> Dict[str, Any]:
+    async def _get_order_status(self, order_id: str) -> dict[str, Any]:
         return self.clob_client.get_order(order_id)
 
     async def _process_order_response(
         self,
-        response: Dict[str, Any],
+        response: dict[str, Any],
         side: TradeSide,
         ticker: Ticker,
         limit_price: Decimal,
