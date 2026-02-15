@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import List
 
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.position.position_manager import PositionManager
@@ -19,7 +20,7 @@ class Trader(ABC):
         self.market_data = market_data
         self.risk_manager = risk_manager
         self.position_manager = position_manager
-        self.orders: List[Order] = []
+        self.orders: list[Order] = []
 
     @abstractmethod
     async def place_order(
