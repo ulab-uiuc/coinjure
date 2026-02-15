@@ -16,7 +16,6 @@ from decimal import Decimal
 import click
 
 from swm_agent.cli.monitor import TradingMonitor
-from swm_agent.position.position_manager import PositionManager
 from swm_agent.ticker.ticker import CashTicker, Ticker
 from swm_agent.trader.paper_trader import PaperTrader
 from swm_agent.trader.types import TradeSide
@@ -71,7 +70,7 @@ async def simulate_trading_session(trader: PaperTrader, num_trades: int = 10) ->
         quantity = Decimal(str(random.randint(10, 100)))
 
         print(
-            f'Trade {i+1}: {side.value.upper()} {quantity} {ticker.symbol} @ ${price}'
+            f'Trade {i + 1}: {side.value.upper()} {quantity} {ticker.symbol} @ ${price}'
         )
 
         # Place order

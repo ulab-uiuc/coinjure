@@ -1,7 +1,7 @@
 import json
 import logging
 from decimal import Decimal
-from typing import Dict, Literal, Optional, TypedDict
+from typing import Literal, TypedDict
 
 import requests
 
@@ -18,7 +18,7 @@ url = 'https://api.siliconflow.cn/v1/chat/completions'
 class LLMAnalysisResult(TypedDict):
     action: Literal['buy', 'sell', 'hold']
     confidence: float
-    reasoning: Optional[str]
+    reasoning: str | None
 
 
 class SimpleStrategy(Strategy):
@@ -50,7 +50,7 @@ class SimpleStrategy(Strategy):
             # Check confidence level
             if analysis['confidence'] < self.confidence_threshold:
                 self.logger.info(
-                    f"Discarding event due to low confidence: {analysis['confidence']}"
+                    f'Discarding event due to low confidence: {analysis["confidence"]}'
                 )
                 return
 
@@ -128,7 +128,7 @@ class SimpleStrategy(Strategy):
         try:
             if analysis['action'] == 'buy':
                 self.logger.info(
-                    f"Executing market order BUY for {ticker.symbol} with confidence {analysis['confidence']}"
+                    f'Executing market order BUY for {ticker.symbol} with confidence {analysis["confidence"]}'
                 )
                 # Get the current market price
                 price = await trader.market_data.get_best_ask(ticker)
@@ -144,7 +144,7 @@ class SimpleStrategy(Strategy):
 
             elif analysis['action'] == 'sell':
                 self.logger.info(
-                    f"Executing market order SELL for {ticker.symbol} with confidence {analysis['confidence']}"
+                    f'Executing market order SELL for {ticker.symbol} with confidence {analysis["confidence"]}'
                 )
                 # Get the current market price
                 price = await trader.market_data.get_best_bid(ticker)
