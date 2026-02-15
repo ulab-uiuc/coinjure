@@ -1,7 +1,6 @@
 from decimal import Decimal
-from typing import Any
 
-from swm_agent.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
+from swm_agent.events.events import Event, PriceChangeEvent
 from swm_agent.trader.trader import Trader
 from swm_agent.trader.types import TradeSide
 
@@ -24,7 +23,7 @@ class TestStrategy(Strategy):
                 # Buy if price went up
                 if current_price > last_price:
                     print(
-                        f'{ticker } price increased from {last_price} to {current_price}. Buying {self.fixed_quantity}.'
+                        f'{ticker} price increased from {last_price} to {current_price}. Buying {self.fixed_quantity}.'
                     )
                     print(
                         await trader.place_order(

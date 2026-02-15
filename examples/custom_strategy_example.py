@@ -12,9 +12,7 @@ the SWM Agent framework. It shows how to:
 
 import asyncio
 from decimal import Decimal
-from typing import Dict, Set
 
-from swm_agent.core.trading_engine import TradingEngine
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from swm_agent.order.order_book import Level, OrderBook
@@ -42,7 +40,7 @@ class MomentumStrategy(Strategy):
     ):
         self.price_threshold = price_threshold
         self.position_size_pct = position_size_pct
-        self.last_prices: Dict[str, Decimal] = {}
+        self.last_prices: dict[str, Decimal] = {}
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         """Process incoming events and make trading decisions."""
@@ -53,7 +51,7 @@ class MomentumStrategy(Strategy):
         elif isinstance(event, NewsEvent):
             # Could implement news sentiment analysis here
             print(
-                f"News received: {event.title[:50] if event.title else 'No title'}..."
+                f'News received: {event.title[:50] if event.title else "No title"}...'
             )
 
         elif isinstance(event, OrderBookEvent):
@@ -145,7 +143,7 @@ class MeanReversionStrategy(Strategy):
         self.window_size = window_size
         self.deviation_threshold = deviation_threshold
         self.position_size = position_size
-        self.price_history: Dict[str, list] = {}
+        self.price_history: dict[str, list] = {}
 
     def _calculate_moving_average(self, prices: list) -> Decimal:
         """Calculate simple moving average."""
@@ -291,7 +289,7 @@ class NewsKeywordStrategy(Strategy):
             current_price = Decimal('0.50')  # Would get from market data
 
             if sentiment == 'bullish':
-                print(f'  -> BUY signal')
+                print('  -> BUY signal')
                 await trader.place_order(
                     side=TradeSide.BUY,
                     ticker=ticker,
@@ -302,7 +300,7 @@ class NewsKeywordStrategy(Strategy):
             elif sentiment == 'bearish':
                 position = trader.position_manager.get_position(ticker)
                 if position and position.quantity > 0:
-                    print(f'  -> SELL signal')
+                    print('  -> SELL signal')
                     await trader.place_order(
                         side=TradeSide.SELL,
                         ticker=ticker,
@@ -379,7 +377,7 @@ async def test_momentum_strategy():
         event = PriceChangeEvent(ticker=ticker, price=price)
         await strategy.process_event(event, trader)
 
-    print(f'\nFinal positions:')
+    print('\nFinal positions:')
     print(f'  Cash: {trader.position_manager.get_cash_positions()}')
     print(f'  Holdings: {trader.position_manager.get_non_cash_positions()}')
 
@@ -412,7 +410,7 @@ async def test_mean_reversion_strategy():
         event = PriceChangeEvent(ticker=ticker, price=price)
         await strategy.process_event(event, trader)
 
-    print(f'\nFinal positions:')
+    print('\nFinal positions:')
     print(f'  Cash: {trader.position_manager.get_cash_positions()}')
     print(f'  Holdings: {trader.position_manager.get_non_cash_positions()}')
 

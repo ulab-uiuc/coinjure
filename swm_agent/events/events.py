@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
 
 from swm_agent.ticker.ticker import PolyMarketTicker
 
@@ -53,8 +52,8 @@ class NewsEvent(Event):
     title: str
     source: str
     url: str
-    published_at: Optional[datetime]
-    categories: List[str]
+    published_at: datetime | None
+    categories: list[str]
     description: str
     image_url: str
     uuid: str
@@ -67,8 +66,8 @@ class NewsEvent(Event):
         title: str = '',
         source: str = '',
         url: str = '',
-        published_at: Optional[datetime] = None,
-        categories: List[str] = None,
+        published_at: datetime | None = None,
+        categories: list[str] = None,
         description: str = '',
         image_url: str = '',
         uuid: str = '',
@@ -92,7 +91,7 @@ class NewsEvent(Event):
 
     def __str__(self) -> str:
         ticker_str = f'{self.ticker.symbol}' if self.ticker else 'None'
-        content = f"{self.news[:100]}{'...' if len(self.news) > 100 else ''}"
+        content = f'{self.news[:100]}{"..." if len(self.news) > 100 else ""}'
         return f'NewsEvent: ticker={ticker_str}, title={self.title}, source={self.source}\n  Content: {content}'
 
     def __repr__(self) -> str:

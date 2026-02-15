@@ -1,6 +1,4 @@
 from decimal import Decimal
-from typing import Optional
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -36,7 +34,7 @@ class MockDataSource(DataSource):
         self.events = events
         self.index = 0
 
-    async def get_next_event(self) -> Optional[Event]:
+    async def get_next_event(self) -> Event | None:
         if self.index < len(self.events):
             event = self.events[self.index]
             self.index += 1

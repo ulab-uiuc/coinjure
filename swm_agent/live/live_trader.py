@@ -1,7 +1,5 @@
 import asyncio
-import os
 from decimal import Decimal
-from typing import Optional
 
 from swm_agent.core.trading_engine import TradingEngine
 from swm_agent.data.live.live_data_source import (
@@ -23,7 +21,7 @@ async def run_live_trading(
     data_source: LivePolyMarketDataSource | LiveNewsDataSource | LiveRSSNewsDataSource,
     strategy: Strategy,
     trader: Trader,
-    duration: Optional[float] = None,
+    duration: float | None = None,
 ) -> None:
     """
     Run live trading with the given data source, strategy, and trader.
@@ -57,8 +55,8 @@ async def run_live_paper_trading(
     data_source: LivePolyMarketDataSource | LiveNewsDataSource | LiveRSSNewsDataSource,
     strategy: Strategy,
     initial_capital: Decimal,
-    risk_manager: Optional[RiskManager] = None,
-    duration: Optional[float] = None,
+    risk_manager: RiskManager | None = None,
+    duration: float | None = None,
 ) -> None:
     """
     Run live paper trading (simulated) with the given configuration.
@@ -107,9 +105,9 @@ async def run_live_polymarket_trading(
     strategy: Strategy,
     wallet_private_key: str,
     signature_type: int,
-    funder: Optional[str] = None,
-    risk_manager: Optional[RiskManager] = None,
-    duration: Optional[float] = None,
+    funder: str | None = None,
+    risk_manager: RiskManager | None = None,
+    duration: float | None = None,
     max_position_size: Decimal = Decimal('1000'),
     max_total_exposure: Decimal = Decimal('10000'),
 ) -> None:

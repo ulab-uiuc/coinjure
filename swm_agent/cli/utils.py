@@ -2,7 +2,6 @@
 
 import asyncio
 import threading
-from typing import Optional
 
 from swm_agent.cli.monitor import TradingMonitor
 from swm_agent.core.trading_engine import TradingEngine
@@ -24,8 +23,8 @@ class MonitoredTradingEngine:
         self.engine = engine
         self.refresh_rate = refresh_rate
         self.enabled = enabled
-        self.monitor: Optional[TradingMonitor] = None
-        self._monitor_thread: Optional[threading.Thread] = None
+        self.monitor: TradingMonitor | None = None
+        self._monitor_thread: threading.Thread | None = None
 
     def _run_monitor_thread(self) -> None:
         """Run monitor in a separate thread."""

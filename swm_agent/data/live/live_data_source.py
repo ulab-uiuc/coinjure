@@ -4,24 +4,24 @@ import os
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import feedparser
 import httpx
 from py_clob_client.client import ClobClient
 
 from ...events.events import Event, NewsEvent, OrderBookEvent
-from ...ticker.ticker import PolyMarketTicker, Ticker
+from ...ticker.ticker import PolyMarketTicker
 from ..data_source import DataSource
 
 
 class LivePolyMarketDataSource(DataSource):
     event_cache_file: str
     polling_interval: float
-    processed_event_ids: Set[str]
+    processed_event_ids: set[str]
     event_queue: asyncio.Queue
     clob_client: ClobClient
-    last_order_book_state: Dict[str, Decimal]
+    last_order_book_state: dict[str, Decimal]
 
     def __init__(
         self,
@@ -34,26 +34,26 @@ class LivePolyMarketDataSource(DataSource):
         self.event_queue = asyncio.Queue()
         self.clob_client = ClobClient('https://clob.polymarket.com')
         self.last_order_book_state = {}
-        self._poll_task: Optional[asyncio.Task] = None
+        self._poll_task: asyncio.Task | None = None
 
         if os.path.exists(self.event_cache_file):
-            with open(self.event_cache_file, 'r') as f:
+            with open(self.event_cache_file) as f:
                 for line in f:
                     event = json.loads(line.strip())
                     if 'id' in event:
                         self.processed_event_ids.add(str(event['id']))
 
-    async def _fetch_events(self) -> List[Dict[str, Any]]:
+    async def _fetch_events(self) -> list[dict[str, Any]]:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'https://gamma-api.polymarket.com/events?active=true&closed=false&limit=100'
+                'https://gamma-api.polymarket.com/events?active=true&closed=false&limit=100'
             )
             if response.status_code == 200:
                 events = response.json()
                 return events
             return []
 
-    async def _fetch_token_history(self, token_id: str) -> List[Dict[str, Any]]:
+    async def _fetch_token_history(self, token_id: str) -> list[dict[str, Any]]:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
@@ -66,7 +66,7 @@ class LivePolyMarketDataSource(DataSource):
         except Exception:
             return []
 
-    async def _fetch_market_history(self, event: Dict[str, Any]) -> Dict[str, Any]:
+    async def _fetch_market_history(self, event: dict[str, Any]) -> dict[str, Any]:
         modified_event = event.copy()
         for market in modified_event.get('markets', []):
             token_ids = json.loads(market.get('clobTokenIds', '[]'))
@@ -92,7 +92,7 @@ class LivePolyMarketDataSource(DataSource):
         order_book: Any,
         market_id: str = '',
         event_id: str = '',
-    ) -> List[OrderBookEvent]:
+    ) -> list[OrderBookEvent]:
         events = []
 
         if not order_book:
@@ -156,7 +156,7 @@ class LivePolyMarketDataSource(DataSource):
                     if event_id not in self.processed_event_ids:
                         enriched_event = await self._fetch_market_history(event)
 
-                        news_content = f"{enriched_event.get('title', '')}: {enriched_event.get('description', '')}"
+                        news_content = f'{enriched_event.get("title", "")}: {enriched_event.get("description", "")}'
                         news_event = NewsEvent(news=news_content)
                         await self.event_queue.put(news_event)
 
@@ -200,7 +200,7 @@ class LivePolyMarketDataSource(DataSource):
                 pass
             self._poll_task = None
 
-    async def get_next_event(self) -> Optional[Event]:
+    async def get_next_event(self) -> Event | None:
         try:
             return await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -212,10 +212,10 @@ class LiveNewsDataSource(DataSource):
     cache_file: str
     polling_interval: float
     max_articles_per_poll: int
-    languages: List[str]
-    categories: List[str]
+    languages: list[str]
+    categories: list[str]
     base_url: str
-    processed_article_ids: Set[str]
+    processed_article_ids: set[str]
     event_queue: asyncio.Queue
 
     def __init__(
@@ -224,8 +224,8 @@ class LiveNewsDataSource(DataSource):
         cache_file: str = 'news_cache.jsonl',
         polling_interval: float = 300.0,
         max_articles_per_poll: int = 10,
-        languages: List[str] = None,
-        categories: List[str] = None,
+        languages: list[str] = None,
+        categories: list[str] = None,
     ):
         self.api_token = api_token
         self.cache_file = cache_file
@@ -237,14 +237,14 @@ class LiveNewsDataSource(DataSource):
 
         self.processed_article_ids = set()
         self.event_queue = asyncio.Queue()
-        self._poll_task: Optional[asyncio.Task] = None
+        self._poll_task: asyncio.Task | None = None
 
         self._load_processed_articles()
 
     def _load_processed_articles(self) -> None:
         if os.path.exists(self.cache_file):
             try:
-                with open(self.cache_file, 'r') as f:
+                with open(self.cache_file) as f:
                     for line in f:
                         article = json.loads(line.strip())
                         if 'uuid' in article:
@@ -252,7 +252,7 @@ class LiveNewsDataSource(DataSource):
             except Exception as e:
                 print(f'Error loading article cache: {e}')
 
-    async def _fetch_articles(self) -> List[Dict[str, Any]]:
+    async def _fetch_articles(self) -> list[dict[str, Any]]:  # noqa: C901
         try:
             today = datetime.now()
 
@@ -319,7 +319,7 @@ class LiveNewsDataSource(DataSource):
 
                         # If articles_data is a dict, it might be organized by categories
                         if isinstance(articles_data, dict):
-                            print(f"'data' is a dictionary, attempting to flatten")
+                            print("'data' is a dictionary, attempting to flatten")
                             flattened_articles = []
 
                             for category, articles in articles_data.items():
@@ -359,7 +359,7 @@ class LiveNewsDataSource(DataSource):
             traceback.print_exc()
             return []
 
-    def _create_news_event(self, article: Dict[str, Any]) -> NewsEvent:
+    def _create_news_event(self, article: dict[str, Any]) -> NewsEvent:
         # Handle published_at date
         published_at = None
         if 'published_at' in article and article['published_at']:
@@ -426,7 +426,7 @@ class LiveNewsDataSource(DataSource):
                 else:
                     raise
 
-    def _save_article(self, article: Dict[str, Any]) -> None:
+    def _save_article(self, article: dict[str, Any]) -> None:
         try:
             with open(self.cache_file, 'a', encoding='utf-8') as f:
                 json.dump(article, f, ensure_ascii=False)
@@ -437,7 +437,7 @@ class LiveNewsDataSource(DataSource):
     async def _poll_data(self) -> None:
         while True:
             try:
-                print(f'Fetching news articles...')
+                print('Fetching news articles...')
                 articles = await self._retry_on_error(self._fetch_articles)
                 print(f'Received {len(articles)} articles')
 
@@ -451,7 +451,7 @@ class LiveNewsDataSource(DataSource):
                         # Check for UUID
                         article_id = article.get('uuid')
                         if not article_id:
-                            print(f'Article missing UUID, generating random ID')
+                            print('Article missing UUID, generating random ID')
                             article_id = str(uuid.uuid4())
                             article['uuid'] = article_id
 
@@ -466,7 +466,7 @@ class LiveNewsDataSource(DataSource):
                         # Add to queue
                         await self.event_queue.put(event)
                         print(
-                            f"Added article to queue: {article_id} - {article.get('title', 'No title')}"
+                            f'Added article to queue: {article_id} - {article.get("title", "No title")}'
                         )
 
                         # Mark as processed and save
@@ -500,7 +500,7 @@ class LiveNewsDataSource(DataSource):
                 pass
             self._poll_task = None
 
-    async def get_next_event(self) -> Optional[NewsEvent]:
+    async def get_next_event(self) -> NewsEvent | None:
         try:
             return await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -511,9 +511,9 @@ class LiveRSSNewsDataSource(DataSource):
     cache_file: str
     polling_interval: float
     max_articles_per_poll: int
-    languages: List[str]
-    categories: List[str]
-    processed_article_ids: Set[str]
+    languages: list[str]
+    categories: list[str]
+    processed_article_ids: set[str]
     event_queue: asyncio.Queue
 
     RSS_FEEDS = {
@@ -527,19 +527,23 @@ class LiveRSSNewsDataSource(DataSource):
         'https://feeds.content.dowjones.io/public/rss/socialpoliticsfeed': ['politics'],
         'https://feeds.content.dowjones.io/public/rss/socialeconomyfeed': ['economy'],
         'https://feeds.content.dowjones.io/public/rss/RSSArtsCulture': ['arts'],
-        'https://feeds.content.dowjones.io/public/rss/latestnewsrealestate': ['real estate'],
-        'https://feeds.content.dowjones.io/public/rss/RSSPersonalFinance': ['personal finance'],
+        'https://feeds.content.dowjones.io/public/rss/latestnewsrealestate': [
+            'real estate'
+        ],
+        'https://feeds.content.dowjones.io/public/rss/RSSPersonalFinance': [
+            'personal finance'
+        ],
         'https://feeds.content.dowjones.io/public/rss/socialhealth': ['health'],
         'https://feeds.content.dowjones.io/public/rss/RSSStyle': ['style'],
         'https://feeds.content.dowjones.io/public/rss/rsssportsfeed': ['sports'],
     }
-    
+
     def __init__(
         self,
         cache_file: str = 'rss_news_cache.jsonl',
         polling_interval: float = 300.0,
         max_articles_per_poll: int = 10,
-        categories: List[str] = None,
+        categories: list[str] = None,
     ):
         self.cache_file = cache_file
         self.polling_interval = polling_interval
@@ -550,28 +554,28 @@ class LiveRSSNewsDataSource(DataSource):
         feedparser._check_cache = lambda *args, **kwargs: None
         self.processed_article_ids = set()
         self.event_queue = asyncio.Queue()
-        self._poll_task: Optional[asyncio.Task] = None
+        self._poll_task: asyncio.Task | None = None
         self._load_processed_articles()
-    
+
     def _load_processed_articles(self) -> None:
         if os.path.exists(self.cache_file):
             try:
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                with open(self.cache_file, encoding='utf-8') as f:
                     for line in f:
                         article = json.loads(line.strip())
                         if 'uuid' in article:
                             self.processed_article_ids.add(article['uuid'])
             except Exception as e:
                 print(f'Error loading article cache: {e}')
-    
-    def _save_article(self, article: Dict[str, Any]) -> None:
+
+    def _save_article(self, article: dict[str, Any]) -> None:
         try:
             with open(self.cache_file, 'a', encoding='utf-8') as f:
                 json.dump(article, f, ensure_ascii=False)
                 f.write('\n')
         except Exception as e:
             print(f'Error saving article: {e}')
-    
+
     def _extract_image_url(self, entry) -> str:
         if 'media_content' in entry:
             for media in entry.get('media_content', []):
@@ -582,7 +586,7 @@ class LiveRSSNewsDataSource(DataSource):
                 if isinstance(media, dict) and 'url' in media:
                     return media.get('url', '')
         return ''
-    
+
     def _create_news_event(self, entry, feed_title, tags) -> NewsEvent:
         title = entry.get('title', 'No title')
 
@@ -632,7 +636,7 @@ class LiveRSSNewsDataSource(DataSource):
             uuid=guid,
             event_id=guid,
         )
-    
+
     async def _retry_on_error(
         self, func, *args, retries: int = 3, delay: int = 2, **kwargs
     ) -> Any:
@@ -645,8 +649,8 @@ class LiveRSSNewsDataSource(DataSource):
                     await asyncio.sleep(delay)
                 else:
                     raise
-    
-    async def _fetch_rss_feeds(self) -> List[Dict[str, Any]]:
+
+    async def _fetch_rss_feeds(self) -> list[dict[str, Any]]:  # noqa: C901
         results = []
         processed_count = 0
 
@@ -662,7 +666,7 @@ class LiveRSSNewsDataSource(DataSource):
                     print(f'Feed from {feed_url} is invalid')
                     continue
 
-                feed_title = "Unknown Source"
+                feed_title = 'Unknown Source'
                 if hasattr(feed, 'feed') and hasattr(feed.feed, 'title'):
                     feed_title = feed.feed.title
 
@@ -691,13 +695,13 @@ class LiveRSSNewsDataSource(DataSource):
             except Exception as e:
                 print(f'Error fetching feed {feed_url}: {e}')
                 import traceback
+
                 traceback.print_exc()
         return results
-    
+
     async def _poll_data(self) -> None:
         while True:
             try:
-
                 news_items = await self._retry_on_error(self._fetch_rss_feeds)
 
                 for entry, feed_title, tags in news_items:
@@ -730,17 +734,19 @@ class LiveRSSNewsDataSource(DataSource):
                     except Exception as e:
                         print(f'Error processing article: {e}')
                         import traceback
+
                         traceback.print_exc()
                         continue
 
             except Exception as e:
                 print(f'Error in polling loop: {e}')
                 import traceback
+
                 traceback.print_exc()
 
             print(f'Sleeping for {self.polling_interval} seconds')
             await asyncio.sleep(self.polling_interval)
-    
+
     async def start(self) -> None:
         if self._poll_task is None or self._poll_task.done():
             self._poll_task = asyncio.create_task(self._poll_data())
@@ -754,7 +760,7 @@ class LiveRSSNewsDataSource(DataSource):
                 pass
             self._poll_task = None
 
-    async def get_next_event(self) -> Optional[NewsEvent]:
+    async def get_next_event(self) -> NewsEvent | None:
         try:
             return await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
