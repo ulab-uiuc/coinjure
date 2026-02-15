@@ -14,7 +14,6 @@ import asyncio
 import os
 from decimal import Decimal
 
-from swm_agent.analytics.performance_analyzer import PerformanceAnalyzer
 from swm_agent.core.trading_engine import TradingEngine
 from swm_agent.data.backtest.historical_data_source import HistoricalDataSource
 from swm_agent.data.market_data_manager import MarketDataManager
@@ -195,10 +194,10 @@ async def run_backtest_with_risk_management():
     )
 
     print('\nStarting backtest with risk management...')
-    print(f'Max trade size: $500')
-    print(f'Max position size: $2,000')
-    print(f'Max total exposure: $8,000')
-    print(f'Max drawdown: 15%')
+    print('Max trade size: $500')
+    print('Max position size: $2,000')
+    print('Max total exposure: $8,000')
+    print('Max drawdown: 15%')
 
     await engine.start()
 

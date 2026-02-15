@@ -17,7 +17,7 @@ from swm_agent.data.live.live_data_source import LiveRSSNewsDataSource
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.live.live_trader import run_live_paper_trading
 from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import ConservativeRiskManager, StandardRiskManager
+from swm_agent.risk.risk_manager import ConservativeRiskManager
 from swm_agent.strategy.test_strategy import TestStrategy
 from swm_agent.ticker.ticker import CashTicker
 
@@ -44,11 +44,11 @@ async def run_rss_paper_trading():
     # Create strategy
     strategy = TestStrategy()
 
-    print(f'\nConfiguration:')
+    print('\nConfiguration:')
     print(f'  Initial Capital: ${initial_capital:,.2f}')
     print(f'  Duration: {duration} seconds')
-    print(f'  Polling Interval: 30 seconds')
-    print(f'  Categories: finance, business')
+    print('  Polling Interval: 30 seconds')
+    print('  Categories: finance, business')
 
     print('\nStarting live paper trading...')
     print('(Press Ctrl+C to stop early)\n')
@@ -99,7 +99,7 @@ async def run_paper_trading_with_risk_management():
 
     strategy = TestStrategy()
 
-    print(f'\nRisk Management Settings:')
+    print('\nRisk Management Settings:')
     print(f'  Max Trade Size: ${risk_manager.max_single_trade_size:,.2f}')
     print(f'  Max Position Size: ${risk_manager.max_position_size:,.2f}')
     print(f'  Max Total Exposure: ${risk_manager.max_total_exposure:,.2f}')

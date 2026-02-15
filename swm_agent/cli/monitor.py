@@ -1,10 +1,8 @@
 """Trading monitor CLI command."""
 
-import asyncio
 import time
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -14,11 +12,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.ticker.ticker import CashTicker
+from swm_agent.position.position_manager import PositionManager
 from swm_agent.trader.trader import Trader
-from swm_agent.trader.types import Order, OrderStatus
+from swm_agent.trader.types import OrderStatus
 
 
 class TradingMonitor:
@@ -99,7 +95,8 @@ class TradingMonitor:
         table.add_column('Realized P&L', justify='right')
 
         for pos in positions:
-            current_price = self.trader.market_data.get_best_bid(pos.ticker)
+            best_bid = self.trader.market_data.get_best_bid(pos.ticker)
+            current_price = best_bid.price if best_bid else Decimal('0')
             unrealized_pnl = self.position_manager.get_unrealized_pnl(
                 pos.ticker, self.trader.market_data
             )
@@ -117,7 +114,7 @@ class TradingMonitor:
 
     def _create_orders_table(self, limit: int = 10) -> Panel:
         """Create recent orders table."""
-        orders = self.trader.orders[-limit:]  # Get last N orders
+        orders = getattr(self.trader, 'orders', [])[-limit:]  # Get last N orders
 
         if not orders:
             return Panel(
@@ -182,8 +179,10 @@ class TradingMonitor:
         table.add_column('Spread %', justify='right')
 
         for ticker in tickers:
-            bid = market_data.get_best_bid(ticker)
-            ask = market_data.get_best_ask(ticker)
+            best_bid = market_data.get_best_bid(ticker)
+            best_ask = market_data.get_best_ask(ticker)
+            bid = best_bid.price if best_bid else Decimal('0')
+            ask = best_ask.price if best_ask else Decimal('0')
             spread = ask - bid
             spread_pct = (spread / bid * 100) if bid > 0 else Decimal('0')
 
@@ -211,13 +210,10 @@ class TradingMonitor:
         table.add_row('Runtime', runtime_str)
 
         # Order statistics
-        total_orders = len(self.trader.orders)
-        filled_orders = sum(
-            1 for o in self.trader.orders if o.status == OrderStatus.FILLED
-        )
-        rejected_orders = sum(
-            1 for o in self.trader.orders if o.status == OrderStatus.REJECTED
-        )
+        orders = getattr(self.trader, 'orders', [])
+        total_orders = len(orders)
+        filled_orders = sum(1 for o in orders if o.status == OrderStatus.FILLED)
+        rejected_orders = sum(1 for o in orders if o.status == OrderStatus.REJECTED)
 
         table.add_row('Total Orders', str(total_orders))
         table.add_row('Filled Orders', str(filled_orders))
@@ -324,7 +320,7 @@ class TradingMonitor:
     type=click.Path(exists=True),
     help='Path to trading engine config file (if applicable)',
 )
-def monitor(watch: bool, refresh: float, config: Optional[str]) -> None:
+def monitor(watch: bool, refresh: float, config: str | None) -> None:
     """Monitor trading activities, positions, and portfolio status.
 
     Display current portfolio value, active positions with P&L,

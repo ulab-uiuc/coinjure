@@ -1,7 +1,5 @@
 from decimal import Decimal
 
-import pytest
-
 from swm_agent.order.order_book import Level, OrderBook
 
 

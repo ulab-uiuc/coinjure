@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from swm_agent.data.live.live_data_source import LiveNewsDataSource
 
 
-async def test_news_source(args):
+async def test_news_source(args):  # noqa: C901
     data_dir = args.data_dir
     os.makedirs(data_dir, exist_ok=True)
 
@@ -37,7 +37,7 @@ async def test_news_source(args):
     )
 
     print(f'Starting LiveNewsDataSource (polling every {args.interval} seconds)')
-    print(f"Categories: {', '.join(categories) if categories else 'All'}")
+    print(f'Categories: {", ".join(categories) if categories else "All"}')
     await data_source.start()
 
     # Event counter
@@ -71,7 +71,7 @@ async def test_news_source(args):
                 print(f'Published: {event.published_at}')
 
                 if event.categories:
-                    print(f"Categories: {', '.join(event.categories)}")
+                    print(f'Categories: {", ".join(event.categories)}')
 
                 if args.verbose:
                     print(f'Description: {event.description}')
