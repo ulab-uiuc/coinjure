@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Optional
 
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.position.position_manager import PositionManager
@@ -46,9 +45,9 @@ class StandardRiskManager(RiskManager):
         max_position_size: Decimal = Decimal('5000'),
         max_total_exposure: Decimal = Decimal('50000'),
         max_drawdown_pct: Decimal = Decimal('0.20'),
-        daily_loss_limit: Optional[Decimal] = None,
+        daily_loss_limit: Decimal | None = None,
         max_positions: int = 10,
-        initial_capital: Optional[Decimal] = None,
+        initial_capital: Decimal | None = None,
     ):
         """
         Initialize the risk manager.
@@ -75,8 +74,8 @@ class StandardRiskManager(RiskManager):
         self.initial_capital = initial_capital
 
         # Track peak portfolio value for drawdown calculation
-        self._peak_portfolio_value: Optional[Decimal] = None
-        self._daily_starting_value: Optional[Decimal] = None
+        self._peak_portfolio_value: Decimal | None = None
+        self._daily_starting_value: Decimal | None = None
         self._daily_pnl = Decimal('0')
 
     def _get_portfolio_value(self) -> Decimal:
@@ -280,7 +279,7 @@ class ConservativeRiskManager(StandardRiskManager):
         self,
         position_manager: PositionManager,
         market_data: MarketDataManager,
-        initial_capital: Optional[Decimal] = None,
+        initial_capital: Decimal | None = None,
     ):
         super().__init__(
             position_manager=position_manager,
@@ -302,7 +301,7 @@ class AggressiveRiskManager(StandardRiskManager):
         self,
         position_manager: PositionManager,
         market_data: MarketDataManager,
-        initial_capital: Optional[Decimal] = None,
+        initial_capital: Decimal | None = None,
     ):
         super().__init__(
             position_manager=position_manager,

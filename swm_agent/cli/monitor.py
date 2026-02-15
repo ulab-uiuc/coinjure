@@ -225,7 +225,6 @@ class DemoStrategy(Strategy):
 # 3. Layout
 # ---------------------------------------------------------------------------
 
-
 def make_layout() -> Layout:
     """Build the dashboard skeleton.
 
@@ -298,7 +297,6 @@ def _dd_color(pct: float) -> str:
 
 
 # ---- Header ---------------------------------------------------------------
-
 
 def generate_header(snap: EngineSnapshot) -> Panel:
     pnl_m = _pnl_style(snap.total_pnl)
@@ -388,7 +386,6 @@ def generate_recent_trades(snap: EngineSnapshot) -> Panel:
             title='[bold] Recent Trades [/bold]',
             border_style='yellow',
         )
-
     table = Table(
         show_header=True, header_style='bold', expand=True, padding=(0, 1),
     )

@@ -3,16 +3,10 @@
 This example shows how to run a trading engine with live monitoring.
 """
 
-import asyncio
-from decimal import Decimal
-
 from swm_agent.cli.monitor import TradingMonitor
 from swm_agent.core.trading_engine import TradingEngine
 from swm_agent.data.data_source import DataSource
-from swm_agent.position.position_manager import PositionManager
 from swm_agent.strategy.strategy import Strategy
-from swm_agent.ticker.ticker import CashTicker
-from swm_agent.trader.paper_trader import PaperTrader
 from swm_agent.trader.trader import Trader
 
 
@@ -33,7 +27,7 @@ async def run_trading_with_monitor(
         refresh_rate: Refresh rate for watch mode in seconds
     """
     # Create trading engine
-    engine = TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
+    TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
     # Create monitor
     monitor = TradingMonitor(trader=trader, position_manager=trader.position_manager)
