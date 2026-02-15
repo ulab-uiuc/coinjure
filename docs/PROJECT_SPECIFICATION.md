@@ -1,207 +1,205 @@
-# SWM Agent 项目说明书
+# SWM Agent Project Specification
 
-## 一、项目核心功能与解决的问题
+## 1. Core Features and Problems Solved
 
-### 1.1 核心功能
+### 1.1 Core Features
 
-**SWM Agent**（Social World Model Trading Agent）是一个面向 **Polymarket 预测市场** 的智能交易代理系统，基于社会世界模型（Social World Model）概念构建。项目的核心功能包括：
+**SWM Agent** (Social World Model Trading Agent) is an intelligent trading agent system designed for the **Polymarket prediction market**, built on the Social World Model concept. Its core features include:
 
-| 功能模块 | 描述 |
-|---------|------|
-| **实时市场集成** | 对接 Polymarket 的 CLOB（中央限价订单簿）API 进行实盘交易 |
-| **新闻情感分析** | 集成新闻 API 与 RSS 源，分析市场相关新闻事件 |
-| **LLM 驱动决策** | 使用大语言模型分析新闻内容并生成交易信号 |
-| **风险管控** | 支持多级风险经理，可配置持仓、回撤、单笔等限制 |
-| **回测框架** | 基于历史数据进行策略验证 |
-| **模拟交易** | 纸质交易模式，可在无真实资金风险下测试策略 |
-| **绩效分析** | 提供 Sharpe 比率、最大回撤、胜率等指标 |
+| Module | Description |
+|--------|-------------|
+| **Real-time Market Integration** | Connects to Polymarket's CLOB (Central Limit Order Book) API for live trading |
+| **News Sentiment Analysis** | Integrates news APIs and RSS feeds to analyze market-relevant news events |
+| **LLM-driven Decision Making** | Uses large language models to analyze news content and generate trading signals |
+| **Risk Management** | Multi-level risk managers with configurable position, drawdown, and per-trade limits |
+| **Backtesting Framework** | Strategy validation using historical data |
+| **Paper Trading** | Simulated trading mode for strategy testing without real capital risk |
+| **Performance Analytics** | Provides Sharpe ratio, maximum drawdown, win rate, and other metrics |
 
-### 1.2 解决的问题
+### 1.2 Problems Solved
 
-1. **自动化预测市场交易**：将新闻、订单簿等事件与交易决策自动化衔接  
-2. **风险可控的实盘与模拟**：通过风险经理与模拟交易降低实盘试错成本  
-3. **策略可复用与可扩展**：统一策略接口，方便定制和回测  
-4. **多数据源统一接入**：抽象数据源接口，支持历史、新闻、RSS、Polymarket 实时数据  
-
----
-
-## 二、技术栈
-
-### 2.1 编程语言与运行时
-
-- **Python**：>= 3.10，< 3.12
-
-### 2.2 核心框架与库
-
-| 类别 | 技术 | 用途 |
-|------|------|------|
-| **CLI** | Click | 命令行界面 |
-| **终端展示** | Rich | 监控面板、表格、布局 |
-| **数据验证** | Pydantic | 数据模型校验 |
-| **类型检查** | Beartype | 运行时类型检查 |
-| **Polymarket** | py-clob-client | Polymarket CLOB API 交互 |
-| **HTTP 客户端** | httpx | 异步 HTTP 请求 |
-| **RSS 解析** | feedparser | RSS 订阅解析 |
-
-### 2.3 数据库与中间件
-
-- **无专用数据库**：使用本地 JSONL 文件缓存事件与新闻（如 `events_cache.jsonl`、`news_cache.jsonl` 等）
-- **无消息队列**：使用 Python `asyncio.Queue` 实现事件流
-
-### 2.4 开发与测试工具
-
-- **包管理**：Poetry  
-- **代码风格**：Ruff（替代 Black / isort）  
-- **类型检查**：mypy（strict 模式）  
-- **测试**：pytest、pytest-asyncio、pytest-cov、pytest-mock、hypothesis  
-- **预提交**：pre-commit  
+1. **Automated prediction market trading**: Automates the connection between news, order book events, and trading decisions
+2. **Risk-controlled live and simulated trading**: Reduces live-trading trial-and-error cost through risk managers and paper trading
+3. **Reusable and extensible strategies**: Unified strategy interface for easy customization and backtesting
+4. **Unified multi-source data ingestion**: Abstract data source interface supporting historical, news, RSS, and Polymarket live data
 
 ---
 
-## 三、项目目录结构
+## 2. Technology Stack
+
+### 2.1 Language and Runtime
+
+- **Python**: >= 3.10, < 3.12
+
+### 2.2 Core Frameworks and Libraries
+
+| Category | Technology | Purpose |
+|----------|-----------|---------|
+| **CLI** | Click | Command-line interface |
+| **Terminal Display** | Rich | Monitoring dashboards, tables, layouts |
+| **Data Validation** | Pydantic | Data model validation |
+| **Type Checking** | Beartype | Runtime type checking |
+| **Polymarket** | py-clob-client | Polymarket CLOB API interaction |
+| **HTTP Client** | httpx | Asynchronous HTTP requests |
+| **RSS Parsing** | feedparser | RSS feed parsing |
+
+### 2.3 Databases and Middleware
+
+- **No dedicated database**: Uses local JSONL files to cache events and news (e.g., `events_cache.jsonl`, `news_cache.jsonl`)
+- **No message queue**: Uses Python `asyncio.Queue` for event streaming
+
+### 2.4 Development and Testing Tools
+
+- **Package management**: Poetry
+- **Code style**: Ruff (replaces Black / isort)
+- **Type checking**: mypy (strict mode)
+- **Testing**: pytest, pytest-asyncio, pytest-cov, pytest-mock, hypothesis
+- **Pre-commit**: pre-commit
+
+---
+
+## 3. Project Directory Structure
 
 ```
 qfj/
-├── swm_agent/                    # 主包目录
-│   ├── cli/                     # 命令行
-│   │   ├── cli.py               # CLI 入口
-│   │   ├── monitor.py           # 交易监控命令
+├── swm_agent/                    # Main package
+│   ├── cli/                     # CLI
+│   │   ├── cli.py               # CLI entry point
+│   │   ├── monitor.py           # Trading monitor command
 │   │   └── utils.py
-│   ├── core/                    # 核心引擎
-│   │   └── trading_engine.py    # 交易引擎（事件循环与驱动）
-│   ├── strategy/                # 策略层
-│   │   ├── strategy.py         # 策略抽象基类
-│   │   ├── simple_strategy.py  # LLM 策略
-│   │   └── test_strategy.py    # 测试用策略
-│   ├── trader/                  # 交易执行层
-│   │   ├── trader.py           # 交易者抽象基类
-│   │   ├── paper_trader.py     # 纸质交易（模拟）
-│   │   ├── polymarket_trader.py # Polymarket 实盘交易
-│   │   └── types.py            # 交易类型定义
-│   ├── data/                    # 数据层
-│   │   ├── data_source.py      # 数据源抽象基类
-│   │   ├── market_data_manager.py # 行情管理
+│   ├── core/                    # Core engine
+│   │   └── trading_engine.py    # Trading engine (event loop and driver)
+│   ├── strategy/                # Strategy layer
+│   │   ├── strategy.py         # Strategy abstract base class
+│   │   ├── simple_strategy.py  # LLM strategy
+│   │   └── test_strategy.py    # Test strategy
+│   ├── trader/                  # Trade execution layer
+│   │   ├── trader.py           # Trader abstract base class
+│   │   ├── paper_trader.py     # Paper trading (simulation)
+│   │   ├── polymarket_trader.py # Polymarket live trading
+│   │   └── types.py            # Trade type definitions
+│   ├── data/                    # Data layer
+│   │   ├── data_source.py      # Data source abstract base class
+│   │   ├── market_data_manager.py # Market data management
 │   │   ├── backtest/
-│   │   │   └── historical_data_source.py # 历史回测数据源
+│   │   │   └── historical_data_source.py # Historical backtest data source
 │   │   └── live/
-│   │       └── live_data_source.py # 实时数据源（Polymarket/新闻/RSS）
-│   ├── events/                  # 事件系统
-│   │   └── events.py           # OrderBookEvent、NewsEvent、PriceChangeEvent
-│   ├── ticker/                  # 标的标识
-│   │   └── ticker.py           # Ticker、PolyMarketTicker、CashTicker
-│   ├── order/                   # 订单
-│   │   └── order_book.py       # 订单簿管理
-│   ├── position/                # 持仓
-│   │   └── position_manager.py # 持仓与 PnL 管理
-│   ├── risk/                    # 风控
+│   │       └── live_data_source.py # Live data sources (Polymarket/News/RSS)
+│   ├── events/                  # Event system
+│   │   └── events.py           # OrderBookEvent, NewsEvent, PriceChangeEvent
+│   ├── ticker/                  # Instrument identifiers
+│   │   └── ticker.py           # Ticker, PolyMarketTicker, CashTicker
+│   ├── order/                   # Orders
+│   │   └── order_book.py       # Order book management
+│   ├── position/                # Positions
+│   │   └── position_manager.py # Position and PnL management
+│   ├── risk/                    # Risk control
 │   │   └── risk_manager.py     # NoRisk/Standard/Conservative/Aggressive
-│   ├── analytics/                # 分析
-│   │   └── performance_analyzer.py # 绩效分析
-│   ├── backtest/                # 回测
-│   │   └── backtester.py       # 回测编排
-│   └── live/                    # 实盘
-│       └── live_trader.py      # 实盘/模拟运行入口
-├── examples/                     # 示例
+│   ├── analytics/                # Analytics
+│   │   └── performance_analyzer.py # Performance analysis
+│   ├── backtest/                # Backtesting
+│   │   └── backtester.py       # Backtest orchestration
+│   └── live/                    # Live trading
+│       └── live_trader.py      # Live/paper trading entry point
+├── examples/                     # Examples
 │   ├── backtest_example.py
 │   ├── live_paper_trading_example.py
 │   ├── custom_strategy_example.py
 │   ├── performance_analysis_example.py
 │   ├── monitor_example.py
 │   └── demo_monitor.py
-├── scripts/                      # 工具脚本
+├── scripts/                      # Utility scripts
 │   ├── get_live_polymarket_data.py
 │   └── get_live_news_data.py
-├── tests/                        # 单元测试
-├── docs/                         # 文档（本项目说明书所在目录）
-├── .github/                      # CI/CD 和 Issue 模板
-├── pyproject.toml               # Poetry 配置
+├── tests/                        # Unit tests
+├── docs/                         # Documentation
+├── .github/                      # CI/CD and issue templates
+├── pyproject.toml               # Poetry configuration
 ├── README.md
 └── .pre-commit-config.yaml
 ```
 
-### 3.1 关键目录说明
+### 3.1 Key Directory Descriptions
 
-| 目录 | 作用 |
-|------|------|
-| `swm_agent/core/` | 交易引擎，负责事件循环、策略调用、交易执行调度 |
-| `swm_agent/strategy/` | 策略定义，实现 `process_event` 并调用 `trader.place_order` |
-| `swm_agent/trader/` | 交易执行，包含模拟（PaperTrader）与实盘（PolymarketTrader） |
-| `swm_agent/data/` | 数据源抽象，历史、Polymarket、新闻、RSS 的实现 |
-| `swm_agent/events/` | 事件类型：OrderBookEvent、NewsEvent、PriceChangeEvent |
-| `swm_agent/risk/` | 风控层，限制单笔、单标、总敞口、回撤、日损失等 |
-| `swm_agent/position/` | 持仓与 PnL 计算 |
-| `swm_agent/analytics/` | Sharpe、胜率、最大回撤、盈亏比等绩效指标 |
-| `swm_agent/live/` | 实盘/模拟运行入口（`run_live_paper_trading`、`run_live_polymarket_trading` 等） |
+| Directory | Purpose |
+|-----------|---------|
+| `swm_agent/core/` | Trading engine: event loop, strategy invocation, trade execution scheduling |
+| `swm_agent/strategy/` | Strategy definitions: implements `process_event` and calls `trader.place_order` |
+| `swm_agent/trader/` | Trade execution: includes simulation (PaperTrader) and live (PolymarketTrader) |
+| `swm_agent/data/` | Data source abstraction: historical, Polymarket, news, and RSS implementations |
+| `swm_agent/events/` | Event types: OrderBookEvent, NewsEvent, PriceChangeEvent |
+| `swm_agent/risk/` | Risk control layer: per-trade, per-instrument, total exposure, drawdown, and daily loss limits |
+| `swm_agent/position/` | Position tracking and PnL computation |
+| `swm_agent/analytics/` | Sharpe ratio, win rate, maximum drawdown, profit/loss ratio, and other performance metrics |
+| `swm_agent/live/` | Live/paper trading entry points (`run_live_paper_trading`, `run_live_polymarket_trading`, etc.) |
 
 ---
 
-## 四、程序入口
+## 4. Program Entry Points
 
-### 4.1 CLI 入口（主入口）
+### 4.1 CLI Entry Point (Main)
 
-在 `pyproject.toml` 中定义：
+Defined in `pyproject.toml`:
 
 ```toml
 [tool.poetry.scripts]
 swm-agent = "swm_agent.cli.cli:cli"
 ```
 
-即主入口为：**`swm_agent.cli.cli:cli`**。
+The main entry point is: **`swm_agent.cli.cli:cli`**.
 
-安装后可通过命令：
+After installation, the CLI can be invoked directly:
 
 ```bash
-swm-agent monitor           # 监控
-swm-agent monitor --watch   # 实时刷新
+swm-agent monitor           # Monitor
+swm-agent monitor --watch   # Live refresh
 ```
 
-直接调用该 CLI。
+### 4.2 Entry Point Overview
 
-### 4.2 代码入口点一览
+| Entry Point | File | Description |
+|-------------|------|-------------|
+| **CLI** | `swm_agent/cli/cli.py` | `cli()` — registers the `monitor` subcommand |
+| **Backtesting** | `examples/backtest_example.py` | Run this script directly for backtesting |
+| **Paper Trading** | `examples/live_paper_trading_example.py` or `swm_agent/live/live_trader.py` | Run via `run_live_paper_trading()` |
+| **Live Trading** | `swm_agent/live/live_trader.py` | Run via `run_live_polymarket_trading()` |
 
-| 入口 | 文件 | 说明 |
-|------|------|------|
-| **CLI** | `swm_agent/cli/cli.py` | `cli()` → 注册 `monitor` 子命令 |
-| **回测** | `examples/backtest_example.py` | 直接运行该脚本进行回测 |
-| **模拟实盘** | `examples/live_paper_trading_example.py` 或 `swm_agent/live/live_trader.py` | 通过 `run_live_paper_trading()` 运行 |
-| **实盘交易** | `swm_agent/live/live_trader.py` | 通过 `run_live_polymarket_trading()` 运行 |
-
-### 4.3 执行流程概览
+### 4.3 Execution Flow Overview
 
 ```
-用户命令 / 脚本
+User command / script
     ↓
-CLI (cli.py) 或 examples / live_trader
+CLI (cli.py) or examples / live_trader
     ↓
 TradingEngine(data_source, strategy, trader)
     ↓
-engine.start()：循环调用 data_source.get_next_event()
+engine.start(): loops calling data_source.get_next_event()
     ↓
-对 OrderBookEvent → market_data.process_orderbook_event()
-对 PriceChangeEvent → market_data.process_price_change_event()
+OrderBookEvent → market_data.process_orderbook_event()
+PriceChangeEvent → market_data.process_price_change_event()
     ↓
 strategy.process_event(event, trader)
     ↓
-strategy 内部调用 trader.place_order()
+Strategy internally calls trader.place_order()
     ↓
-PaperTrader 或 PolymarketTrader 执行订单并更新 position_manager
+PaperTrader or PolymarketTrader executes order and updates position_manager
 ```
 
 ---
 
-## 五、附录：典型运行方式
+## 5. Appendix: Typical Run Commands
 
-### 回测
+### Backtesting
 
 ```bash
 python examples/backtest_example.py
 ```
 
-### 模拟实盘（RSS 新闻）
+### Paper Trading (RSS News)
 
 ```bash
 python examples/live_paper_trading_example.py
-# 或
+# or
 python -c "
 import asyncio
 from decimal import Decimal
@@ -218,7 +216,7 @@ asyncio.run(run_live_paper_trading(
 "
 ```
 
-### 监控
+### Monitoring
 
 ```bash
 swm-agent monitor
@@ -227,4 +225,4 @@ swm-agent monitor --watch --refresh 1.0
 
 ---
 
-*文档版本：基于项目当前代码结构整理*
+*Document version: Based on current project code structure*
