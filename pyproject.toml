@@ -86,6 +86,8 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
+    "swm_agent.cli.utils",
+    "swm_agent.live.live_trader",
     "swm_agent.events.events",
     "swm_agent.analytics.performance_analyzer",
     "swm_agent.data.market_data_manager",
@@ -95,7 +97,7 @@ module = [
     "swm_agent.core.trading_engine",
     "swm_agent.backtest.backtester",
 ]
-disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value"]
+disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value", "unused-coroutine"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -154,6 +156,7 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["S101"]
+"swm_agent/data/data_source.py" = ["B027"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"

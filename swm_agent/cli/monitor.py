@@ -20,7 +20,6 @@ import random
 from collections import deque
 from datetime import datetime
 from decimal import Decimal
-from typing import Deque, List, Optional, Tuple
 
 import click
 from rich.align import Align
@@ -36,7 +35,7 @@ from swm_agent.data.data_source import DataSource
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.events.events import Event, NewsEvent, PriceChangeEvent
 from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import NoRiskManager, StandardRiskManager
+from swm_agent.risk.risk_manager import StandardRiskManager
 from swm_agent.strategy.strategy import Strategy
 from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
 from swm_agent.trader.paper_trader import PaperTrader
@@ -64,8 +63,8 @@ class TUILogHandler(logging.Handler):
 
     def __init__(
         self,
-        log_deque: Deque[str],
-        signal_deque: Deque[Tuple[str, str, str]],
+        log_deque: deque[str],
+        signal_deque: deque[tuple[str, str, str]],
     ) -> None:
         super().__init__()
         self.log_deque = log_deque
@@ -141,7 +140,7 @@ class DemoDataSource(DataSource):
         self._prices = {t.symbol: Decimal('0.50') for t in _DEMO_TICKERS}
         self._speed = speed
 
-    async def get_next_event(self) -> Optional[Event]:
+    async def get_next_event(self) -> Event | None:
         await asyncio.sleep(random.uniform(0.3, 1.2) / self._speed)
 
         ticker = random.choice(_DEMO_TICKERS)
@@ -539,7 +538,7 @@ def generate_active_orders(snap: EngineSnapshot) -> Panel:
 # ---- System Logs -----------------------------------------------------------
 
 
-def generate_logs(log_deque: Deque[str]) -> Panel:
+def generate_logs(log_deque: deque[str]) -> Panel:
     visible = list(log_deque)[-8:]
     body = '\n'.join(visible) if visible else '[dim]Waiting for events…[/dim]'
     return Panel(
@@ -554,7 +553,7 @@ def generate_logs(log_deque: Deque[str]) -> Panel:
 
 def generate_news_signals(
     snap: EngineSnapshot,
-    signal_deque: Deque[Tuple[str, str, str]],
+    signal_deque: deque[tuple[str, str, str]],
 ) -> Panel:
     """Merge engine ``news_headlines`` with strategy signal logs."""
     table = Table(
@@ -564,7 +563,7 @@ def generate_news_signals(
     table.add_column('Headline / Signal')
     table.add_column('Action', width=12)
 
-    rows: list[Tuple[str, str, str]] = []
+    rows: list[tuple[str, str, str]] = []
 
     # Headlines from the engine
     for ts, headline in snap.news_headlines:
@@ -585,7 +584,7 @@ def generate_news_signals(
 
     # Deduplicate & show most recent
     seen: set[str] = set()
-    unique: list[Tuple[str, str, str]] = []
+    unique: list[tuple[str, str, str]] = []
     for r in reversed(rows):
         key = r[1]
         if key not in seen:
@@ -611,8 +610,8 @@ def generate_news_signals(
 def render_dashboard(
     layout: Layout,
     snap: EngineSnapshot,
-    log_deque: Deque[str],
-    signal_deque: Deque[Tuple[str, str, str]],
+    log_deque: deque[str],
+    signal_deque: deque[tuple[str, str, str]],
 ) -> None:
     """Populate every layout slot from the current snapshot + log queues."""
     layout['header'].update(generate_header(snap))
@@ -857,8 +856,8 @@ def _build_live_engine(
 async def _async_monitor(
     engine: TradingEngine,
     refresh: int,
-    log_deque: Deque[str],
-    signal_deque: Deque[Tuple[str, str, str]],
+    log_deque: deque[str],
+    signal_deque: deque[tuple[str, str, str]],
 ) -> None:
     """Run engine in background + Rich TUI in foreground."""
     _log = logging.getLogger(__name__)
@@ -984,8 +983,8 @@ def monitor(
     initial_capital = Decimal(str(capital))
 
     # ----- log interception -----
-    log_deque: Deque[str] = deque(maxlen=200)
-    signal_deque: Deque[Tuple[str, str, str]] = deque(maxlen=100)
+    log_deque: deque[str] = deque(maxlen=200)
+    signal_deque: deque[tuple[str, str, str]] = deque(maxlen=100)
     handler = TUILogHandler(log_deque, signal_deque)
     handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
 

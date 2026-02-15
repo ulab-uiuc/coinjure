@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from swm_agent.events.events import Event
 
 
 class DataSource(ABC):
     @abstractmethod
-    async def get_next_event(self) -> Optional[Event]:
+    async def get_next_event(self) -> Event | None:
         """Retrieve next event. Returns ``None`` if finished (or on timeout)."""
         pass
 
