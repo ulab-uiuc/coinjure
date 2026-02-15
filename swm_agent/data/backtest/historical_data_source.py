@@ -1,7 +1,5 @@
 import json
-from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from swm_agent.events.events import Event, PriceChangeEvent
 from swm_agent.ticker.ticker import PolyMarketTicker
@@ -20,7 +18,7 @@ class HistoricalDataSource(DataSource):
         events: list[Event] = []
 
         try:
-            with open(self.history_file, 'r') as f:
+            with open(self.history_file) as f:
                 for line in f:
                     data = json.loads(line.strip())
                     if (
@@ -47,7 +45,7 @@ class HistoricalDataSource(DataSource):
         print(f'Historical data loaded: {events}')
         return events
 
-    async def get_next_event(self) -> Optional[Event]:
+    async def get_next_event(self) -> Event | None:
         if self.index < len(self.events):
             event = self.events[self.index]
             self.index += 1

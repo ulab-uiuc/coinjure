@@ -1,7 +1,6 @@
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Optional
 
 from swm_agent.trader.types import Trade, TradeSide
 
@@ -36,7 +35,7 @@ class PerformanceAnalyzer:
         self.trades: list[Trade] = []
         self.initial_capital = initial_capital
         self.equity_curve: list[EquityPoint] = []
-        self._stats: Optional[TradeStats] = None
+        self._stats: TradeStats | None = None
         self._pnl_per_trade: list[Decimal] = []
 
         # Initialize equity curve with starting capital

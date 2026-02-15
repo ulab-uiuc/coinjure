@@ -221,7 +221,7 @@ def example_risk_metrics():
     random.seed(42)  # For reproducibility
 
     print('\nSimulating 100 trades...')
-    for i in range(100):
+    for _i in range(100):
         # Random price between 0.40 and 0.60
         price = Decimal(str(round(0.40 + random.random() * 0.20, 2)))
         quantity = Decimal(str(random.randint(50, 200)))
@@ -250,15 +250,15 @@ def example_risk_metrics():
     print(f'Total Trades: {stats.total_trades}')
     print(f'Winning Trades: {stats.winning_trades} ({stats.win_rate * 100:.1f}%)')
     print(f'Losing Trades: {stats.losing_trades}')
-    print(f'')
+    print('')
     print(f'Total Return: {analyzer.get_return_pct():.2f}%')
     print(f'Max Drawdown: {stats.max_drawdown * 100:.2f}%')
     print(f'Sharpe Ratio: {stats.sharpe_ratio:.4f}')
     print(f'Profit Factor: {stats.profit_factor:.2f}')
-    print(f'')
+    print('')
     print(f'Average Profit: ${stats.average_profit:,.2f}')
     print(f'Average Loss: ${stats.average_loss:,.2f}')
-    print(f'')
+    print('')
     print(f'Current Equity: ${analyzer.get_current_equity():,.2f}')
 
 

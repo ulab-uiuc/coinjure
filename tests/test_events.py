@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from swm_agent.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
+from swm_agent.events.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 from swm_agent.ticker.ticker import PolyMarketTicker
 
 

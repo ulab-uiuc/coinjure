@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
 
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.ticker.ticker import CashTicker, Ticker

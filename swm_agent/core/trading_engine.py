@@ -1,5 +1,3 @@
-import time
-
 from swm_agent.data.data_source import DataSource
 from swm_agent.events.events import OrderBookEvent, PriceChangeEvent
 from swm_agent.strategy.strategy import Strategy
