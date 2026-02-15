@@ -6,7 +6,6 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional, Tuple
 
 from swm_agent.analytics.performance_analyzer import PerformanceAnalyzer
 from swm_agent.data.data_source import DataSource
@@ -41,8 +40,8 @@ class PositionSnapshot:
 @dataclass(frozen=True)
 class OrderBookSnapshot:
     ticker_symbol: str
-    bids: List[Tuple[Decimal, Decimal]]  # [(price, size), ...]
-    asks: List[Tuple[Decimal, Decimal]]
+    bids: list[tuple[Decimal, Decimal]]  # [(price, size), ...]
+    asks: list[tuple[Decimal, Decimal]]
 
 
 @dataclass(frozen=True)
@@ -85,11 +84,11 @@ class EngineSnapshot:
     engine_running: bool
 
     # ---- collections ----
-    positions: List[PositionSnapshot]
-    orderbooks: List[OrderBookSnapshot]
-    recent_trades: List[TradeSnapshot]
-    active_orders: List[OrderSnapshot]
-    news_headlines: List[Tuple[str, str]]  # [(time_str, headline), ...]
+    positions: list[PositionSnapshot]
+    orderbooks: list[OrderBookSnapshot]
+    recent_trades: list[TradeSnapshot]
+    active_orders: list[OrderSnapshot]
+    news_headlines: list[tuple[str, str]]  # [(time_str, headline), ...]
 
 
 # ---------------------------------------------------------------------------
@@ -119,12 +118,12 @@ class TradingEngine:
         self._continuous = continuous
 
         # --- monitoring helpers ---
-        self._start_time: Optional[datetime] = None
+        self._start_time: datetime | None = None
         self._event_count: int = 0
         self._last_orders_idx: int = 0
         self._order_times: list[str] = []
         self._perf = PerformanceAnalyzer(initial_capital=initial_capital)
-        self._news: deque[Tuple[str, str]] = deque(maxlen=100)
+        self._news: deque[tuple[str, str]] = deque(maxlen=100)
 
         # [H3] Guard: prevent calling data_source.start() more than once.
         self._ds_started: bool = False
@@ -133,7 +132,7 @@ class TradingEngine:
     # Main loop                                                           #
     # ------------------------------------------------------------------ #
 
-    async def start(self) -> None:
+    async def start(self) -> None:  # noqa: C901
         self._start_time = datetime.now()
         self.running = True
 
@@ -242,7 +241,7 @@ class TradingEngine:
     # Snapshot (non-blocking, no awaits)                                  #
     # ------------------------------------------------------------------ #
 
-    def get_snapshot(self) -> EngineSnapshot:
+    def get_snapshot(self) -> EngineSnapshot:  # noqa: C901
         """Return an immutable snapshot of current engine + portfolio state.
 
         This method is intentionally **synchronous** and never yields, so it
@@ -299,7 +298,7 @@ class TradingEngine:
         )
 
         # ---- positions --------------------------------------------------
-        pos_snaps: List[PositionSnapshot] = []
+        pos_snaps: list[PositionSnapshot] = []
         for pos in pm.get_non_cash_positions():
             if pos.quantity == 0:
                 continue
@@ -326,9 +325,9 @@ class TradingEngine:
         # ---- order books ------------------------------------------------
         # [H1] Snapshot the dict to avoid RuntimeError if it's mutated.
         # [M2] Sort by symbol for stable UI ordering.
-        ob_snaps: List[OrderBookSnapshot] = []
-        for ticker, ob in sorted(
-            list(md.order_books.items()),
+        ob_snaps: list[OrderBookSnapshot] = []
+        for ticker, ob in sorted(  # noqa: C414
+            list(md.order_books.items()),  # snapshot to avoid RuntimeError
             key=lambda kv: kv[0].symbol,
         ):
             if isinstance(ticker, CashTicker):
@@ -346,8 +345,8 @@ class TradingEngine:
         # [M3] Direct attribute access now that Trader declares ``orders``.
         all_orders = list(self.trader.orders)  # snapshot the list
 
-        trade_snaps: List[TradeSnapshot] = []
-        active_snaps: List[OrderSnapshot] = []
+        trade_snaps: list[TradeSnapshot] = []
+        active_snaps: list[OrderSnapshot] = []
 
         for idx in range(len(all_orders) - 1, max(len(all_orders) - 20, -1) - 1, -1):
             if idx < 0:

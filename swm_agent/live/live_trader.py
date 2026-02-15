@@ -42,7 +42,7 @@ async def run_live_trading(
         try:
             await asyncio.wait_for(engine.start(), timeout=duration)
         except asyncio.TimeoutError:
-            engine.stop()
+            await engine.stop()
             print(f'Live trading stopped after {duration} seconds.')
     else:
         # Run indefinitely
