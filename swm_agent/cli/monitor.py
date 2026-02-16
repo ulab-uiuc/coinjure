@@ -1,5 +1,8 @@
 """Trading monitor CLI command."""
 
+from __future__ import annotations
+
+import asyncio
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -12,7 +15,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swm_agent.position.position_manager import PositionManager
+from swm_agent.data.live.google_news_data_source import GoogleNewsDataSource
+from swm_agent.data.market_data_manager import MarketDataManager
+from swm_agent.events.events import NewsEvent
+from swm_agent.position.position_manager import Position, PositionManager
+from swm_agent.risk.risk_manager import NoRiskManager
+from swm_agent.ticker.ticker import CashTicker
+from swm_agent.trader.paper_trader import PaperTrader
 from swm_agent.trader.trader import Trader
 from swm_agent.trader.types import OrderStatus
 
@@ -229,6 +238,32 @@ class TradingMonitor:
 
         return Panel(table, title='[bold]Statistics[/bold]', border_style='cyan')
 
+    def _create_news_panel(self, limit: int = 8) -> Panel:
+        """Create news headlines panel."""
+        headlines: list[NewsEvent] = getattr(self, 'news_headlines', [])[-limit:]
+
+        if not headlines:
+            return Panel(
+                '[dim]Waiting for news...[/dim]',
+                title='[bold]News Headlines[/bold]',
+                border_style='magenta',
+            )
+
+        table = Table(show_header=True, header_style='bold')
+        table.add_column('Time', style='dim', width=6)
+        table.add_column('Source', style='cyan', width=14)
+        table.add_column('Headline')
+
+        for ev in reversed(headlines):
+            t = ev.published_at.strftime('%H:%M') if ev.published_at else ''
+            src = (ev.source or '')[:14]
+            title = (ev.title or ev.news or '')[:80]
+            table.add_row(t, src, title)
+
+        return Panel(
+            table, title='[bold]News Headlines[/bold]', border_style='magenta'
+        )
+
     def create_layout(self) -> Layout:
         """Create the full monitoring layout."""
         layout = Layout()
@@ -254,7 +289,9 @@ class TradingMonitor:
         )
 
         layout['right'].split_column(
-            Layout(name='orders', ratio=2), Layout(name='bottom_row', ratio=1)
+            Layout(name='orders', ratio=2),
+            Layout(name='news', ratio=1),
+            Layout(name='bottom_row', ratio=1),
         )
 
         layout['bottom_row'].split_row(
@@ -265,6 +302,7 @@ class TradingMonitor:
         layout['portfolio'].update(self._create_portfolio_summary())
         layout['positions'].update(self._create_positions_table())
         layout['orders'].update(self._create_orders_table())
+        layout['news'].update(self._create_news_panel())
         layout['market'].update(self._create_market_snapshot())
         layout['stats'].update(self._create_stats_panel())
 
@@ -300,6 +338,68 @@ class TradingMonitor:
                 pass
 
 
+def _drain_news_queue(
+    news_ds: GoogleNewsDataSource, headlines: list[NewsEvent],
+) -> None:
+    """Move pending events from the data source queue into *headlines*."""
+    while not news_ds.event_queue.empty():
+        try:
+            event = news_ds.event_queue.get_nowait()
+            if isinstance(event, NewsEvent):
+                headlines.append(event)
+        except asyncio.QueueEmpty:
+            break
+
+
+async def _run_monitor(watch: bool, refresh: float) -> None:
+    """Async entry point that wires components and runs the monitor."""
+    market_data = MarketDataManager()
+    position_manager = PositionManager()
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.POLYMARKET_USDC,
+            quantity=Decimal('10000'),
+            average_cost=Decimal('1'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+    trader = PaperTrader(
+        market_data=market_data,
+        risk_manager=NoRiskManager(),
+        position_manager=position_manager,
+        min_fill_rate=Decimal('0.5'),
+        max_fill_rate=Decimal('1.0'),
+        commission_rate=Decimal('0.0'),
+    )
+
+    headlines: list[NewsEvent] = []
+    news_ds = GoogleNewsDataSource(polling_interval=60.0)
+
+    mon = TradingMonitor(trader, position_manager)
+    mon.news_headlines = headlines  # type: ignore[attr-defined]
+
+    await news_ds.start()
+    try:
+        if watch:
+            with Live(
+                mon.create_layout(),
+                console=mon.console,
+                refresh_per_second=4,
+                screen=True,
+            ) as live:
+                while True:
+                    _drain_news_queue(news_ds, headlines)
+                    live.update(mon.create_layout())
+                    await asyncio.sleep(refresh)
+        else:
+            _drain_news_queue(news_ds, headlines)
+            mon.display_snapshot()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await news_ds.stop()
+
+
 @click.command()
 @click.option(
     '--watch',
@@ -331,21 +431,7 @@ def monitor(watch: bool, refresh: float, config: str | None) -> None:
         swm-agent monitor --watch       # Live updating mode
         swm-agent monitor -w -r 1.0     # Live mode with 1 second refresh
     """
-    # For demonstration purposes, this is a placeholder
-    # In production, you would instantiate the actual trading engine
-    click.echo(
-        'Monitor command is ready! To use it, you need to integrate it with your '
-        'trading engine.'
-    )
-    click.echo('\nTo integrate:')
-    click.echo('1. Import your trading engine, trader, and position manager')
-    click.echo('2. Pass them to TradingMonitor')
-    click.echo('3. Call monitor.display_snapshot() or monitor.display_live()')
-    click.echo('\nExample integration:')
-    click.echo('    from swm_agent.core.trading_engine import TradingEngine')
-    click.echo('    # ... initialize your trading engine ...')
-    click.echo('    monitor = TradingMonitor(trader, position_manager)')
-    click.echo('    if watch:')
-    click.echo('        monitor.display_live(refresh_rate=refresh)')
-    click.echo('    else:')
-    click.echo('        monitor.display_snapshot()')
+    try:
+        asyncio.run(_run_monitor(watch, refresh))
+    except KeyboardInterrupt:
+        pass
