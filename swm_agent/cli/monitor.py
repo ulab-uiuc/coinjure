@@ -260,9 +260,7 @@ class TradingMonitor:
             title = (ev.title or ev.news or '')[:80]
             table.add_row(t, src, title)
 
-        return Panel(
-            table, title='[bold]News Headlines[/bold]', border_style='magenta'
-        )
+        return Panel(table, title='[bold]News Headlines[/bold]', border_style='magenta')
 
     def create_layout(self) -> Layout:
         """Create the full monitoring layout."""
@@ -339,7 +337,8 @@ class TradingMonitor:
 
 
 def _drain_news_queue(
-    news_ds: GoogleNewsDataSource, headlines: list[NewsEvent],
+    news_ds: GoogleNewsDataSource,
+    headlines: list[NewsEvent],
 ) -> None:
     """Move pending events from the data source queue into *headlines*."""
     while not news_ds.event_queue.empty():

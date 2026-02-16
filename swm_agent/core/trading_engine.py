@@ -188,15 +188,11 @@ class TradingEngine:
                     self.market_data.process_orderbook_event(event)
                 elif isinstance(event, PriceChangeEvent):
                     self.market_data.process_price_change_event(event)
-                    logger.debug(
-                        'Price %s → %s', event.ticker.symbol, event.price
-                    )
+                    logger.debug('Price %s → %s', event.ticker.symbol, event.price)
 
                 if isinstance(event, NewsEvent):
                     headline = event.title or event.news[:100]
-                    self._news.append(
-                        (datetime.now().strftime('%H:%M:%S'), headline)
-                    )
+                    self._news.append((datetime.now().strftime('%H:%M:%S'), headline))
                     logger.info('NewsEvent: %s', headline)
 
                 await self.strategy.process_event(event, self.trader)
@@ -293,9 +289,7 @@ class TradingEngine:
 
         # ---- exposure ---------------------------------------------------
         market_value = max(equity - cash, Decimal('0'))
-        exposure_pct = (
-            float(market_value / equity * 100) if equity > 0 else 0.0
-        )
+        exposure_pct = float(market_value / equity * 100) if equity > 0 else 0.0
 
         # ---- positions --------------------------------------------------
         pos_snaps: list[PositionSnapshot] = []
@@ -337,7 +331,9 @@ class TradingEngine:
             if bids or asks:
                 ob_snaps.append(
                     OrderBookSnapshot(
-                        ticker_symbol=ticker.symbol, bids=bids, asks=asks,
+                        ticker_symbol=ticker.symbol,
+                        bids=bids,
+                        asks=asks,
                     )
                 )
 
@@ -354,11 +350,7 @@ class TradingEngine:
             order = all_orders[idx]
             side_str = order.side.value.upper()
             status_str = order.status.value.upper()
-            ts = (
-                self._order_times[idx]
-                if idx < len(self._order_times)
-                else ''
-            )
+            ts = self._order_times[idx] if idx < len(self._order_times) else ''
 
             if order.status in (
                 OrderStatus.FILLED,

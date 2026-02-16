@@ -62,11 +62,7 @@ class PaperTokenAdapter:
             ticker = self._ensure_ticker(token_id)
             pos = self.position_manager.get_position(ticker)
             return [pos] if pos and pos.quantity != 0 else []
-        return [
-            p
-            for p in self.position_manager.positions.values()
-            if p.quantity != 0
-        ]
+        return [p for p in self.position_manager.positions.values() if p.quantity != 0]
 
     async def place_order(
         self,
@@ -181,7 +177,9 @@ def positions(token_id: str | None) -> None:
 
 @token.command()
 @click.option('--token', 'token_id', required=True, help='Token ID.')
-@click.option('--side', required=True, type=click.Choice(['buy', 'sell'], case_sensitive=False))
+@click.option(
+    '--side', required=True, type=click.Choice(['buy', 'sell'], case_sensitive=False)
+)
 @click.option('--price', required=True, type=str, help='Limit price.')
 @click.option('--size', required=True, type=str, help='Quantity.')
 def place(token_id: str, side: str, price: str, size: str) -> None:

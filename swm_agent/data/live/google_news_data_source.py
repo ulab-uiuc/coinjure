@@ -69,6 +69,7 @@ _HTML_HEADERS: dict[str, str] = {
 # Low-level HTTP helper (mirrors live-trade-bench BaseFetcher)
 # ------------------------------------------------------------------
 
+
 def _is_rate_limited(resp: Any) -> bool:
     try:
         return getattr(resp, 'status_code', None) == 429
@@ -94,13 +95,17 @@ def _make_request(
     if 'google.com' in url:
         cookies.update(_GOOGLE_COOKIES)
     return requests.get(
-        url, headers=_HTML_HEADERS, cookies=cookies, timeout=timeout,
+        url,
+        headers=_HTML_HEADERS,
+        cookies=cookies,
+        timeout=timeout,
     )
 
 
 # ------------------------------------------------------------------
 # HTML-parsing helpers (ported from live-trade-bench NewsFetcher)
 # ------------------------------------------------------------------
+
 
 def _clean_google_href(href: str) -> str:
     """Unwrap ``/url?q=<real_url>`` redirects."""
@@ -173,7 +178,10 @@ def _scrape_google_news(  # noqa: C901
         )
         try:
             resp = _make_request(
-                url, min_delay=min_delay, max_delay=max_delay, timeout=15,
+                url,
+                min_delay=min_delay,
+                max_delay=max_delay,
+                timeout=15,
             )
             soup = BeautifulSoup(resp.text, 'html.parser')
         except Exception:
@@ -204,13 +212,15 @@ def _scrape_google_news(  # noqa: C901
                 snippet = _find_snippet(el, title_text, source_text, date_text)
                 ts = _parse_relative_or_absolute(date_text, now)
 
-                results.append({
-                    'link': link,
-                    'title': title_text,
-                    'snippet': snippet,
-                    'date': ts,
-                    'source': source_text,
-                })
+                results.append(
+                    {
+                        'link': link,
+                        'title': title_text,
+                        'snippet': snippet,
+                        'date': ts,
+                        'source': source_text,
+                    }
+                )
             except Exception:
                 logger.exception('Error processing Google News card')
                 continue
@@ -225,6 +235,7 @@ def _scrape_google_news(  # noqa: C901
 # ------------------------------------------------------------------
 # DataSource implementation
 # ------------------------------------------------------------------
+
 
 class GoogleNewsDataSource(DataSource):
     """Scrape Google News and emit ``NewsEvent`` objects.
@@ -348,12 +359,18 @@ class GoogleNewsDataSource(DataSource):
                     count += 1
             except Exception:
                 logger.exception(
-                    'Error scraping Google News for query %r', query,
+                    'Error scraping Google News for query %r',
+                    query,
                 )
         return results
 
     async def _retry_on_error(
-        self, func: Any, *args: Any, retries: int = 3, delay: int = 2, **kwargs: Any,
+        self,
+        func: Any,
+        *args: Any,
+        retries: int = 3,
+        delay: int = 2,
+        **kwargs: Any,
     ) -> Any:
         for attempt in range(retries):
             try:
@@ -376,15 +393,17 @@ class GoogleNewsDataSource(DataSource):
                         event = self._to_news_event(item, query)
                         await self.event_queue.put(event)
                         self.processed_article_ids.add(uid)
-                        self._save_article({
-                            'uuid': uid,
-                            'title': item.get('title', ''),
-                            'snippet': item.get('snippet', ''),
-                            'link': item.get('link', ''),
-                            'date': item.get('date'),
-                            'source': item.get('source', ''),
-                            'query': query,
-                        })
+                        self._save_article(
+                            {
+                                'uuid': uid,
+                                'title': item.get('title', ''),
+                                'snippet': item.get('snippet', ''),
+                                'link': item.get('link', ''),
+                                'date': item.get('date'),
+                                'source': item.get('source', ''),
+                                'query': query,
+                            }
+                        )
                     except Exception:
                         logger.exception('Error processing scraped article')
             except Exception:
