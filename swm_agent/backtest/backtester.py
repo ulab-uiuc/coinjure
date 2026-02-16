@@ -81,7 +81,7 @@ async def run_backtest(
     engine = TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
     await engine.start()
-    # TODO: performance analyzing
+    engine._perf.print_summary()
     print('Backtest complete.')
 
 
