@@ -52,9 +52,9 @@ class MonitoredTradingEngine:
         # Start trading engine
         await self.engine.start()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the trading engine and monitoring."""
-        self.engine.stop()
+        await self.engine.stop()
 
     def display_snapshot(self) -> None:
         """Display a snapshot of current state (for non-watch mode)."""

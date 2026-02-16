@@ -241,7 +241,7 @@ class TestTradingEngine:
             trader=paper_trader,
         )
 
-        engine.stop()
+        await engine.stop()
         assert engine.running is False
 
     @pytest.mark.asyncio

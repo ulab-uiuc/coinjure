@@ -62,7 +62,8 @@ class PaperTrader(Trader):
         # Calculate how much we can fill
         filled_qty = min(quantity, available_liquidity)
         if filled_qty == Decimal('0.0'):
-            # TODO: record orders for future matching
+            # NOTE: Resting-order queue not implemented — would require an
+            # engine-level matching loop and order lifecycle management.
             return Order(
                 status=OrderStatus.PLACED,
                 side=side,

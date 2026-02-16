@@ -34,6 +34,7 @@ class LivePolyMarketDataSource(DataSource):
         self.event_queue = asyncio.Queue()
         self.clob_client = ClobClient('https://clob.polymarket.com')
         self.last_order_book_state = {}
+        self._poll_task: asyncio.Task | None = None
 
         if os.path.exists(self.event_cache_file):
             with open(self.event_cache_file) as f:
@@ -187,7 +188,17 @@ class LivePolyMarketDataSource(DataSource):
             await asyncio.sleep(self.polling_interval)
 
     async def start(self) -> None:
-        asyncio.create_task(self._poll_data())
+        if self._poll_task is None or self._poll_task.done():
+            self._poll_task = asyncio.create_task(self._poll_data())
+
+    async def stop(self) -> None:
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+            self._poll_task = None
 
     async def get_next_event(self) -> Event | None:
         try:
@@ -226,6 +237,7 @@ class LiveNewsDataSource(DataSource):
 
         self.processed_article_ids = set()
         self.event_queue = asyncio.Queue()
+        self._poll_task: asyncio.Task | None = None
 
         self._load_processed_articles()
 
@@ -476,7 +488,17 @@ class LiveNewsDataSource(DataSource):
             await asyncio.sleep(self.polling_interval)
 
     async def start(self) -> None:
-        asyncio.create_task(self._poll_data())
+        if self._poll_task is None or self._poll_task.done():
+            self._poll_task = asyncio.create_task(self._poll_data())
+
+    async def stop(self) -> None:
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+            self._poll_task = None
 
     async def get_next_event(self) -> NewsEvent | None:
         try:
@@ -532,6 +554,7 @@ class LiveRSSNewsDataSource(DataSource):
         feedparser._check_cache = lambda *args, **kwargs: None
         self.processed_article_ids = set()
         self.event_queue = asyncio.Queue()
+        self._poll_task: asyncio.Task | None = None
         self._load_processed_articles()
 
     def _load_processed_articles(self) -> None:
@@ -725,7 +748,17 @@ class LiveRSSNewsDataSource(DataSource):
             await asyncio.sleep(self.polling_interval)
 
     async def start(self) -> None:
-        asyncio.create_task(self._poll_data())
+        if self._poll_task is None or self._poll_task.done():
+            self._poll_task = asyncio.create_task(self._poll_data())
+
+    async def stop(self) -> None:
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+            self._poll_task = None
 
     async def get_next_event(self) -> NewsEvent | None:
         try:
