@@ -42,6 +42,8 @@ rich = "^13.7.0"
 httpx = ">=0.24.0"
 feedparser = ">=6.0.0"
 requests = ">=2.28.0"
+beautifulsoup4 = ">=4.12.0"
+tenacity = ">=8.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.6.0"
@@ -91,11 +93,12 @@ module = [
     "swm_agent.data.market_data_manager",
     "swm_agent.data.backtest.historical_data_source",
     "swm_agent.data.live.live_data_source",
+    "swm_agent.data.live.google_news_data_source",
     "swm_agent.trader.paper_trader",
     "swm_agent.core.trading_engine",
     "swm_agent.backtest.backtester",
 ]
-disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value"]
+disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value", "import-untyped", "misc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
