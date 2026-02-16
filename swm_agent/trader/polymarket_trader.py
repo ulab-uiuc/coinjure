@@ -3,15 +3,21 @@ from decimal import Decimal
 from typing import Any
 
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType
+from py_clob_client.clob_types import (
+    AssetType,
+    BalanceAllowanceParams,
+    OrderArgs,
+    OrderType,
+)
 from py_clob_client.constants import POLYGON
+from py_clob_client.exceptions import PolyApiException
 from py_clob_client.order_builder.constants import BUY, SELL
 from py_order_utils.model import EOA
 
 from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.position.position_manager import PositionManager
+from swm_agent.position.position_manager import Position, PositionManager
 from swm_agent.risk.risk_manager import RiskManager
-from swm_agent.ticker.ticker import PolyMarketTicker, Ticker
+from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
 from swm_agent.trader.trader import Trader
 from swm_agent.trader.types import (
     Order,
@@ -52,6 +58,25 @@ class PolymarketTrader(Trader):
         self.clob_client.set_api_creds(self.clob_client.create_or_derive_api_creds())
 
         self.orders: list[Order] = []
+
+    def _sync_usdc_balance(self) -> None:
+        """Re-fetch USDC balance from Polymarket and update position manager."""
+        try:
+            balance_info = self.clob_client.get_balance_allowance(
+                params=BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
+            )
+            actual_balance = Decimal(balance_info['balance']) / Decimal('1000000')
+            existing = self.position_manager.get_position(CashTicker.POLYMARKET_USDC)
+            self.position_manager.update_position(
+                Position(
+                    ticker=CashTicker.POLYMARKET_USDC,
+                    quantity=actual_balance,
+                    average_cost=Decimal('1'),
+                    realized_pnl=existing.realized_pnl if existing else Decimal('0'),
+                )
+            )
+        except Exception:
+            pass  # Non-critical — local tracking continues as fallback
 
     async def _submit_fok_order(
         self, side: TradeSide, ticker: PolyMarketTicker, price: Decimal, size: Decimal
@@ -168,7 +193,7 @@ class PolymarketTrader(Trader):
             commission=commission,
         )
 
-    async def place_order(
+    async def place_order(  # noqa: C901
         self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
     ) -> PlaceOrderResult:
         # Validate inputs
@@ -195,15 +220,16 @@ class PolymarketTrader(Trader):
                 )
 
         # Check if we have enough cash
-        # TODO: we need to maintain polymarket balance in position manager
-        # if side == TradeSide.BUY:
-        #     cash_position = self.position_manager.get_position(ticker.collateral)
-        #     cash_required = quantity * limit_price * (Decimal('1') + self.commission_rate)
-        #     if cash_position is None or cash_position.quantity < cash_required:
-        #         return PlaceOrderResult(
-        #             order=None,
-        #             failure_reason=OrderFailureReason.INSUFFICIENT_CASH,
-        #         )
+        if side == TradeSide.BUY:
+            cash_position = self.position_manager.get_position(ticker.collateral)
+            cash_required = (
+                quantity * limit_price * (Decimal('1') + self.commission_rate)
+            )
+            if cash_position is None or cash_position.quantity < cash_required:
+                return PlaceOrderResult(
+                    order=None,
+                    failure_reason=OrderFailureReason.INSUFFICIENT_CASH,
+                )
 
         # Check risk limits
         if not await self.risk_manager.check_trade(ticker, side, quantity, limit_price):
@@ -222,18 +248,27 @@ class PolymarketTrader(Trader):
             )
 
             # update positions
-            # TODO: may need to pull latest usdc balance from api
             for trade in order.trades:
                 self.position_manager.apply_trade(trade)
+            self._sync_usdc_balance()
 
             # Store order
             self.orders.append(order)
 
             return PlaceOrderResult(order=order)
 
+        except PolyApiException as e:
+            print(f'Polymarket API error: {e}')
+            failure_reason = OrderFailureReason.UNKNOWN
+            if e.status_code == 400:
+                error_msg = str(e.error_msg).lower()
+                if 'insufficient' in error_msg or 'balance' in error_msg:
+                    failure_reason = OrderFailureReason.INSUFFICIENT_CASH
+                else:
+                    failure_reason = OrderFailureReason.INVALID_ORDER
+            return PlaceOrderResult(order=None, failure_reason=failure_reason)
         except Exception as e:
             print(f'Error placing order: {e}')
-            # TODO: Handle PolyApiException
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.UNKNOWN,
