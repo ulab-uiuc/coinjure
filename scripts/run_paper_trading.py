@@ -78,12 +78,15 @@ async def _main(exchange: str, monitor: bool, duration: int) -> None:
     logger.info('=' * 60)
 
     # Market data source (Polymarket or Kalshi)
-    market_source = config['data_source_cls'](
-        event_cache_file=config['cache_file'],
-        polling_interval=30.0,
-        orderbook_refresh_interval=10.0,
-        reprocess_on_start=True,
-    )
+    ds_kwargs: dict = {
+        'event_cache_file': config['cache_file'],
+        'polling_interval': 30.0,
+        'reprocess_on_start': True,
+    }
+    # orderbook_refresh_interval is only supported by Polymarket
+    if exchange == 'polymarket':
+        ds_kwargs['orderbook_refresh_interval'] = 10.0
+    market_source = config['data_source_cls'](**ds_kwargs)
 
     # Google News source for real news context
     news_source = GoogleNewsDataSource(
