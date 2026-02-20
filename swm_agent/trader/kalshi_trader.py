@@ -80,7 +80,11 @@ class KalshiTrader(Trader):
             client_order_id=str(uuid.uuid4()),
         )
 
-        response = await asyncio.to_thread(self._portfolio_api.create_order, request)
+        response = await asyncio.to_thread(
+            lambda: self._portfolio_api.create_order(
+                create_order_request=request
+            )
+        )
 
         if hasattr(response, 'to_dict'):
             return response.to_dict()
@@ -88,7 +92,9 @@ class KalshiTrader(Trader):
 
     async def _get_order_status(self, order_id: str) -> dict[str, Any]:
         """Get order details from Kalshi API."""
-        response = await asyncio.to_thread(self._portfolio_api.get_order, order_id)
+        response = await asyncio.to_thread(
+            lambda: self._portfolio_api.get_order(order_id)
+        )
         if hasattr(response, 'to_dict'):
             return response.to_dict()
         return response if isinstance(response, dict) else {}

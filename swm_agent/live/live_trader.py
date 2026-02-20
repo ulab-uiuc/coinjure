@@ -276,7 +276,7 @@ async def run_live_kalshi_trading(
     )
 
     # Fetch initial balance from Kalshi (via the trader's portfolio API)
-    balance_response = await asyncio.to_thread(trader._portfolio_api.get_balance)
+    balance_response = await asyncio.to_thread(lambda: trader._portfolio_api.get_balance())
     # Balance is in cents
     initial_balance = Decimal(str(balance_response.balance)) / Decimal('100')
 

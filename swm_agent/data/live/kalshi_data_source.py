@@ -102,11 +102,11 @@ class LiveKalshiDataSource(DataSource):
                 if cursor:
                     kwargs['cursor'] = cursor
                 response = await asyncio.to_thread(
-                    self._markets_api.get_markets, **kwargs
+                    lambda kw=kwargs: self._markets_api.get_markets(**kw)
                 )
-                markets = response.markets if hasattr(response, 'markets') else []
-                for m in markets:
-                    d = m.to_dict() if hasattr(m, 'to_dict') else m
+                raw_markets = response.markets if hasattr(response, 'markets') else []
+                for m in raw_markets or []:
+                    d: dict[str, Any] = m.to_dict() if hasattr(m, 'to_dict') else dict(m)
                     # Only include markets with at least an ask price
                     yes_ask = d.get('yes_ask', 0) or 0
                     if yes_ask == 0:
