@@ -78,13 +78,10 @@ async def main():
         commission_rate=Decimal('0.0'),
     )
 
-    # LLM Strategy: SimpleStrategy with DeepSeek
+    # LLM Strategy: SimpleStrategy
     strategy = SimpleStrategy(
         trade_size=Decimal('10'),
         confidence_threshold=0.3,
-        model='deepseek/deepseek-chat',
-        temperature=0.3,
-        max_tokens=512,
     )
 
     # Engine (continuous mode for live trading)
