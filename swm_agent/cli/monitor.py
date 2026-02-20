@@ -44,6 +44,11 @@ class TradingMonitor:
         # Attributes synced from engine by MonitoredTradingEngine._sync_data()
         self.llm_decisions: list = []
         self.total_executed: int = 0
+        self.total_decisions: int = 0
+        self.total_buy_yes: int = 0
+        self.total_buy_no: int = 0
+        self.total_holds: int = 0
+        self.total_closes: int = 0
         self.activity_log: list[tuple[str, str]] = []
         self.news_headlines: list[tuple[str, str]] = []
         self.event_count: int = 0
@@ -245,15 +250,14 @@ class TradingMonitor:
             active_positions = 0
         table.add_row('Active Positions', str(active_positions))
 
-        # LLM decision counts
-        decisions = getattr(self, 'llm_decisions', [])
-        buy_yes = sum(1 for d in decisions if d.action == 'BUY_YES')
-        buy_no = sum(1 for d in decisions if d.action == 'BUY_NO')
-        holds = sum(1 for d in decisions if d.action == 'HOLD')
-        closes = sum(1 for d in decisions if d.action.startswith('CLOSE'))
-        # Use the running counter (not affected by deque eviction)
+        # LLM decision counts — use running counters (not deque which evicts old entries)
+        total_decisions = getattr(self, 'total_decisions', 0)
         total_executed = getattr(self, 'total_executed', 0)
-        table.add_row('LLM Decisions', str(len(decisions)))
+        buy_yes = getattr(self, 'total_buy_yes', 0)
+        buy_no = getattr(self, 'total_buy_no', 0)
+        holds = getattr(self, 'total_holds', 0)
+        closes = getattr(self, 'total_closes', 0)
+        table.add_row('LLM Decisions', str(total_decisions))
         table.add_row('  YES / NO / HOLD', f'{buy_yes} / {buy_no} / {holds}')
         table.add_row('  Closes', str(closes))
         table.add_row('  Executed', str(total_executed))

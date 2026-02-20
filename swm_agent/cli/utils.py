@@ -44,9 +44,13 @@ class MonitoredTradingEngine:
             if decisions is not None:
                 self.monitor.llm_decisions = list(decisions)  # type: ignore[attr-defined]
 
-            # Sync total executed counter (not affected by deque eviction)
-            total_exec = getattr(self.engine.strategy, 'total_executed', 0)
-            self.monitor.total_executed = total_exec  # type: ignore[attr-defined]
+            # Sync running counters (not affected by deque eviction)
+            self.monitor.total_executed = getattr(self.engine.strategy, 'total_executed', 0)
+            self.monitor.total_decisions = getattr(self.engine.strategy, 'total_decisions', 0)
+            self.monitor.total_buy_yes = getattr(self.engine.strategy, 'total_buy_yes', 0)
+            self.monitor.total_buy_no = getattr(self.engine.strategy, 'total_buy_no', 0)
+            self.monitor.total_holds = getattr(self.engine.strategy, 'total_holds', 0)
+            self.monitor.total_closes = getattr(self.engine.strategy, 'total_closes', 0)
 
             # Sync activity log from engine
             self.monitor.activity_log = list(self.engine._activity_log)  # type: ignore[attr-defined]

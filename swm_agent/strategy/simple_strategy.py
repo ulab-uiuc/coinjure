@@ -81,6 +81,11 @@ class SimpleStrategy(Strategy):
         self.decisions: deque[LLMDecision] = deque(maxlen=200)
         self.total_decisions: int = 0  # Running counter (not affected by deque eviction)
         self.total_executed: int = 0  # Running counter (not affected by deque eviction)
+        # Per-action running counters (not affected by deque eviction)
+        self.total_buy_yes: int = 0
+        self.total_buy_no: int = 0
+        self.total_holds: int = 0
+        self.total_closes: int = 0
         # Position metadata: ticker_symbol → PositionMeta
         self._position_meta: dict[str, PositionMeta] = {}
         # Guard against concurrent close attempts on the same ticker
@@ -157,6 +162,7 @@ class SimpleStrategy(Strategy):
                 if analysis['action'] == 'hold':
                     self.decisions.append(decision)
                     self.total_decisions += 1
+                    self.total_holds += 1
                     return
 
                 executed, fill_price = await self._execute_trade(analysis, ticker, trader)
@@ -165,6 +171,10 @@ class SimpleStrategy(Strategy):
                     self.total_executed += 1
                 self.decisions.append(decision)
                 self.total_decisions += 1
+                if analysis['action'] == 'buy_yes':
+                    self.total_buy_yes += 1
+                elif analysis['action'] == 'buy_no':
+                    self.total_buy_no += 1
 
                 # Record position metadata if trade was executed
                 if executed:
@@ -504,6 +514,7 @@ Respond in JSON only:
             self._position_meta.pop(ticker.symbol, None)
             self.total_executed += 1
 
+        self.total_closes += 1
         self.decisions.append(LLMDecision(
             timestamp=datetime.now().strftime('%H:%M:%S'),
             ticker_name=f'{action[:12]}: {ticker.name[:25]}',
