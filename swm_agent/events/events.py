@@ -24,6 +24,7 @@ class OrderBookEvent(Event):
     price: Decimal
     size: Decimal
     size_delta: Decimal
+    side: str  # 'bid' or 'ask'
 
     def __init__(
         self,
@@ -31,11 +32,13 @@ class OrderBookEvent(Event):
         price: Decimal,
         size: Decimal,
         size_delta: Decimal,
+        side: str = '',
     ):
         self.ticker = ticker
         self.price = price
         self.size = size
         self.size_delta = size_delta
+        self.side = side
 
     def trigger(self) -> None:
         pass

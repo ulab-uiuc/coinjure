@@ -29,11 +29,27 @@ from swm_agent.trader.types import OrderStatus
 class TradingMonitor:
     """Monitor for displaying trading engine state."""
 
-    def __init__(self, trader: Trader, position_manager: PositionManager) -> None:
+    def __init__(
+        self,
+        trader: Trader,
+        position_manager: PositionManager,
+        exchange_name: str = '',
+    ) -> None:
         self.trader = trader
         self.position_manager = position_manager
+        self.exchange_name = exchange_name
         self.console = Console()
         self.start_time = datetime.now()
+
+        # Attributes synced from engine by MonitoredTradingEngine._sync_data()
+        self.llm_decisions: list = []
+        self.total_executed: int = 0
+        self.activity_log: list[tuple[str, str]] = []
+        self.news_headlines: list[tuple[str, str]] = []
+        self.event_count: int = 0
+        self.news_buffer_count: int = 0
+        self.perf_stats = None
+        self.ob_count: int = 0
 
     def _format_decimal(self, value: Decimal, decimals: int = 4) -> str:
         """Format decimal with specified precision."""
@@ -54,157 +70,141 @@ class TradingMonitor:
         table.add_column('Metric', style='cyan')
         table.add_column('Value', justify='right')
 
-        # Portfolio value
-        portfolio_value = self.position_manager.get_portfolio_value(
-            self.trader.market_data
-        )
-        total_value = sum(portfolio_value.values(), Decimal('0'))
-        table.add_row(
-            'Total Portfolio Value', f'${self._format_decimal(total_value, 2)}'
-        )
-
-        # Cash positions
-        cash_positions = self.position_manager.get_cash_positions()
-        for cash_pos in cash_positions:
+        try:
+            # Snapshot positions dict to avoid RuntimeError during iteration
+            md = self.trader.market_data
+            portfolio_value = self.position_manager.get_portfolio_value(md)
+            total_value = sum(portfolio_value.values(), Decimal('0'))
             table.add_row(
-                f'  {cash_pos.ticker.symbol}',
-                f'${self._format_decimal(cash_pos.quantity, 2)}',
+                'Total Portfolio Value', f'${self._format_decimal(total_value, 2)}'
             )
 
-        # P&L
-        realized_pnl = self.position_manager.get_total_realized_pnl()
-        unrealized_pnl = self.position_manager.get_total_unrealized_pnl(
-            self.trader.market_data
-        )
-        total_pnl = realized_pnl + unrealized_pnl
+            cash_positions = self.position_manager.get_cash_positions()
+            for cash_pos in cash_positions:
+                table.add_row(
+                    f'  {cash_pos.ticker.symbol}',
+                    f'${self._format_decimal(cash_pos.quantity, 2)}',
+                )
 
-        table.add_row('Realized P&L', self._format_pnl(realized_pnl))
-        table.add_row('Unrealized P&L', self._format_pnl(unrealized_pnl))
-        table.add_row('Total P&L', self._format_pnl(total_pnl))
+            realized_pnl = self.position_manager.get_total_realized_pnl()
+            unrealized_pnl = self.position_manager.get_total_unrealized_pnl(md)
+            total_pnl = realized_pnl + unrealized_pnl
+
+            table.add_row('Realized P&L', self._format_pnl(realized_pnl))
+            table.add_row('Unrealized P&L', self._format_pnl(unrealized_pnl))
+            table.add_row('Total P&L', self._format_pnl(total_pnl))
+
+            # Exposure metrics
+            non_cash = self.position_manager.get_non_cash_positions()
+            market_exposure = Decimal('0')
+            for p in non_cash:
+                if p.quantity > 0:
+                    bid = md.get_best_bid(p.ticker)
+                    if bid:
+                        market_exposure += bid.price * p.quantity
+
+            if total_value > 0:
+                exposure_pct = float(market_exposure / total_value * 100)
+                table.add_row('Exposure', f'${self._format_decimal(market_exposure, 2)} ({exposure_pct:.1f}%)')
+            else:
+                table.add_row('Exposure', '$0.00 (0.0%)')
+        except (RuntimeError, KeyError, AttributeError):
+            table.add_row('', Text('updating...', style='dim'))
 
         return Panel(table, title='[bold]Portfolio Summary[/bold]', border_style='blue')
 
-    def _create_positions_table(self) -> Panel:
-        """Create active positions table."""
-        positions = self.position_manager.get_non_cash_positions()
 
-        if not positions:
+    def _create_llm_decisions_panel(self, limit: int = 12) -> Panel:
+        """Create LLM decisions panel showing AI probability estimates vs market."""
+        decisions: list = getattr(self, 'llm_decisions', [])[-limit:]
+
+        if not decisions:
             return Panel(
-                '[dim]No active positions[/dim]',
-                title='[bold]Active Positions[/bold]',
-                border_style='green',
+                '[dim]Waiting for LLM analysis...[/dim]',
+                title='[bold]LLM Decisions[/bold]',
+                border_style='bright_magenta',
             )
 
-        table = Table(show_header=True, header_style='bold')
-        table.add_column('Ticker', style='cyan')
-        table.add_column('Quantity', justify='right')
-        table.add_column('Avg Cost', justify='right')
-        table.add_column('Current', justify='right')
-        table.add_column('Unrealized P&L', justify='right')
-        table.add_column('Realized P&L', justify='right')
+        table = Table(show_header=True, header_style='bold', expand=True)
+        table.add_column('Time', style='dim', width=8)
+        table.add_column('Action', width=8)
+        table.add_column('LLM', justify='right', width=5)
+        table.add_column('Mkt', justify='right', width=5)
+        table.add_column('Edge', justify='right', width=6)
+        table.add_column('Market', width=22)
+        table.add_column('Reasoning', ratio=1)
+        table.add_column('', width=3)
 
-        for pos in positions:
-            best_bid = self.trader.market_data.get_best_bid(pos.ticker)
-            current_price = best_bid.price if best_bid else Decimal('0')
-            unrealized_pnl = self.position_manager.get_unrealized_pnl(
-                pos.ticker, self.trader.market_data
-            )
+        for d in reversed(decisions):
+            action_style = {
+                'BUY_YES': 'bold green',
+                'BUY_NO': 'bold red',
+                'HOLD': 'dim',
+                'CLOSE_EDGE_TP': 'bold yellow',
+                'CLOSE_EDGE_REV': 'bold red',
+                'CLOSE_REEVAL': 'bold magenta',
+                'CLOSE_TIMEOUT': 'yellow',
+            }.get(d.action, 'white')
+
+            llm_prob = getattr(d, 'llm_prob', 0.0) or 0.0
+            mkt_price = getattr(d, 'market_price', 0.0) or 0.0
+            edge = llm_prob - mkt_price
+
+            edge_style = 'green' if edge > 0 else 'red' if edge < 0 else 'dim'
+            edge_str = f'{edge:+.0%}' if mkt_price > 0 else '—'
+
+            exec_text = Text('✓', style='bold green') if d.executed else Text('—', style='dim')
+            reasoning = getattr(d, 'reasoning', '') or ''
 
             table.add_row(
-                pos.ticker.symbol,
-                self._format_decimal(pos.quantity, 2),
-                f'${self._format_decimal(pos.average_cost, 4)}',
-                f'${self._format_decimal(current_price, 4)}',
-                self._format_pnl(unrealized_pnl),
-                self._format_pnl(pos.realized_pnl),
-            )
-
-        return Panel(table, title='[bold]Active Positions[/bold]', border_style='green')
-
-    def _create_orders_table(self, limit: int = 10) -> Panel:
-        """Create recent orders table."""
-        orders = getattr(self.trader, 'orders', [])[-limit:]  # Get last N orders
-
-        if not orders:
-            return Panel(
-                '[dim]No orders yet[/dim]',
-                title='[bold]Recent Orders[/bold]',
-                border_style='yellow',
-            )
-
-        table = Table(show_header=True, header_style='bold')
-        table.add_column('Status', style='white')
-        table.add_column('Side', style='white')
-        table.add_column('Ticker', style='cyan')
-        table.add_column('Limit Price', justify='right')
-        table.add_column('Filled Qty', justify='right')
-        table.add_column('Avg Price', justify='right')
-        table.add_column('Commission', justify='right')
-
-        for order in reversed(orders):  # Show most recent first
-            # Status color coding
-            status_style = {
-                OrderStatus.FILLED: 'green',
-                OrderStatus.PARTIALLY_FILLED: 'yellow',
-                OrderStatus.REJECTED: 'red',
-                OrderStatus.CANCELLED: 'dim',
-            }.get(order.status, 'white')
-
-            side_style = 'green' if order.side.value == 'buy' else 'red'
-
-            table.add_row(
-                Text(order.status.value.upper(), style=status_style),
-                Text(order.side.value.upper(), style=side_style),
-                order.ticker.symbol,
-                f'${self._format_decimal(order.limit_price, 4)}',
-                self._format_decimal(order.filled_quantity, 2),
-                f'${self._format_decimal(order.average_price, 4)}'
-                if order.average_price > 0
-                else '-',
-                f'${self._format_decimal(order.commission, 4)}',
-            )
-
-        return Panel(table, title='[bold]Recent Orders[/bold]', border_style='yellow')
-
-    def _create_market_snapshot(self) -> Panel:
-        """Create market data snapshot."""
-        market_data = self.trader.market_data
-        tickers = list(
-            {pos.ticker for pos in self.position_manager.get_non_cash_positions()}
-        )
-
-        if not tickers:
-            return Panel(
-                '[dim]No market data available[/dim]',
-                title='[bold]Market Snapshot[/bold]',
-                border_style='magenta',
-            )
-
-        table = Table(show_header=True, header_style='bold')
-        table.add_column('Ticker', style='cyan')
-        table.add_column('Best Bid', justify='right')
-        table.add_column('Best Ask', justify='right')
-        table.add_column('Spread', justify='right')
-        table.add_column('Spread %', justify='right')
-
-        for ticker in tickers:
-            best_bid = market_data.get_best_bid(ticker)
-            best_ask = market_data.get_best_ask(ticker)
-            bid = best_bid.price if best_bid else Decimal('0')
-            ask = best_ask.price if best_ask else Decimal('0')
-            spread = ask - bid
-            spread_pct = (spread / bid * 100) if bid > 0 else Decimal('0')
-
-            table.add_row(
-                ticker.symbol,
-                f'${self._format_decimal(bid, 4)}',
-                f'${self._format_decimal(ask, 4)}',
-                f'${self._format_decimal(spread, 4)}',
-                f'{self._format_decimal(spread_pct, 2)}%',
+                d.timestamp,
+                Text(d.action, style=action_style),
+                Text(f'{llm_prob:.0%}', style='white') if llm_prob > 0 else Text('—', style='dim'),
+                Text(f'{mkt_price:.0%}', style='white') if mkt_price > 0 else Text('—', style='dim'),
+                Text(edge_str, style=edge_style),
+                d.ticker_name[:22],
+                Text(reasoning[:45], style='dim'),
+                exec_text,
             )
 
         return Panel(
-            table, title='[bold]Market Snapshot[/bold]', border_style='magenta'
+            table, title='[bold]LLM Decisions (Prob vs Market)[/bold]', border_style='bright_magenta'
+        )
+
+    def _create_activity_log_panel(self, limit: int = 12) -> Panel:
+        """Create scrolling activity log panel."""
+        log_entries: list[tuple[str, str]] = getattr(self, 'activity_log', [])[-limit:]
+
+        if not log_entries:
+            return Panel(
+                '[dim]Waiting for activity...[/dim]',
+                title='[bold]Activity Log[/bold]',
+                border_style='bright_cyan',
+            )
+
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column('Time', style='dim', width=8)
+        table.add_column('Event')
+
+        for ts, msg in reversed(log_entries):
+            # Color code based on content
+            if 'BUY' in msg:
+                style = 'green'
+            elif 'SELL' in msg:
+                style = 'red'
+            elif 'Error' in msg:
+                style = 'bold red'
+            elif 'LLM' in msg:
+                style = 'bright_magenta'
+            elif 'News' in msg:
+                style = 'cyan'
+            else:
+                style = 'white'
+
+            table.add_row(ts, Text(msg[:80], style=style))
+
+        return Panel(
+            table, title='[bold]Activity Log[/bold]', border_style='bright_cyan'
         )
 
     def _create_stats_panel(self) -> Panel:
@@ -215,11 +215,14 @@ class TradingMonitor:
 
         # Runtime
         runtime = datetime.now() - self.start_time
-        runtime_str = str(runtime).split('.')[0]  # Remove microseconds
+        runtime_str = str(runtime).split('.')[0]
         table.add_row('Runtime', runtime_str)
 
-        # Order statistics
-        orders = getattr(self.trader, 'orders', [])
+        # Order statistics — snapshot the list to avoid RuntimeError
+        try:
+            orders = list(getattr(self.trader, 'orders', []))
+        except RuntimeError:
+            orders = []
         total_orders = len(orders)
         filled_orders = sum(1 for o in orders if o.status == OrderStatus.FILLED)
         rejected_orders = sum(1 for o in orders if o.status == OrderStatus.REJECTED)
@@ -229,80 +232,296 @@ class TradingMonitor:
         table.add_row('Rejected Orders', str(rejected_orders))
 
         if total_orders > 0:
-            success_rate = (filled_orders / total_orders) * 100
-            table.add_row('Success Rate', f'{success_rate:.1f}%')
+            fill_rate = (filled_orders / total_orders) * 100
+            table.add_row('Fill Rate', f'{fill_rate:.1f}%')
 
-        # Position count
-        active_positions = len(self.position_manager.get_non_cash_positions())
+        # Position count (only positions with qty > 0)
+        try:
+            active_positions = sum(
+                1 for p in self.position_manager.get_non_cash_positions()
+                if p.quantity > 0
+            )
+        except RuntimeError:
+            active_positions = 0
         table.add_row('Active Positions', str(active_positions))
+
+        # LLM decision counts
+        decisions = getattr(self, 'llm_decisions', [])
+        buy_yes = sum(1 for d in decisions if d.action == 'BUY_YES')
+        buy_no = sum(1 for d in decisions if d.action == 'BUY_NO')
+        holds = sum(1 for d in decisions if d.action == 'HOLD')
+        closes = sum(1 for d in decisions if d.action.startswith('CLOSE'))
+        # Use the running counter (not affected by deque eviction)
+        total_executed = getattr(self, 'total_executed', 0)
+        table.add_row('LLM Decisions', str(len(decisions)))
+        table.add_row('  YES / NO / HOLD', f'{buy_yes} / {buy_no} / {holds}')
+        table.add_row('  Closes', str(closes))
+        table.add_row('  Executed', str(total_executed))
+
+        # News buffer stats
+        news_count = getattr(self, 'news_buffer_count', 0)
+        table.add_row('  News Buffered', str(news_count))
+
+        # Performance analyzer stats
+        perf_stats = getattr(self, 'perf_stats', None)
+        if perf_stats is not None and perf_stats.total_trades > 0:
+            table.add_row('', '')  # separator
+            table.add_row('[bold]Performance[/bold]', '')
+            win_pct = f'{perf_stats.win_rate * 100:.1f}%'
+            table.add_row('  Win Rate', Text(win_pct, style='green' if perf_stats.win_rate > Decimal('0.5') else 'red'))
+            table.add_row('  Profit Factor', f'{perf_stats.profit_factor:.2f}')
+            table.add_row('  Sharpe Ratio', f'{perf_stats.sharpe_ratio:.2f}')
+            dd_pct = f'{perf_stats.max_drawdown * 100:.1f}%'
+            table.add_row('  Max Drawdown', Text(dd_pct, style='red' if perf_stats.max_drawdown > Decimal('0.05') else 'white'))
+            table.add_row('  Total PnL', self._format_pnl(perf_stats.total_pnl))
+            table.add_row('  W/L Streak', f'{perf_stats.max_consecutive_wins}W / {perf_stats.max_consecutive_losses}L')
 
         return Panel(table, title='[bold]Statistics[/bold]', border_style='cyan')
 
-    def _create_news_panel(self, limit: int = 8) -> Panel:
-        """Create news headlines panel."""
-        headlines: list[NewsEvent] = getattr(self, 'news_headlines', [])[-limit:]
+    def _create_trading_panel(self, limit: int = 10) -> Panel:
+        """Create combined positions + recent orders panel."""
+        # Snapshot shared collections to avoid RuntimeError
+        try:
+            positions = list(self.position_manager.get_non_cash_positions())
+        except RuntimeError:
+            positions = []
+        try:
+            orders = list(getattr(self.trader, 'orders', []))[-limit:]
+        except RuntimeError:
+            orders = []
 
-        if not headlines:
+        text_parts: list[Text] = []
+
+        # Positions section
+        if positions:
+            text_parts.append(Text('── Positions ──\n', style='bold green'))
+            for pos in positions:
+                if pos.quantity <= 0:
+                    continue
+                # Try bid first, fallback to ask
+                md = self.trader.market_data
+                best_bid = md.get_best_bid(pos.ticker)
+                cur = best_bid.price if best_bid else Decimal('0')
+                if cur <= 0:
+                    best_ask = md.get_best_ask(pos.ticker)
+                    cur = best_ask.price if best_ask else Decimal('0')
+                pnl = (cur - pos.average_cost) * pos.quantity if cur > 0 else Decimal('0')
+                pnl_style = 'green' if pnl >= 0 else 'red'
+                line = Text()
+                display_name = getattr(pos.ticker, 'name', '') or pos.ticker.symbol
+                line.append(f'  {display_name[:28]:<28}', style='cyan')
+                line.append(f' qty={pos.quantity:<6}', style='white')
+                line.append(f' cost=${pos.average_cost:.4f}', style='dim')
+                if cur > 0:
+                    line.append(f' now=${cur:.4f}', style='white')
+                    line.append(f' pnl=${pnl:+.2f}', style=pnl_style)
+                else:
+                    line.append(' now=N/A', style='dim')
+                    line.append(' pnl=N/A', style='dim')
+                line.append('\n')
+                text_parts.append(line)
+        else:
+            text_parts.append(Text('── Positions ──\n', style='bold green'))
+            text_parts.append(Text('  No positions yet\n', style='dim'))
+
+        text_parts.append(Text('\n'))
+
+        # Orders section
+        if orders:
+            text_parts.append(Text('── Recent Orders ──\n', style='bold yellow'))
+            for order in reversed(orders[-8:]):
+                side_style = 'green' if order.side.value == 'buy' else 'red'
+                status_style = 'green' if order.status == OrderStatus.FILLED else 'yellow'
+                line = Text()
+                line.append(f'  {order.side.value.upper():<5}', style=side_style)
+                order_name = getattr(order.ticker, 'name', '') or order.ticker.symbol
+                line.append(f' {order_name[:25]:<25}', style='cyan')
+                line.append(f' ${order.limit_price:.4f}', style='white')
+                line.append(f' filled={order.filled_quantity}', style='dim')
+                line.append(f' [{order.status.value.upper()}]', style=status_style)
+                line.append('\n')
+                text_parts.append(line)
+        else:
+            text_parts.append(Text('── Recent Orders ──\n', style='bold yellow'))
+            text_parts.append(Text('  No orders yet\n', style='dim'))
+
+        combined = Text()
+        for part in text_parts:
+            combined.append_text(part)
+
+        return Panel(combined, title='[bold]Trading Activity[/bold]', border_style='yellow')
+
+    def _create_orderbook_panel(self, limit: int = 8) -> Panel:
+        """Create order book panel showing top markets with bid/ask/spread."""
+        try:
+            # Snapshot to avoid RuntimeError
+            ob_items = list(self.trader.market_data.order_books.items())
+        except (RuntimeError, AttributeError):
+            ob_items = []
+
+        # Filter: skip cash tickers, empty books, and extreme probability markets
+        active_books: list[tuple] = []
+        for ticker, ob in ob_items:
+            if isinstance(ticker, CashTicker):
+                continue
+            best_bid = ob.best_bid
+            best_ask = ob.best_ask
+            if not (best_bid and best_ask and best_bid.price > 0):
+                continue
+            mid = (best_bid.price + best_ask.price) / 2
+            # Skip extreme markets (< 5% or > 95%) — uninteresting
+            if mid < Decimal('0.05') or mid > Decimal('0.95'):
+                continue
+            spread = best_ask.price - best_bid.price
+            active_books.append((ticker, best_bid, best_ask, spread, mid))
+
+        if not active_books:
+            return Panel(
+                '[dim]Waiting for order book data...[/dim]',
+                title='[bold]Order Books[/bold]',
+                border_style='green',
+            )
+
+        # Sort by closeness to 50% (most interesting markets first)
+        active_books.sort(key=lambda x: abs(x[4] - Decimal('0.5')))
+
+        table = Table(show_header=True, header_style='bold', expand=True)
+        table.add_column('Market', ratio=2)
+        table.add_column('Bid', justify='right', width=8)
+        table.add_column('Ask', justify='right', width=8)
+        table.add_column('Sprd', justify='right', width=7)
+        table.add_column('Mid', justify='right', width=6)
+
+        for ticker, bid, ask, spread, mid in active_books[:limit]:
+            name = getattr(ticker, 'name', '') or ticker.symbol
+            spread_style = 'green' if spread <= Decimal('0.02') else 'yellow' if spread <= Decimal('0.05') else 'red'
+            mid_pct = f'{mid * 100:.0f}%'
+            table.add_row(
+                name[:30],
+                f'${bid.price:.4f}',
+                f'${ask.price:.4f}',
+                Text(f'{spread:.4f}', style=spread_style),
+                mid_pct,
+            )
+
+        total_ob = getattr(self, 'ob_count', len(ob_items))
+        return Panel(
+            table,
+            title=f'[bold]Order Books ({len(active_books)}/{total_ob} active)[/bold]',
+            border_style='green',
+        )
+
+    def _create_news_panel(self, limit: int = 10) -> Panel:
+        """Create news headlines panel."""
+        news: list[tuple[str, str]] = getattr(self, 'news_headlines', [])
+
+        if not news:
             return Panel(
                 '[dim]Waiting for news...[/dim]',
                 title='[bold]News Headlines[/bold]',
-                border_style='magenta',
+                border_style='bright_yellow',
             )
 
-        table = Table(show_header=True, header_style='bold')
-        table.add_column('Time', style='dim', width=6)
-        table.add_column('Source', style='cyan', width=14)
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column('Time', style='dim', width=8)
         table.add_column('Headline')
 
-        for ev in reversed(headlines):
-            t = ev.published_at.strftime('%H:%M') if ev.published_at else ''
-            src = (ev.source or '')[:14]
-            title = (ev.title or ev.news or '')[:80]
-            table.add_row(t, src, title)
+        # Show most recent first
+        for ts, headline in reversed(news[-limit:]):
+            table.add_row(ts, Text(headline[:70], style='white'))
 
-        return Panel(table, title='[bold]News Headlines[/bold]', border_style='magenta')
+        return Panel(
+            table,
+            title=f'[bold]News Headlines ({len(news)} total)[/bold]',
+            border_style='bright_yellow',
+        )
+
+    def _create_system_status_panel(self) -> Panel:
+        """Create compact system status bar."""
+        event_count = getattr(self, 'event_count', 0)
+        ob_count = getattr(self, 'ob_count', 0)
+        news_count = len(getattr(self, 'news_headlines', []))
+        news_buf = getattr(self, 'news_buffer_count', 0)
+
+        # Runtime
+        runtime = datetime.now() - self.start_time
+        runtime_str = str(runtime).split('.')[0]
+
+        status_parts = [
+            f'Runtime: {runtime_str}',
+            f'Events: {event_count}',
+            f'Order Books: {ob_count}',
+            f'News: {news_count}',
+            f'News Buffer: {news_buf}',
+        ]
+        status_line = Text('  |  '.join(status_parts), style='white')
+
+        return Panel(
+            status_line,
+            title='[bold]System Status[/bold]',
+            border_style='bright_green',
+        )
 
     def create_layout(self) -> Layout:
         """Create the full monitoring layout."""
         layout = Layout()
 
-        # Main vertical split
+        # Header + body + status bar + footer
         layout.split_column(
             Layout(name='header', size=3),
             Layout(name='body'),
+            Layout(name='status_bar', size=3),
             Layout(name='footer', size=1),
         )
 
-        # Header
-        header_text = Text(
-            'SWM Agent - Trading Monitor', justify='center', style='bold blue'
-        )
+        # Header with exchange name
+        title = 'SWM Agent - Trading Monitor'
+        if self.exchange_name:
+            title = f'SWM Agent - {self.exchange_name} Trading Monitor'
+        header_text = Text(title, justify='center', style='bold blue')
         layout['header'].update(Panel(header_text, border_style='blue'))
 
-        # Body with 2x2 grid
-        layout['body'].split_row(Layout(name='left'), Layout(name='right'))
-
-        layout['left'].split_column(
-            Layout(name='portfolio', ratio=1), Layout(name='positions', ratio=2)
+        # Body: 3 rows
+        layout['body'].split_column(
+            Layout(name='top_row', ratio=3),
+            Layout(name='mid_row', ratio=3),
+            Layout(name='bot_row', ratio=3),
         )
 
-        layout['right'].split_column(
-            Layout(name='orders', ratio=2),
+        # Top row: Portfolio + Stats | LLM Decisions (main focus)
+        layout['top_row'].split_row(
+            Layout(name='left_top', ratio=1),
+            Layout(name='llm_decisions', ratio=2),
+        )
+
+        layout['left_top'].split_column(
+            Layout(name='portfolio'),
+            Layout(name='stats'),
+        )
+
+        # Mid row: Trading Activity (positions + orders) | Activity Log
+        layout['mid_row'].split_row(
+            Layout(name='trading', ratio=1),
+            Layout(name='activity_log', ratio=1),
+        )
+
+        # Bottom row: Order Books | News Headlines
+        layout['bot_row'].split_row(
+            Layout(name='orderbooks', ratio=1),
             Layout(name='news', ratio=1),
-            Layout(name='bottom_row', ratio=1),
-        )
-
-        layout['bottom_row'].split_row(
-            Layout(name='market', ratio=1), Layout(name='stats', ratio=1)
         )
 
         # Populate panels
         layout['portfolio'].update(self._create_portfolio_summary())
-        layout['positions'].update(self._create_positions_table())
-        layout['orders'].update(self._create_orders_table())
-        layout['news'].update(self._create_news_panel())
-        layout['market'].update(self._create_market_snapshot())
         layout['stats'].update(self._create_stats_panel())
+        layout['llm_decisions'].update(self._create_llm_decisions_panel())
+        layout['trading'].update(self._create_trading_panel())
+        layout['activity_log'].update(self._create_activity_log_panel())
+        layout['orderbooks'].update(self._create_orderbook_panel())
+        layout['news'].update(self._create_news_panel())
+
+        # System status bar
+        layout['status_bar'].update(self._create_system_status_panel())
 
         # Footer
         footer_text = Text(
@@ -413,13 +632,7 @@ async def _run_monitor(watch: bool, refresh: float) -> None:
     type=float,
     help='Refresh rate in seconds for watch mode (default: 2.0)',
 )
-@click.option(
-    '--config',
-    '-c',
-    type=click.Path(exists=True),
-    help='Path to trading engine config file (if applicable)',
-)
-def monitor(watch: bool, refresh: float, config: str | None) -> None:
+def monitor(watch: bool, refresh: float) -> None:
     """Monitor trading activities, positions, and portfolio status.
 
     Display current portfolio value, active positions with P&L,

@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
@@ -5,6 +6,8 @@ from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.position.position_manager import PositionManager
 from swm_agent.ticker.ticker import CashTicker, Ticker
 from swm_agent.trader.types import TradeSide
+
+logger = logging.getLogger(__name__)
 
 
 class RiskManager(ABC):
@@ -199,42 +202,47 @@ class StandardRiskManager(RiskManager):
 
         # Check trade size limit
         if not self._check_trade_size(quantity, price):
-            print(
-                f'Risk check failed: Trade size {quantity * price} exceeds limit {self.max_single_trade_size}'
+            logger.warning(
+                'Risk check failed: Trade size %s exceeds limit %s',
+                quantity * price, self.max_single_trade_size,
             )
             return False
 
         # Check position limit
         if not self._check_position_limit(ticker, side, quantity, price):
-            print(
-                f'Risk check failed: Position would exceed limit {self.max_position_size}'
+            logger.warning(
+                'Risk check failed: Position would exceed limit %s',
+                self.max_position_size,
             )
             return False
 
         # Check total exposure
         if not self._check_total_exposure(side, quantity, price):
-            print(
-                f'Risk check failed: Total exposure would exceed limit {self.max_total_exposure}'
+            logger.warning(
+                'Risk check failed: Total exposure would exceed limit %s',
+                self.max_total_exposure,
             )
             return False
 
         # Check drawdown
         if not self._check_drawdown():
-            print(
-                f'Risk check failed: Drawdown exceeds limit {self.max_drawdown_pct * 100}%'
+            logger.warning(
+                'Risk check failed: Drawdown exceeds limit %s%%',
+                self.max_drawdown_pct * 100,
             )
             return False
 
         # Check daily loss
         if not self._check_daily_loss():
-            print(
-                f'Risk check failed: Daily loss exceeds limit {self.daily_loss_limit}'
+            logger.warning(
+                'Risk check failed: Daily loss exceeds limit %s',
+                self.daily_loss_limit,
             )
             return False
 
         # Check max positions
         if not self._check_max_positions(ticker, side):
-            print(f'Risk check failed: Would exceed max positions {self.max_positions}')
+            logger.warning('Risk check failed: Would exceed max positions %s', self.max_positions)
             return False
 
         return True

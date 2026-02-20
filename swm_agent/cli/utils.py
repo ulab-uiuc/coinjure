@@ -1,55 +1,129 @@
 """Utility functions for CLI integration with trading engine."""
 
-import asyncio
+import logging
 import threading
+import time
+
+from rich.live import Live
 
 from swm_agent.cli.monitor import TradingMonitor
 from swm_agent.core.trading_engine import TradingEngine
+
+logger = logging.getLogger(__name__)
 
 
 class MonitoredTradingEngine:
     """Wrapper for TradingEngine that runs with live monitoring in watch mode."""
 
     def __init__(
-        self, engine: TradingEngine, refresh_rate: float = 2.0, enabled: bool = True
+        self,
+        engine: TradingEngine,
+        refresh_rate: float = 2.0,
+        enabled: bool = True,
+        exchange_name: str = '',
     ) -> None:
-        """Initialize monitored trading engine.
-
-        Args:
-            engine: The trading engine to monitor
-            refresh_rate: Refresh rate for live monitoring in seconds
-            enabled: Whether monitoring is enabled
-        """
         self.engine = engine
         self.refresh_rate = refresh_rate
         self.enabled = enabled
+        self.exchange_name = exchange_name
         self.monitor: TradingMonitor | None = None
         self._monitor_thread: threading.Thread | None = None
 
+    def _sync_data(self) -> None:
+        """Sync engine data into monitor for display.
+
+        Copies all mutable collections so the monitor thread never
+        iterates over objects the engine thread is mutating.
+        """
+        if not self.monitor:
+            return
+
+        try:
+            # Sync LLM decisions from strategy
+            decisions = getattr(self.engine.strategy, 'decisions', None)
+            if decisions is not None:
+                self.monitor.llm_decisions = list(decisions)  # type: ignore[attr-defined]
+
+            # Sync total executed counter (not affected by deque eviction)
+            total_exec = getattr(self.engine.strategy, 'total_executed', 0)
+            self.monitor.total_executed = total_exec  # type: ignore[attr-defined]
+
+            # Sync activity log from engine
+            self.monitor.activity_log = list(self.engine._activity_log)  # type: ignore[attr-defined]
+
+            # Sync news headlines from engine
+            self.monitor.news_headlines = list(self.engine._news)  # type: ignore[attr-defined]
+
+            # Sync event count from engine
+            self.monitor.event_count = self.engine._event_count  # type: ignore[attr-defined]
+
+            # Sync news buffer count from strategy
+            self.monitor.news_buffer_count = getattr(self.engine.strategy, 'news_buffer_count', 0)  # type: ignore[attr-defined]
+
+            # Sync performance stats from engine's performance analyzer
+            perf = getattr(self.engine, '_perf', None)
+            if perf is not None:
+                stats = perf.get_stats()
+                self.monitor.perf_stats = stats  # type: ignore[attr-defined]
+
+            # Sync order book count
+            try:
+                self.monitor.ob_count = len(self.engine.market_data.order_books)  # type: ignore[attr-defined]
+            except (RuntimeError, AttributeError):
+                pass
+        except (RuntimeError, Exception) as e:
+            # RuntimeError: dict/deque changed size during iteration
+            # This is harmless — we'll get the data on the next refresh
+            logger.debug('sync_data transient error: %s', e)
+
     def _run_monitor_thread(self) -> None:
-        """Run monitor in a separate thread."""
-        if self.monitor:
-            self.monitor.display_live(refresh_rate=self.refresh_rate)
+        """Run monitor in a separate thread with data sync."""
+        if not self.monitor:
+            return
+        try:
+            with Live(
+                self.monitor.create_layout(),
+                console=self.monitor.console,
+                refresh_per_second=4,
+                screen=True,
+            ) as live:
+                while True:
+                    try:
+                        self._sync_data()
+                        live.update(self.monitor.create_layout())
+                    except (RuntimeError, KeyError, AttributeError) as e:
+                        # Transient thread-safety errors from iterating shared
+                        # dicts/lists while the engine mutates them.
+                        # Log and retry on next refresh cycle.
+                        logger.debug('Monitor render error (retrying): %s', e)
+                    except Exception as e:
+                        # Unexpected error — log but keep the thread alive
+                        logger.warning('Monitor error: %s', e, exc_info=True)
+
+                    time.sleep(self.refresh_rate)
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.error('Monitor thread fatal error: %s', e, exc_info=True)
 
     async def start(self) -> None:
         """Start the trading engine with monitoring."""
         if self.enabled:
-            # Create monitor
+            import asyncio
+
             self.monitor = TradingMonitor(
                 trader=self.engine.trader,
                 position_manager=self.engine.trader.position_manager,
+                exchange_name=self.exchange_name,
             )
 
-            # Start monitor in separate thread
             self._monitor_thread = threading.Thread(
                 target=self._run_monitor_thread, daemon=True
             )
             self._monitor_thread.start()
 
-            # Small delay to let monitor initialize
             await asyncio.sleep(0.5)
 
-        # Start trading engine
         await self.engine.start()
 
     async def stop(self) -> None:
@@ -62,12 +136,16 @@ class MonitoredTradingEngine:
             self.monitor = TradingMonitor(
                 trader=self.engine.trader,
                 position_manager=self.engine.trader.position_manager,
+                exchange_name=self.exchange_name,
             )
         self.monitor.display_snapshot()
 
 
 def add_monitoring_to_engine(
-    engine: TradingEngine, watch: bool = False, refresh_rate: float = 2.0
+    engine: TradingEngine,
+    watch: bool = False,
+    refresh_rate: float = 2.0,
+    exchange_name: str = '',
 ) -> MonitoredTradingEngine:
     """Add monitoring capabilities to an existing trading engine.
 
@@ -75,24 +153,14 @@ def add_monitoring_to_engine(
         engine: The trading engine to monitor
         watch: Enable live watch mode
         refresh_rate: Refresh rate for watch mode in seconds
+        exchange_name: Exchange name to show in monitor header
 
     Returns:
         A MonitoredTradingEngine that wraps the original engine
-
-    Example:
-        ```python
-        # Create your trading engine
-        engine = TradingEngine(data_source, strategy, trader)
-
-        # Add monitoring
-        monitored_engine = add_monitoring_to_engine(
-            engine, watch=True, refresh_rate=1.0
-        )
-
-        # Start with monitoring
-        await monitored_engine.start()
-        ```
     """
     return MonitoredTradingEngine(
-        engine=engine, refresh_rate=refresh_rate, enabled=watch
+        engine=engine,
+        refresh_rate=refresh_rate,
+        enabled=watch,
+        exchange_name=exchange_name,
     )
