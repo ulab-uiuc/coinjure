@@ -90,6 +90,8 @@ class SimpleStrategy(Strategy):
         self._position_meta: dict[str, PositionMeta] = {}
         # Guard against concurrent close attempts on the same ticker
         self._closing_in_progress: set[str] = set()
+        # Track consecutive close failures per ticker to avoid infinite retry loops
+        self._close_failures: dict[str, int] = {}
         # Guard against concurrent open attempts on the same market
         self._opening_in_progress: set[str] = set()
         # Buffer of recent Google News for context (title, snippet, source, timestamp)
@@ -242,16 +244,52 @@ class SimpleStrategy(Strategy):
                     news_text += f': {snippet[:200]}'
                 scored.append((score, news_text))
 
-        # Return top matches sorted by relevance
+        # Return top matches sorted by relevance, with a total character budget
+        # to avoid overloading the LLM prompt
         scored.sort(key=lambda x: -x[0])
-        return [text for _, text in scored[:max_results]]
+        results: list[str] = []
+        total_chars = 0
+        for _, text in scored[:max_results]:
+            if total_chars + len(text) > 800:
+                break
+            results.append(text)
+            total_chars += len(text)
+        return results
 
     # ------------------------------------------------------------------
     # Position exit logic
     # ------------------------------------------------------------------
 
     async def _check_position_exits(self, ticker: Ticker, trader: Trader) -> None:
-        """Check if a position on this ticker should be closed.
+        """Check exits for this ticker's position.
+
+        Also handles the case where a YES ticker OrderBookEvent arrives but we
+        hold a NO position: the NO orderbook is often empty (no real bids/asks),
+        so we derive the NO price from the YES bid (NO ≈ 1 - YES_bid) and run
+        the same exit logic.
+        """
+        await self._check_one_position(ticker, trader)
+
+        # If this is a YES ticker, also check the paired NO position.
+        # This matters when the NO token has no real orderbook of its own.
+        if isinstance(ticker, PolyMarketTicker) and ticker.no_token_id:
+            no_ticker = ticker.get_no_ticker()
+            if no_ticker and no_ticker.symbol in self._position_meta:
+                yes_bid = trader.market_data.get_best_bid(ticker)
+                if yes_bid is not None:
+                    no_price_derived = float(Decimal('1') - yes_bid.price)
+                    await self._check_one_position(
+                        no_ticker, trader, price_override=no_price_derived,
+                    )
+
+    async def _check_one_position(
+        self,
+        ticker: Ticker,
+        trader: Trader,
+        *,
+        price_override: float | None = None,
+    ) -> None:
+        """Core exit logic for a single position.
 
         Exit rules (in priority order):
         1. Edge reversed: market price crossed past our LLM estimate
@@ -271,12 +309,15 @@ class SimpleStrategy(Strategy):
         if meta is None:
             return  # No metadata, position was opened before strategy started
 
-        bid = trader.market_data.get_best_bid(ticker)
-        if bid is None:
-            return
+        if price_override is not None:
+            current_price = price_override
+        else:
+            bid = trader.market_data.get_best_bid(ticker)
+            if bid is None:
+                return
+            current_price = float(bid.price)
 
         now = datetime.now()
-        current_price = float(bid.price)
         llm_prob = meta.llm_prob
 
         # --- Rule 1 & 2: Edge check (fast, no LLM call) ---
@@ -512,7 +553,20 @@ Respond in JSON only:
         executed = result.order is not None
         if executed:
             self._position_meta.pop(ticker.symbol, None)
+            self._close_failures.pop(ticker.symbol, None)
             self.total_executed += 1
+        else:
+            # Count consecutive failures; drop meta after 3 to avoid infinite retry
+            # (e.g. market already resolved, token delisted)
+            failures = self._close_failures.get(ticker.symbol, 0) + 1
+            self._close_failures[ticker.symbol] = failures
+            if failures >= 3:
+                self.logger.warning(
+                    f'Close failed {failures}x for {ticker.symbol[:30]}, '
+                    f'dropping position meta (market may be resolved/delisted)'
+                )
+                self._position_meta.pop(ticker.symbol, None)
+                self._close_failures.pop(ticker.symbol, None)
 
         self.total_closes += 1
         self.decisions.append(LLMDecision(
@@ -556,12 +610,13 @@ Respond in JSON only:
             if relevant_news:
                 news_section = '\n\nRecent relevant news:\n' + '\n'.join(f'- {n}' for n in relevant_news)
 
+            details_text = (event.news or '')[:500]
             prompt = f"""You are a prediction market analyst. Estimate the TRUE probability that this event will happen.
 
 This is a binary contract: pays $1 if YES, $0 if NO.{price_info}
 
 Market: {event.title}
-Details: {event.news}{news_section}
+Details: {details_text}{news_section}
 
 Your job: estimate the real probability (0.0 to 1.0) based on ALL available information.
 If you have relevant news, use it to inform your estimate — the market may not have priced in recent developments.
