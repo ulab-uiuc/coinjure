@@ -89,10 +89,22 @@ class PositionManager:
             return Decimal('0')
 
         position = self.positions[ticker.symbol]
-        best_bid = market_data.get_best_bid(ticker)
-        if best_bid is None:
+        if position.quantity <= 0:
             return Decimal('0')
-        current_price = best_bid.price
+
+        # Try bid first, fallback to ask
+        current_price = Decimal('0')
+        best_bid = market_data.get_best_bid(ticker)
+        if best_bid is not None:
+            current_price = best_bid.price
+        else:
+            best_ask = market_data.get_best_ask(ticker)
+            if best_ask is not None:
+                current_price = best_ask.price
+
+        if current_price <= 0:
+            return Decimal('0')
+
         unrealized_pnl = (current_price - position.average_cost) * position.quantity
         return unrealized_pnl
 
@@ -157,12 +169,17 @@ class PositionManager:
             portfolio_value[cash_pos.ticker.symbol] = cash_pos.quantity
 
         for pos in self.get_non_cash_positions():
+            if pos.quantity <= 0:
+                continue
             collateral = pos.ticker.collateral
 
             best_bid = market_data.get_best_bid(pos.ticker)
-            if best_bid is None:
+            current_price = best_bid.price if best_bid else None
+            if current_price is None:
+                best_ask = market_data.get_best_ask(pos.ticker)
+                current_price = best_ask.price if best_ask else None
+            if current_price is None:
                 continue
-            current_price = best_bid.price
             position_value = pos.quantity * current_price
 
             portfolio_value[collateral.symbol] = (

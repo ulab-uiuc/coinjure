@@ -42,8 +42,8 @@ async def run_live_trading(
     """
     engine = TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
-    # Start the live data source polling
-    await data_source.start()
+    # NOTE: data_source.start() is called by engine.start() internally
+    # (guarded by _ds_started flag). Do NOT call it here to avoid double-starting.
 
     if duration:
         # Run for specified duration

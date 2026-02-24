@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, quote_plus, urlparse
 
+import feedparser
 import requests
 from bs4 import BeautifulSoup
 from tenacity import (
@@ -233,6 +234,71 @@ def _scrape_google_news(  # noqa: C901
 
 
 # ------------------------------------------------------------------
+# RSS-based alternative (no scraping, no rate limits)
+# ------------------------------------------------------------------
+
+
+def _fetch_google_news_rss(
+    query: str,
+    *,
+    max_results: int = 20,
+) -> list[dict[str, Any]]:
+    """Fetch Google News results via RSS feed (no rate limiting).
+
+    Google News RSS endpoint is public and does NOT enforce the same
+    rate limits as the search HTML endpoint.
+    """
+    encoded = quote_plus(query)
+    url = f'https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en'
+
+    try:
+        feed = feedparser.parse(url)
+    except Exception:
+        logger.exception('Google News RSS parse failed for %r', query)
+        return []
+
+    if not hasattr(feed, 'entries') or not feed.entries:
+        return []
+
+    results: list[dict[str, Any]] = []
+    for entry in feed.entries[:max_results]:
+        title = entry.get('title', '')
+        link = entry.get('link', '')
+        # Google News RSS titles often end with " - Source Name"
+        source = ''
+        if ' - ' in title:
+            parts = title.rsplit(' - ', 1)
+            title = parts[0]
+            source = parts[1] if len(parts) > 1 else ''
+
+        snippet = entry.get('summary', '')
+        # Strip HTML from summary
+        if snippet and '<' in snippet:
+            try:
+                snippet = BeautifulSoup(snippet, 'html.parser').get_text(strip=True)
+            except Exception:
+                snippet = ''
+
+        ts = datetime.now().timestamp()
+        if 'published_parsed' in entry and entry.published_parsed:
+            try:
+                from calendar import timegm
+                ts = timegm(entry.published_parsed)
+            except Exception:
+                pass
+
+        results.append({
+            'link': link,
+            'title': title,
+            'snippet': snippet[:300],
+            'date': ts,
+            'source': source or 'Google News',
+        })
+
+    return results
+
+
+# ------------------------------------------------------------------
 # DataSource implementation
 # ------------------------------------------------------------------
 
@@ -335,20 +401,35 @@ class GoogleNewsDataSource(DataSource):
     # -- polling loop -------------------------------------------------
 
     async def _fetch_all_queries(self) -> list[tuple[dict[str, Any], str]]:
-        """Scrape all configured queries; return ``(item, query)`` pairs."""
+        """Fetch news for all configured queries; return ``(item, query)`` pairs.
+
+        Uses Google News RSS as primary source (reliable, no rate limits).
+        Falls back to HTML scraping if RSS returns no results.
+        """
         results: list[tuple[dict[str, Any], str]] = []
         count = 0
         for query in self.queries:
             if count >= self.max_articles_per_poll:
                 break
             try:
+                # Primary: RSS feed (no rate limits)
                 items = await asyncio.to_thread(
-                    _scrape_google_news,
+                    _fetch_google_news_rss,
                     query,
-                    max_pages=self.max_pages,
-                    min_delay=self.min_delay,
-                    max_delay=self.max_delay,
+                    max_results=self.max_articles_per_poll - count,
                 )
+
+                # Fallback: HTML scraping if RSS returns nothing
+                if not items:
+                    logger.debug('RSS returned 0 results for %r, trying scraper', query)
+                    items = await asyncio.to_thread(
+                        _scrape_google_news,
+                        query,
+                        max_pages=self.max_pages,
+                        min_delay=self.min_delay,
+                        max_delay=self.max_delay,
+                    )
+
                 for item in items:
                     if count >= self.max_articles_per_poll:
                         break
@@ -359,7 +440,7 @@ class GoogleNewsDataSource(DataSource):
                     count += 1
             except Exception:
                 logger.exception(
-                    'Error scraping Google News for query %r',
+                    'Error fetching Google News for query %r',
                     query,
                 )
         return results

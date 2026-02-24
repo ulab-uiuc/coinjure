@@ -46,6 +46,7 @@ class LiveKalshiDataSource(DataSource):
         private_key_path: str | None = None,
         event_cache_file: str = 'kalshi_events_cache.jsonl',
         polling_interval: float = 60.0,
+        reprocess_on_start: bool = True,
     ):
         self.polling_interval = polling_interval
         self.event_cache_file = event_cache_file
@@ -53,6 +54,7 @@ class LiveKalshiDataSource(DataSource):
         self.event_queue: asyncio.Queue = asyncio.Queue()
         self.last_prices: dict[str, tuple[int, int]] = {}
         self._news_fetched_events: set[str] = set()
+        self._poll_task: asyncio.Task | None = None
 
         # Setup Kalshi API client
         from kalshi_python import Configuration
@@ -77,19 +79,20 @@ class LiveKalshiDataSource(DataSource):
         self._api_client = ApiClient(configuration=config)
         self._markets_api = MarketsApi(self._api_client)
 
-        # Load previously processed events
+        # Load cache
         if os.path.exists(self.event_cache_file):
             with open(self.event_cache_file) as f:
                 for line in f:
                     try:
                         cached = json.loads(line.strip())
                         if 'event_ticker' in cached:
-                            self.processed_event_tickers.add(cached['event_ticker'])
+                            # Always track which events we've already sent news for,
+                            # to avoid re-triggering LLM calls on restart.
+                            self._news_fetched_events.add(cached['event_ticker'])
+                            if not reprocess_on_start:
+                                self.processed_event_tickers.add(cached['event_ticker'])
                     except json.JSONDecodeError:
                         pass
-
-    async def close(self) -> None:
-        pass
 
     async def _fetch_markets(self) -> list[dict[str, Any]]:
         """Fetch open markets from Kalshi API, filtering for liquid markets."""
@@ -164,6 +167,7 @@ class LiveKalshiDataSource(DataSource):
                     price=bid_price,
                     size=size,
                     size_delta=size,
+                    side='bid',
                 )
             )
 
@@ -176,6 +180,7 @@ class LiveKalshiDataSource(DataSource):
                     price=ask_price,
                     size=size,
                     size_delta=size,
+                    side='ask',
                 )
             )
 
@@ -285,7 +290,16 @@ class LiveKalshiDataSource(DataSource):
             await asyncio.sleep(self.polling_interval)
 
     async def start(self) -> None:
-        asyncio.create_task(self._poll_data())
+        if self._poll_task is None or self._poll_task.done():
+            self._poll_task = asyncio.create_task(self._poll_data())
+
+    async def stop(self) -> None:
+        if self._poll_task is not None and not self._poll_task.done():
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
 
     async def get_next_event(self) -> Event | None:
         try:

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from decimal import Decimal
 
@@ -12,6 +13,8 @@ from swm_agent.strategy.strategy import Strategy
 from swm_agent.strategy.test_strategy import TestStrategy
 from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
 from swm_agent.trader.paper_trader import PaperTrader
+
+logger = logging.getLogger(__name__)
 
 
 async def run_live_simulation(
@@ -50,7 +53,7 @@ async def run_live_simulation(
 
     # Run the trading engine
     await engine.start()
-    print('Live simulation stopped.')
+    logger.info('Live simulation stopped.')
 
 
 async def run_backtest(
@@ -82,7 +85,7 @@ async def run_backtest(
 
     await engine.start()
     engine._perf.print_summary()
-    print('Backtest complete.')
+    logger.info('Backtest complete.')
 
 
 if __name__ == '__main__':
