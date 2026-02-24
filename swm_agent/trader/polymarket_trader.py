@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -27,6 +28,8 @@ from swm_agent.trader.types import (
     Trade,
     TradeSide,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PolymarketTrader(Trader):
@@ -109,7 +112,7 @@ class PolymarketTrader(Trader):
         limit_price: Decimal,
         quantity: Decimal,
     ) -> Order:
-        print(response)
+        logger.debug('Order response: %s', response)
         # Check if order was successfully submitted
         if not response.get('success'):
             return Order(
@@ -140,7 +143,7 @@ class PolymarketTrader(Trader):
 
         # Get order status
         order_details = await self._get_order_status(order_id)
-        print(order_details)
+        logger.debug('Order details: %s', order_details)
 
         # Since we only submit FOK order now, if the order is not matched, consider it rejected
         if (
@@ -258,7 +261,7 @@ class PolymarketTrader(Trader):
             return PlaceOrderResult(order=order)
 
         except PolyApiException as e:
-            print(f'Polymarket API error: {e}')
+            logger.error('Polymarket API error: %s', e)
             failure_reason = OrderFailureReason.UNKNOWN
             if e.status_code == 400:
                 error_msg = str(e.error_msg).lower()
@@ -268,7 +271,7 @@ class PolymarketTrader(Trader):
                     failure_reason = OrderFailureReason.INVALID_ORDER
             return PlaceOrderResult(order=None, failure_reason=failure_reason)
         except Exception as e:
-            print(f'Error placing order: {e}')
+            logger.error('Error placing order: %s', e, exc_info=True)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.UNKNOWN,

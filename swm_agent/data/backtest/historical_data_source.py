@@ -1,10 +1,13 @@
 import json
+import logging
 from decimal import Decimal
 
 from swm_agent.events.events import Event, PriceChangeEvent
 from swm_agent.ticker.ticker import PolyMarketTicker
 
 from ..data_source import DataSource
+
+logger = logging.getLogger(__name__)
 
 
 class HistoricalDataSource(DataSource):
@@ -38,11 +41,11 @@ class HistoricalDataSource(DataSource):
                                 )
                                 events.append(event)
         except Exception as e:
-            print(f'Error loading events from {self.history_file}: {e}')
+            logger.error('Error loading events from %s: %s', self.history_file, e)
 
         # Sort events by timestamp
         events.sort(key=lambda e: e.timestamp)
-        print(f'Historical data loaded: {events}')
+        logger.info('Historical data loaded: %d events', len(events))
         return events
 
     async def get_next_event(self) -> Event | None:

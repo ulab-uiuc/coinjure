@@ -26,6 +26,7 @@ class PolyMarketTicker(Ticker):
     token_id: str = ''
     market_id: str = ''
     event_id: str = ''
+    no_token_id: str = ''  # Complement token (NO side)
 
     @property
     def collateral(self) -> Ticker:
@@ -36,6 +37,24 @@ class PolyMarketTicker(Ticker):
     def from_token_id(cls, token_id: str, name: str = '') -> PolyMarketTicker:
         """Create a ticker from a token ID, using the token ID as the symbol"""
         return cls(symbol=token_id, name=name, token_id=token_id)
+
+    def get_no_ticker(self) -> PolyMarketTicker | None:
+        """Return a ticker for the NO side of this market, if available.
+
+        The returned ticker must match the one stored in MarketDataManager
+        by the data source, so we use the same ``name`` (not appending
+        " (NO)") — ``PolyMarketTicker`` equality compares all fields.
+        """
+        if not self.no_token_id:
+            return None
+        return PolyMarketTicker(
+            symbol=self.no_token_id,
+            name=self.name,
+            token_id=self.no_token_id,
+            market_id=self.market_id,
+            event_id=self.event_id,
+            no_token_id=self.token_id,  # reverse: NO's complement is YES
+        )
 
 
 @dataclass(eq=True, frozen=True)

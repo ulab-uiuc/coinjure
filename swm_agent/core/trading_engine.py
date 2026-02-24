@@ -30,6 +30,7 @@ _MAX_CONSECUTIVE_NONE = 120  # ~2 min at 1 s timeout per poll
 @dataclass(frozen=True)
 class PositionSnapshot:
     ticker_symbol: str
+    ticker_name: str
     quantity: Decimal
     average_cost: Decimal
     current_price: Decimal
@@ -49,6 +50,7 @@ class TradeSnapshot:
     time: str
     side: str
     ticker_symbol: str
+    ticker_name: str
     price: Decimal
     quantity: Decimal
     status: str
@@ -58,6 +60,7 @@ class TradeSnapshot:
 class OrderSnapshot:
     side: str
     ticker_symbol: str
+    ticker_name: str
     limit_price: Decimal
     quantity: Decimal
     filled_quantity: Decimal
@@ -123,10 +126,19 @@ class TradingEngine:
         self._last_orders_idx: int = 0
         self._order_times: list[str] = []
         self._perf = PerformanceAnalyzer(initial_capital=initial_capital)
-        self._news: deque[tuple[str, str]] = deque(maxlen=100)
+        self._news: deque[tuple[str, str]] = deque(maxlen=300)
+        self._activity_log: deque[tuple[str, str]] = deque(maxlen=100)
+        self._last_decisions_count: int = 0
 
         # [H3] Guard: prevent calling data_source.start() more than once.
         self._ds_started: bool = False
+
+        # [M4] Periodic stale order book pruning interval (by event count).
+        self._last_prune_event: int = 0
+        self._PRUNE_INTERVAL = 500
+
+        # [P1] Deferred news events: collected during market-event draining.
+        self._deferred_news: deque[NewsEvent] = deque(maxlen=500)
 
     # ------------------------------------------------------------------ #
     # Main loop                                                           #
@@ -157,7 +169,10 @@ class TradingEngine:
                 continue
 
             if event is None:
-                if self._continuous:
+                # [P1] Process deferred news when the queue is idle.
+                if self._deferred_news:
+                    event = self._deferred_news.popleft()
+                elif self._continuous:
                     consecutive_none += 1
                     # [M1] Warn periodically on prolonged silence.
                     if consecutive_none == _MAX_CONSECUTIVE_NONE:
@@ -175,15 +190,55 @@ class TradingEngine:
                             consecutive_none,
                         )
                     continue
-                self.running = False
-                logger.info('Data source exhausted — engine stopping')
-                break
+                else:
+                    self.running = False
+                    logger.info('Data source exhausted — engine stopping')
+                    break
 
             # Got a real event — reset the silence counter.
             consecutive_none = 0
             self._event_count += 1
 
+            # [P1] Before processing a NewsEvent (slow, LLM call), drain all
+            # pending OrderBookEvents so market data is up-to-date. This
+            # prevents the scenario where order books stay empty for minutes
+            # while the engine processes a burst of news events one by one.
+            # Only in continuous (live) mode — backtesting preserves event order.
+            if self._continuous and isinstance(event, NewsEvent):
+                drained = 0
+                while True:
+                    try:
+                        peek = await asyncio.wait_for(
+                            self.data_source.get_next_event(), timeout=0.05,
+                        )
+                    except (asyncio.TimeoutError, Exception):
+                        break
+                    if peek is None:
+                        break
+                    self._event_count += 1
+                    if isinstance(peek, OrderBookEvent):
+                        self.market_data.process_orderbook_event(peek)
+                        drained += 1
+                    elif isinstance(peek, PriceChangeEvent):
+                        self.market_data.process_price_change_event(peek)
+                        drained += 1
+                    elif isinstance(peek, NewsEvent):
+                        # Put non-market events into a buffer to process later
+                        self._deferred_news.append(peek)
+                if drained > 0:
+                    logger.debug('Drained %d market events before NewsEvent', drained)
+
+            # Log milestones to activity log
+            if self._event_count in (1, 10, 50, 100) or self._event_count % 500 == 0:
+                now_str = datetime.now().strftime('%H:%M:%S')
+                ob_count = len(self.market_data.order_books)
+                self._activity_log.append(
+                    (now_str, f'Milestone: {self._event_count} events processed, {ob_count} order books')
+                )
+
             try:
+                now_str = datetime.now().strftime('%H:%M:%S')
+
                 if isinstance(event, OrderBookEvent):
                     self.market_data.process_orderbook_event(event)
                 elif isinstance(event, PriceChangeEvent):
@@ -192,13 +247,84 @@ class TradingEngine:
 
                 if isinstance(event, NewsEvent):
                     headline = event.title or event.news[:100]
-                    self._news.append((datetime.now().strftime('%H:%M:%S'), headline))
+                    self._news.append((now_str, headline))
+                    source = getattr(event, 'source', '') or ''
+                    self._activity_log.append(
+                        (now_str, f'News [{source[:15]}] "{headline[:55]}"')
+                    )
                     logger.info('NewsEvent: %s', headline)
 
+                prev_orders = len(self.trader.orders)
                 await self.strategy.process_event(event, self.trader)
+
+                # Log LLM decisions from strategy (only new ones).
+                # Uses total_decisions counter (monotonically increasing)
+                # instead of len(decisions) which plateaus at deque maxlen.
+                decisions = getattr(self.strategy, 'decisions', None)
+                total_d = getattr(self.strategy, 'total_decisions', 0)
+                if decisions is not None and total_d > self._last_decisions_count:
+                    new_count = total_d - self._last_decisions_count
+                    # Log the newest entries from the tail of the deque
+                    start_idx = max(0, len(decisions) - new_count)
+                    for i in range(start_idx, len(decisions)):
+                        d = decisions[i]
+                        exec_mark = 'TRADED' if d.executed else 'no trade'
+                        llm_p = getattr(d, 'llm_prob', 0)
+                        mkt_p = getattr(d, 'market_price', 0)
+                        prob_str = f'LLM={llm_p:.0%} vs Mkt={mkt_p:.0%}' if mkt_p > 0 else ''
+                        name = d.ticker_name[:30]
+                        self._activity_log.append(
+                            (now_str, f'{d.action} {prob_str} [{exec_mark}] "{name}"')
+                        )
+                    self._last_decisions_count = total_d
+
+                # Log new trades and register tokens for priority refresh
                 self._sync_trades()
+                new_orders = self.trader.orders[prev_orders:]
+                for order in new_orders:
+                    status = order.status.value.upper()
+                    side = order.side.value.upper()
+                    ticker_name = getattr(order.ticker, 'name', '') or order.ticker.symbol[:25]
+                    self._activity_log.append(
+                        (now_str, f'{side} {order.filled_quantity} @ ${order.average_price:.4f} → {status} "{ticker_name[:25]}"')
+                    )
+                    # Tell data source to prioritize this token's order book
+                    if hasattr(order.ticker, 'token_id'):
+                        if order.side.value.upper() == 'BUY':
+                            watch = getattr(self.data_source, 'watch_token', None)
+                            if watch:
+                                watch(order.ticker.token_id)
+                                # Also watch the complement (NO) token if it exists,
+                                # so exit re-evaluations have fresh order book data.
+                                no_token_id = getattr(order.ticker, 'no_token_id', '')
+                                if no_token_id:
+                                    watch(no_token_id)
+                        elif order.side.value.upper() == 'SELL':
+                            # Unwatch tokens when position is fully closed
+                            pos = self.trader.position_manager.get_position(order.ticker)
+                            if pos is None or pos.quantity <= 0:
+                                unwatch = getattr(self.data_source, 'unwatch_token', None)
+                                if unwatch:
+                                    unwatch(order.ticker.token_id)
             except Exception:
+                now_str = datetime.now().strftime('%H:%M:%S')
+                self._activity_log.append((now_str, f'Error processing event #{self._event_count}'))
                 logger.exception('Error processing event #%d', self._event_count)
+
+            # [M4] Periodically prune stale order books from MarketDataManager.
+            if self._event_count - self._last_prune_event >= self._PRUNE_INTERVAL:
+                self._last_prune_event = self._event_count
+                known = getattr(self.data_source, '_known_tickers', None)
+                if known is None:
+                    # CompositeDataSource: check child sources
+                    for src in getattr(self.data_source, 'sources', []):
+                        known = getattr(src, '_known_tickers', None)
+                        if known is not None:
+                            break
+                if known is not None:
+                    removed = self.market_data.prune_stale_tickers(set(known.keys()))
+                    if removed:
+                        logger.info('Pruned %d stale order books from MarketDataManager', removed)
 
         logger.info('TradingEngine stopped  (events=%d)', self._event_count)
 
@@ -260,10 +386,19 @@ class TradingEngine:
             cash += cp.quantity
 
         for pos in pm.get_non_cash_positions():
+            if pos.quantity <= 0:
+                continue
             try:
+                cur_price = None
                 bid = md.get_best_bid(pos.ticker)
                 if bid is not None:
-                    unrealized_pnl += (bid.price - pos.average_cost) * pos.quantity
+                    cur_price = bid.price
+                else:
+                    ask = md.get_best_ask(pos.ticker)
+                    if ask is not None:
+                        cur_price = ask.price
+                if cur_price is not None:
+                    unrealized_pnl += (cur_price - pos.average_cost) * pos.quantity
             except (KeyError, AttributeError):
                 pass
 
@@ -285,7 +420,7 @@ class TradingEngine:
             try:
                 current_dd = rm.get_current_drawdown()
             except Exception:
-                pass
+                logger.debug('get_current_drawdown error', exc_info=True)
 
         # ---- exposure ---------------------------------------------------
         market_value = max(equity - cash, Decimal('0'))
@@ -294,7 +429,7 @@ class TradingEngine:
         # ---- positions --------------------------------------------------
         pos_snaps: list[PositionSnapshot] = []
         for pos in pm.get_non_cash_positions():
-            if pos.quantity == 0:
+            if pos.quantity <= 0:
                 continue
             cur_price = Decimal('0')
             u_pnl = Decimal('0')
@@ -302,12 +437,18 @@ class TradingEngine:
                 bid = md.get_best_bid(pos.ticker)
                 if bid is not None:
                     cur_price = bid.price
+                else:
+                    ask = md.get_best_ask(pos.ticker)
+                    if ask is not None:
+                        cur_price = ask.price
+                if cur_price > 0:
                     u_pnl = (cur_price - pos.average_cost) * pos.quantity
             except (KeyError, AttributeError):
                 pass
             pos_snaps.append(
                 PositionSnapshot(
                     ticker_symbol=pos.ticker.symbol,
+                    ticker_name=getattr(pos.ticker, 'name', '') or pos.ticker.symbol[:30],
                     quantity=pos.quantity,
                     average_cost=pos.average_cost,
                     current_price=cur_price,
@@ -361,6 +502,7 @@ class TradingEngine:
                         time=ts,
                         side=side_str,
                         ticker_symbol=order.ticker.symbol,
+                        ticker_name=getattr(order.ticker, 'name', '') or order.ticker.symbol[:30],
                         price=(
                             order.average_price
                             if order.average_price > 0
@@ -375,6 +517,7 @@ class TradingEngine:
                     OrderSnapshot(
                         side=side_str,
                         ticker_symbol=order.ticker.symbol,
+                        ticker_name=getattr(order.ticker, 'name', '') or order.ticker.symbol[:30],
                         limit_price=order.limit_price,
                         quantity=order.remaining + order.filled_quantity,
                         filled_quantity=order.filled_quantity,
