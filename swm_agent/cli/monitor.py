@@ -56,6 +56,29 @@ class TradingMonitor:
         self.perf_stats = None
         self.ob_count: int = 0
 
+        # Keyboard interaction state
+        self.PANELS: list[str] = ['llm_decisions', 'orderbooks', 'news', 'activity_log']
+        self.focused_panel: str = 'llm_decisions'
+        self.scroll_offsets: dict[str, int] = {p: 0 for p in self.PANELS}
+        self.paused: bool = False
+
+    def _next_panel(self) -> None:
+        """Cycle focus to the next panel."""
+        idx = self.PANELS.index(self.focused_panel)
+        self.focused_panel = self.PANELS[(idx + 1) % len(self.PANELS)]
+        self.scroll_offsets[self.focused_panel] = 0  # Reset scroll on switch
+
+    def _prev_panel(self) -> None:
+        """Cycle focus to the previous panel."""
+        idx = self.PANELS.index(self.focused_panel)
+        self.focused_panel = self.PANELS[(idx - 1) % len(self.PANELS)]
+        self.scroll_offsets[self.focused_panel] = 0
+
+    def _scroll(self, delta: int) -> None:
+        """Scroll the currently focused panel."""
+        key = self.focused_panel
+        self.scroll_offsets[key] = max(0, self.scroll_offsets.get(key, 0) + delta)
+
     def _format_decimal(self, value: Decimal, decimals: int = 4) -> str:
         """Format decimal with specified precision."""
         return f'{value:.{decimals}f}'
@@ -110,7 +133,10 @@ class TradingMonitor:
 
             if total_value > 0:
                 exposure_pct = float(market_exposure / total_value * 100)
-                table.add_row('Exposure', f'${self._format_decimal(market_exposure, 2)} ({exposure_pct:.1f}%)')
+                table.add_row(
+                    'Exposure',
+                    f'${self._format_decimal(market_exposure, 2)} ({exposure_pct:.1f}%)',
+                )
             else:
                 table.add_row('Exposure', '$0.00 (0.0%)')
         except (RuntimeError, KeyError, AttributeError):
@@ -118,16 +144,24 @@ class TradingMonitor:
 
         return Panel(table, title='[bold]Portfolio Summary[/bold]', border_style='blue')
 
-
-    def _create_llm_decisions_panel(self, limit: int = 12) -> Panel:
+    def _create_llm_decisions_panel(
+        self, limit: int = 12, scroll_offset: int = 0, is_focused: bool = False
+    ) -> Panel:
         """Create LLM decisions panel showing AI probability estimates vs market."""
-        decisions: list = getattr(self, 'llm_decisions', [])[-limit:]
+        all_decisions: list = getattr(self, 'llm_decisions', [])
+        # Newest-first, scroll_offset=0 → latest, positive → scroll back
+        end_idx = max(0, len(all_decisions) - scroll_offset)
+        decisions = all_decisions[max(0, end_idx - limit) : end_idx]
+
+        border_style = 'bold bright_white' if is_focused else 'bright_magenta'
+        focus_tag = ' [●]' if is_focused else ''
+        scroll_tag = f' ↑{scroll_offset}' if scroll_offset > 0 else ''
 
         if not decisions:
             return Panel(
                 '[dim]Waiting for LLM analysis...[/dim]',
-                title='[bold]LLM Decisions[/bold]',
-                border_style='bright_magenta',
+                title=f'[bold]LLM Decisions{focus_tag}[/bold]',
+                border_style=border_style,
             )
 
         table = Table(show_header=True, header_style='bold', expand=True)
@@ -158,14 +192,20 @@ class TradingMonitor:
             edge_style = 'green' if edge > 0 else 'red' if edge < 0 else 'dim'
             edge_str = f'{edge:+.0%}' if mkt_price > 0 else '—'
 
-            exec_text = Text('✓', style='bold green') if d.executed else Text('—', style='dim')
+            exec_text = (
+                Text('✓', style='bold green') if d.executed else Text('—', style='dim')
+            )
             reasoning = getattr(d, 'reasoning', '') or ''
 
             table.add_row(
                 d.timestamp,
                 Text(d.action, style=action_style),
-                Text(f'{llm_prob:.0%}', style='white') if llm_prob > 0 else Text('—', style='dim'),
-                Text(f'{mkt_price:.0%}', style='white') if mkt_price > 0 else Text('—', style='dim'),
+                Text(f'{llm_prob:.0%}', style='white')
+                if llm_prob > 0
+                else Text('—', style='dim'),
+                Text(f'{mkt_price:.0%}', style='white')
+                if mkt_price > 0
+                else Text('—', style='dim'),
                 Text(edge_str, style=edge_style),
                 d.ticker_name[:22],
                 Text(reasoning[:45], style='dim'),
@@ -173,25 +213,36 @@ class TradingMonitor:
             )
 
         return Panel(
-            table, title='[bold]LLM Decisions (Prob vs Market)[/bold]', border_style='bright_magenta'
+            table,
+            title=f'[bold]LLM Decisions (Prob vs Market){focus_tag}{scroll_tag}[/bold]',
+            border_style=border_style,
         )
 
-    def _create_activity_log_panel(self, limit: int = 12) -> Panel:
+    def _create_activity_log_panel(
+        self, limit: int = 12, scroll_offset: int = 0, is_focused: bool = False
+    ) -> Panel:
         """Create scrolling activity log panel."""
-        log_entries: list[tuple[str, str]] = getattr(self, 'activity_log', [])[-limit:]
+        all_entries: list[tuple[str, str]] = getattr(self, 'activity_log', [])
+        # Newest-first with scroll
+        entries_rev = list(reversed(all_entries))
+        log_entries = entries_rev[scroll_offset : scroll_offset + limit]
+
+        border_style = 'bold bright_white' if is_focused else 'bright_cyan'
+        focus_tag = ' [●]' if is_focused else ''
+        scroll_tag = f' ↑{scroll_offset}' if scroll_offset > 0 else ''
 
         if not log_entries:
             return Panel(
                 '[dim]Waiting for activity...[/dim]',
-                title='[bold]Activity Log[/bold]',
-                border_style='bright_cyan',
+                title=f'[bold]Activity Log{focus_tag}[/bold]',
+                border_style=border_style,
             )
 
         table = Table(show_header=False, box=None, padding=(0, 1))
         table.add_column('Time', style='dim', width=8)
         table.add_column('Event')
 
-        for ts, msg in reversed(log_entries):
+        for ts, msg in log_entries:
             # Color code based on content
             if 'BUY' in msg:
                 style = 'green'
@@ -209,7 +260,9 @@ class TradingMonitor:
             table.add_row(ts, Text(msg[:80], style=style))
 
         return Panel(
-            table, title='[bold]Activity Log[/bold]', border_style='bright_cyan'
+            table,
+            title=f'[bold]Activity Log{focus_tag}{scroll_tag}[/bold]',
+            border_style=border_style,
         )
 
     def _create_stats_panel(self) -> Panel:
@@ -243,7 +296,8 @@ class TradingMonitor:
         # Position count (only positions with qty > 0)
         try:
             active_positions = sum(
-                1 for p in self.position_manager.get_non_cash_positions()
+                1
+                for p in self.position_manager.get_non_cash_positions()
                 if p.quantity > 0
             )
         except RuntimeError:
@@ -272,13 +326,30 @@ class TradingMonitor:
             table.add_row('', '')  # separator
             table.add_row('[bold]Performance[/bold]', '')
             win_pct = f'{perf_stats.win_rate * 100:.1f}%'
-            table.add_row('  Win Rate', Text(win_pct, style='green' if perf_stats.win_rate > Decimal('0.5') else 'red'))
+            table.add_row(
+                '  Win Rate',
+                Text(
+                    win_pct,
+                    style='green' if perf_stats.win_rate > Decimal('0.5') else 'red',
+                ),
+            )
             table.add_row('  Profit Factor', f'{perf_stats.profit_factor:.2f}')
             table.add_row('  Sharpe Ratio', f'{perf_stats.sharpe_ratio:.2f}')
             dd_pct = f'{perf_stats.max_drawdown * 100:.1f}%'
-            table.add_row('  Max Drawdown', Text(dd_pct, style='red' if perf_stats.max_drawdown > Decimal('0.05') else 'white'))
+            table.add_row(
+                '  Max Drawdown',
+                Text(
+                    dd_pct,
+                    style='red'
+                    if perf_stats.max_drawdown > Decimal('0.05')
+                    else 'white',
+                ),
+            )
             table.add_row('  Total PnL', self._format_pnl(perf_stats.total_pnl))
-            table.add_row('  W/L Streak', f'{perf_stats.max_consecutive_wins}W / {perf_stats.max_consecutive_losses}L')
+            table.add_row(
+                '  W/L Streak',
+                f'{perf_stats.max_consecutive_wins}W / {perf_stats.max_consecutive_losses}L',
+            )
 
         return Panel(table, title='[bold]Statistics[/bold]', border_style='cyan')
 
@@ -309,7 +380,9 @@ class TradingMonitor:
                 if cur <= 0:
                     best_ask = md.get_best_ask(pos.ticker)
                     cur = best_ask.price if best_ask else Decimal('0')
-                pnl = (cur - pos.average_cost) * pos.quantity if cur > 0 else Decimal('0')
+                pnl = (
+                    (cur - pos.average_cost) * pos.quantity if cur > 0 else Decimal('0')
+                )
                 pnl_style = 'green' if pnl >= 0 else 'red'
                 line = Text()
                 display_name = getattr(pos.ticker, 'name', '') or pos.ticker.symbol
@@ -335,7 +408,9 @@ class TradingMonitor:
             text_parts.append(Text('── Recent Orders ──\n', style='bold yellow'))
             for order in reversed(orders[-8:]):
                 side_style = 'green' if order.side.value == 'buy' else 'red'
-                status_style = 'green' if order.status == OrderStatus.FILLED else 'yellow'
+                status_style = (
+                    'green' if order.status == OrderStatus.FILLED else 'yellow'
+                )
                 line = Text()
                 line.append(f'  {order.side.value.upper():<5}', style=side_style)
                 order_name = getattr(order.ticker, 'name', '') or order.ticker.symbol
@@ -353,9 +428,13 @@ class TradingMonitor:
         for part in text_parts:
             combined.append_text(part)
 
-        return Panel(combined, title='[bold]Trading Activity[/bold]', border_style='yellow')
+        return Panel(
+            combined, title='[bold]Trading Activity[/bold]', border_style='yellow'
+        )
 
-    def _create_orderbook_panel(self, limit: int = 8) -> Panel:
+    def _create_orderbook_panel(
+        self, limit: int = 8, scroll_offset: int = 0, is_focused: bool = False
+    ) -> Panel:
         """Create order book panel showing top markets with bid/ask/spread."""
         try:
             # Snapshot to avoid RuntimeError
@@ -379,15 +458,20 @@ class TradingMonitor:
             spread = best_ask.price - best_bid.price
             active_books.append((ticker, best_bid, best_ask, spread, mid))
 
+        border_style = 'bold bright_white' if is_focused else 'green'
+        focus_tag = ' [●]' if is_focused else ''
+        scroll_tag = f' ↑{scroll_offset}' if scroll_offset > 0 else ''
+
         if not active_books:
             return Panel(
                 '[dim]Waiting for order book data...[/dim]',
-                title='[bold]Order Books[/bold]',
-                border_style='green',
+                title=f'[bold]Order Books{focus_tag}[/bold]',
+                border_style=border_style,
             )
 
         # Sort by closeness to 50% (most interesting markets first)
         active_books.sort(key=lambda x: abs(x[4] - Decimal('0.5')))
+        visible = active_books[scroll_offset : scroll_offset + limit]
 
         table = Table(show_header=True, header_style='bold', expand=True)
         table.add_column('Market', ratio=2)
@@ -396,9 +480,15 @@ class TradingMonitor:
         table.add_column('Sprd', justify='right', width=7)
         table.add_column('Mid', justify='right', width=6)
 
-        for ticker, bid, ask, spread, mid in active_books[:limit]:
+        for ticker, bid, ask, spread, mid in visible:
             name = getattr(ticker, 'name', '') or ticker.symbol
-            spread_style = 'green' if spread <= Decimal('0.02') else 'yellow' if spread <= Decimal('0.05') else 'red'
+            spread_style = (
+                'green'
+                if spread <= Decimal('0.02')
+                else 'yellow'
+                if spread <= Decimal('0.05')
+                else 'red'
+            )
             mid_pct = f'{mid * 100:.0f}%'
             table.add_row(
                 name[:30],
@@ -411,33 +501,42 @@ class TradingMonitor:
         total_ob = getattr(self, 'ob_count', len(ob_items))
         return Panel(
             table,
-            title=f'[bold]Order Books ({len(active_books)}/{total_ob} active)[/bold]',
-            border_style='green',
+            title=f'[bold]Order Books ({len(active_books)}/{total_ob} active){focus_tag}{scroll_tag}[/bold]',
+            border_style=border_style,
         )
 
-    def _create_news_panel(self, limit: int = 10) -> Panel:
+    def _create_news_panel(
+        self, limit: int = 10, scroll_offset: int = 0, is_focused: bool = False
+    ) -> Panel:
         """Create news headlines panel."""
         news: list[tuple[str, str]] = getattr(self, 'news_headlines', [])
+
+        border_style = 'bold bright_white' if is_focused else 'bright_yellow'
+        focus_tag = ' [●]' if is_focused else ''
+        scroll_tag = f' ↑{scroll_offset}' if scroll_offset > 0 else ''
 
         if not news:
             return Panel(
                 '[dim]Waiting for news...[/dim]',
-                title='[bold]News Headlines[/bold]',
-                border_style='bright_yellow',
+                title=f'[bold]News Headlines{focus_tag}[/bold]',
+                border_style=border_style,
             )
+
+        # Newest-first with scroll
+        news_rev = list(reversed(news))
+        visible = news_rev[scroll_offset : scroll_offset + limit]
 
         table = Table(show_header=False, box=None, padding=(0, 1))
         table.add_column('Time', style='dim', width=8)
         table.add_column('Headline')
 
-        # Show most recent first
-        for ts, headline in reversed(news[-limit:]):
+        for ts, headline in visible:
             table.add_row(ts, Text(headline[:70], style='white'))
 
         return Panel(
             table,
-            title=f'[bold]News Headlines ({len(news)} total)[/bold]',
-            border_style='bright_yellow',
+            title=f'[bold]News Headlines ({len(news)} total){focus_tag}{scroll_tag}[/bold]',
+            border_style=border_style,
         )
 
     def _create_system_status_panel(self) -> Panel:
@@ -515,22 +614,53 @@ class TradingMonitor:
             Layout(name='news', ratio=1),
         )
 
-        # Populate panels
+        # Populate panels (pass focus + scroll state)
+        focus = self.focused_panel
+        offsets = self.scroll_offsets
         layout['portfolio'].update(self._create_portfolio_summary())
         layout['stats'].update(self._create_stats_panel())
-        layout['llm_decisions'].update(self._create_llm_decisions_panel())
+        layout['llm_decisions'].update(
+            self._create_llm_decisions_panel(
+                scroll_offset=offsets.get('llm_decisions', 0),
+                is_focused=(focus == 'llm_decisions'),
+            )
+        )
         layout['trading'].update(self._create_trading_panel())
-        layout['activity_log'].update(self._create_activity_log_panel())
-        layout['orderbooks'].update(self._create_orderbook_panel())
-        layout['news'].update(self._create_news_panel())
+        layout['activity_log'].update(
+            self._create_activity_log_panel(
+                scroll_offset=offsets.get('activity_log', 0),
+                is_focused=(focus == 'activity_log'),
+            )
+        )
+        layout['orderbooks'].update(
+            self._create_orderbook_panel(
+                scroll_offset=offsets.get('orderbooks', 0),
+                is_focused=(focus == 'orderbooks'),
+            )
+        )
+        layout['news'].update(
+            self._create_news_panel(
+                scroll_offset=offsets.get('news', 0),
+                is_focused=(focus == 'news'),
+            )
+        )
 
         # System status bar
         layout['status_bar'].update(self._create_system_status_panel())
 
-        # Footer
+        # Footer with keyboard shortcuts
+        panel_labels = {
+            'llm_decisions': 'LLM',
+            'orderbooks': 'OrderBooks',
+            'news': 'News',
+            'activity_log': 'Activity',
+        }
+        pause_tag = '  [PAUSED]' if self.paused else ''
+        focus_label = panel_labels.get(focus, focus)
         footer_text = Text(
-            'Press Ctrl+C to exit | Last updated: '
-            + datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            f'[Tab] Next Panel  [j/k ↑↓] Scroll  [p] Pause  [q] Quit'
+            f'  │  Focus: {focus_label}{pause_tag}'
+            f'  │  {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
             justify='center',
             style='dim',
         )
