@@ -1,7 +1,9 @@
 """Utility functions for CLI integration with trading engine."""
 
+import asyncio
 import logging
 
+from swm_agent.cli.control import ControlServer
 from swm_agent.cli.monitor import TradingMonitor
 from swm_agent.core.trading_engine import TradingEngine
 
@@ -9,14 +11,21 @@ logger = logging.getLogger(__name__)
 
 
 class MonitoredTradingEngine:
-    """Wrapper for TradingEngine with an optional Textual live monitor.
+    """Wrapper for TradingEngine with optional Textual live monitor.
 
-    Architecture when monitor is enabled:
-    - Main thread runs Textual (via ``app.run_async()``) — required so that
-      Textual's LinuxDriver can register signal handlers (SIGTSTP/SIGCONT).
-    - The trading engine runs *inside* Textual's asyncio event loop as a
-      Textual Worker (``app.run_worker(engine.start())``), so no second thread
-      is needed and there are no signal-handler conflicts.
+    Architecture when monitor is enabled
+    ─────────────────────────────────────
+    Main thread runs Textual (via ``app.run_async()``) so that Textual's
+    LinuxDriver can register signal handlers (SIGTSTP / SIGCONT).
+    The trading engine and the Unix-socket control server both run *inside*
+    Textual's asyncio event loop as Textual Workers — no extra threads, no
+    signal-handler conflicts.
+
+    Architecture when monitor is disabled
+    ──────────────────────────────────────
+    The engine and the control server run directly in the asyncio event loop
+    (``asyncio.run(_main(...))``).  The process can still be controlled via
+    ``swm-agent trade pause/resume/stop/status`` from another terminal.
     """
 
     def __init__(
@@ -31,34 +40,37 @@ class MonitoredTradingEngine:
         self.enabled = enabled
         self.exchange_name = exchange_name
         self.monitor: TradingMonitor | None = None  # used by display_snapshot()
+        self.control_server: ControlServer = ControlServer(engine)
 
     async def start(self) -> None:
-        """Start the engine, optionally with the Textual live monitor.
-
-        When *enabled*, Textual runs in the current event loop (main thread)
-        and the engine is launched as a Textual worker — no daemon threads,
-        no signal-handler errors.
-
-        When *disabled*, the engine starts directly (non-interactive).
-        """
+        """Start the engine (and monitor if enabled), plus the control server."""
         if self.enabled:
             from swm_agent.cli.textual_monitor import TradingMonitorApp
 
             app = TradingMonitorApp(
-                engine=self.engine, exchange_name=self.exchange_name
+                engine=self.engine,
+                exchange_name=self.exchange_name,
+                control_server=self.control_server,
             )
-            # run_async() runs Textual inside the *current* asyncio event loop,
-            # which lives on the main thread — so signal.signal() works fine.
+            # run_async() keeps Textual on the main thread (required for signals).
+            # Engine + control server are started as Textual workers inside the app.
             await app.run_async()
         else:
-            await self.engine.start()
+            # Non-interactive mode: engine + control server run directly.
+            await asyncio.gather(
+                self.control_server.start(),
+                self.engine.start(),
+                return_exceptions=True,
+            )
+            await self.control_server.stop()
 
     async def stop(self) -> None:
-        """Stop the trading engine."""
+        """Stop engine and control server."""
         await self.engine.stop()
+        await self.control_server.stop()
 
     def display_snapshot(self) -> None:
-        """One-shot Rich snapshot (used when monitor is disabled)."""
+        """One-shot Rich snapshot (non-watch mode)."""
         if self.monitor is None:
             self.monitor = TradingMonitor(
                 trader=self.engine.trader,
@@ -77,13 +89,13 @@ def add_monitoring_to_engine(
     """Wrap a TradingEngine with optional Textual live monitoring.
 
     Args:
-        engine: The trading engine to monitor.
-        watch: Enable live Textual watch mode.
-        refresh_rate: Refresh interval hint (seconds).
-        exchange_name: Exchange name displayed in the monitor header.
+        engine: The trading engine to wrap.
+        watch: Enable the interactive Textual monitor.
+        refresh_rate: UI refresh interval hint (seconds).
+        exchange_name: Exchange name shown in the monitor header.
 
     Returns:
-        A MonitoredTradingEngine wrapping the original engine.
+        A :class:`MonitoredTradingEngine` wrapping the original engine.
     """
     return MonitoredTradingEngine(
         engine=engine,

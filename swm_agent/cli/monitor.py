@@ -754,30 +754,57 @@ async def _run_monitor(watch: bool, refresh: float) -> None:
 
 @click.command()
 @click.option(
+    '--socket',
+    '-s',
+    default=None,
+    type=click.Path(),
+    help='Path to engine control socket (default: ~/.swm/engine.sock)',
+)
+@click.option(
     '--watch',
     '-w',
     is_flag=True,
-    help='Enable live monitoring mode with continuous updates',
+    hidden=True,  # kept for backward compatibility, now always live
+    help='[Deprecated] Always runs in live mode when engine is running.',
 )
 @click.option(
     '--refresh',
     '-r',
     default=2.0,
     type=float,
-    help='Refresh rate in seconds for watch mode (default: 2.0)',
+    hidden=True,
+    help='[Deprecated] Refresh rate (socket monitor uses 2s intervals).',
 )
-def monitor(watch: bool, refresh: float) -> None:
-    """Monitor trading activities, positions, and portfolio status.
+def monitor(socket: str | None, watch: bool, refresh: float) -> None:
+    """Attach a live Textual monitor to a running trading engine.
 
-    Display current portfolio value, active positions with P&L,
-    recent orders, market data, and trading statistics.
+    Connects via Unix socket — the engine continues running when you close
+    the monitor.  Use ``swm-agent trade`` to control the engine.
 
     Examples:
-        swm-agent monitor               # Single snapshot
-        swm-agent monitor --watch       # Live updating mode
-        swm-agent monitor -w -r 1.0     # Live mode with 1 second refresh
+        swm-agent monitor                       # attach to default socket
+        swm-agent monitor -s /tmp/eng.sock      # custom socket path
+        swm-agent trade status                  # check engine health
+        swm-agent trade pause                   # pause LLM decisions
     """
+    from pathlib import Path
+
+    from swm_agent.cli.control import SOCKET_PATH
+    from swm_agent.cli.textual_monitor import SocketTradingMonitorApp
+
+    sock = Path(socket) if socket else SOCKET_PATH
+
+    if not sock.exists():
+        click.echo(
+            click.style('✗ ', fg='red')
+            + f'No engine running — socket not found: {sock}\n\n'
+            'Start an engine first:\n'
+            '  python scripts/run_paper_trading.py -e polymarket\n'
+        )
+        raise SystemExit(1)
+
     try:
-        asyncio.run(_run_monitor(watch, refresh))
+        app = SocketTradingMonitorApp(socket_path=sock)
+        app.run()
     except KeyboardInterrupt:
         pass
