@@ -17,7 +17,10 @@ from swm_agent.trader.types import TradeSide
 
 from .strategy import Strategy
 
+# API endpoint: auto-select based on available keys
+# DeepSeek: set DEEPSEEK_API_KEY; OpenAI: set OPENAI_API_KEY
 DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions'
+OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
 
 # --- Opening trade thresholds ---
 DEFAULT_EDGE_THRESHOLD = Decimal('0.10')  # 10% edge to open
@@ -56,6 +59,7 @@ class LLMDecision:
 @dataclass
 class PositionMeta:
     """Tracks metadata for an open position to drive exit decisions."""
+
     ticker_symbol: str
     side: str  # 'yes' or 'no' — which token we bought
     llm_prob: float  # LLM probability estimate at open
@@ -79,7 +83,9 @@ class SimpleStrategy(Strategy):
         self.max_holding = timedelta(seconds=max_holding)
         self.logger = logging.getLogger(__name__)
         self.decisions: deque[LLMDecision] = deque(maxlen=200)
-        self.total_decisions: int = 0  # Running counter (not affected by deque eviction)
+        self.total_decisions: int = (
+            0  # Running counter (not affected by deque eviction)
+        )
         self.total_executed: int = 0  # Running counter (not affected by deque eviction)
         # Per-action running counters (not affected by deque eviction)
         self.total_buy_yes: int = 0
@@ -109,12 +115,14 @@ class SimpleStrategy(Strategy):
 
             if event.ticker is None:
                 # Google News — buffer for later matching
-                self._news_buffer.append((
-                    event.title or '',
-                    event.news or '',
-                    event.source or 'Google News',
-                    time.time(),
-                ))
+                self._news_buffer.append(
+                    (
+                        event.title or '',
+                        event.news or '',
+                        event.source or 'Google News',
+                        time.time(),
+                    )
+                )
                 self.logger.info(f'Buffered Google News: {(event.title or "")[:50]}')
                 return
 
@@ -124,7 +132,9 @@ class SimpleStrategy(Strategy):
             if ticker is not None:
                 existing = trader.position_manager.get_position(ticker)
                 if existing and existing.quantity > 0:
-                    self.logger.debug(f'Already holding position in {ticker.name[:30]}, skip')
+                    self.logger.debug(
+                        f'Already holding position in {ticker.name[:30]}, skip'
+                    )
                     return
                 # Also check NO ticker
                 if isinstance(ticker, PolyMarketTicker) and ticker.no_token_id:
@@ -132,13 +142,17 @@ class SimpleStrategy(Strategy):
                     if no_ticker:
                         no_pos = trader.position_manager.get_position(no_ticker)
                         if no_pos and no_pos.quantity > 0:
-                            self.logger.debug(f'Already holding NO position in {ticker.name[:30]}, skip')
+                            self.logger.debug(
+                                f'Already holding NO position in {ticker.name[:30]}, skip'
+                            )
                             return
 
                 # Skip if another coroutine is already opening a position for this market
                 market_key = getattr(ticker, 'market_id', '') or ticker.symbol
                 if market_key in self._opening_in_progress:
-                    self.logger.debug(f'Opening already in progress for {ticker.name[:30]}, skip')
+                    self.logger.debug(
+                        f'Opening already in progress for {ticker.name[:30]}, skip'
+                    )
                     return
 
             market_price = self._get_market_price(ticker, trader)
@@ -167,7 +181,9 @@ class SimpleStrategy(Strategy):
                     self.total_holds += 1
                     return
 
-                executed, fill_price = await self._execute_trade(analysis, ticker, trader)
+                executed, fill_price = await self._execute_trade(
+                    analysis, ticker, trader
+                )
                 decision.executed = executed
                 if executed:
                     self.total_executed += 1
@@ -219,10 +235,48 @@ class SimpleStrategy(Strategy):
 
         # Simple keyword matching: extract key words from market title
         stop_words = {
-            'will', 'the', 'a', 'an', 'by', 'in', 'of', 'to', 'and', 'or', 'is', 'be',
-            'end', 'before', 'after', 'on', 'at', 'for', 'with', 'from', 'this', 'that',
-            'what', 'which', 'who', 'how', 'when', 'where', 'does', 'do', 'did', 'has',
-            'have', 'had', 'not', 'no', 'yes', 'any', 'all', 'each', 'every', 'if',
+            'will',
+            'the',
+            'a',
+            'an',
+            'by',
+            'in',
+            'of',
+            'to',
+            'and',
+            'or',
+            'is',
+            'be',
+            'end',
+            'before',
+            'after',
+            'on',
+            'at',
+            'for',
+            'with',
+            'from',
+            'this',
+            'that',
+            'what',
+            'which',
+            'who',
+            'how',
+            'when',
+            'where',
+            'does',
+            'do',
+            'did',
+            'has',
+            'have',
+            'had',
+            'not',
+            'no',
+            'yes',
+            'any',
+            'all',
+            'each',
+            'every',
+            'if',
         }
         keywords = set()
         for word in market_title.lower().split():
@@ -279,7 +333,9 @@ class SimpleStrategy(Strategy):
                 if yes_bid is not None:
                     no_price_derived = float(Decimal('1') - yes_bid.price)
                     await self._check_one_position(
-                        no_ticker, trader, price_override=no_price_derived,
+                        no_ticker,
+                        trader,
+                        price_override=no_price_derived,
                     )
 
     async def _check_one_position(
@@ -324,7 +380,10 @@ class SimpleStrategy(Strategy):
         close_reason = self._check_edge(meta, current_price)
         if close_reason:
             await self._close_position(
-                ticker, trader, position.quantity, current_price,
+                ticker,
+                trader,
+                position.quantity,
+                current_price,
                 action=close_reason,
                 reasoning=self._edge_reasoning(meta, current_price, close_reason),
                 llm_prob=llm_prob,
@@ -336,7 +395,10 @@ class SimpleStrategy(Strategy):
             # entry_price is always the actual token price paid (YES or NO)
             pnl = current_price - meta.entry_price
             await self._close_position(
-                ticker, trader, position.quantity, current_price,
+                ticker,
+                trader,
+                position.quantity,
+                current_price,
                 action='CLOSE_TIMEOUT',
                 reasoning=f'Held {self.max_holding.seconds // 60}min, pnl={pnl:+.2%}',
                 llm_prob=llm_prob,
@@ -406,7 +468,11 @@ class SimpleStrategy(Strategy):
             return f'Close: {action}'
         else:
             direction = 'up' if current_price > meta.entry_price else 'down'
-            pnl_pct = (current_price - meta.entry_price) / meta.entry_price if meta.entry_price > 0 else 0
+            pnl_pct = (
+                (current_price - meta.entry_price) / meta.entry_price
+                if meta.entry_price > 0
+                else 0
+            )
             if action == 'CLOSE_EDGE_TP':
                 return (
                     f'Edge consumed: mkt moved {direction} to {current_price:.0%}, '
@@ -420,8 +486,11 @@ class SimpleStrategy(Strategy):
             return f'Close: {action}'
 
     async def _reeval_position(
-        self, ticker: Ticker, trader: Trader,
-        meta: PositionMeta, current_price: float,
+        self,
+        ticker: Ticker,
+        trader: Trader,
+        meta: PositionMeta,
+        current_price: float,
     ) -> None:
         """Re-evaluate a position by calling LLM again."""
         try:
@@ -451,8 +520,16 @@ Respond in JSON only:
     "reasoning": "one sentence explanation"
 }}
 """
+            # Auto-select API: prefer DeepSeek, fallback to OpenAI
+            deepseek_key = os.environ.get('DEEPSEEK_API_KEY', '')
+            openai_key = os.environ.get('OPENAI_API_KEY', '')
+            if deepseek_key:
+                api_key, api_url, model = deepseek_key, DEEPSEEK_URL, 'deepseek-chat'
+            else:
+                api_key, api_url, model = openai_key, OPENAI_URL, 'gpt-4o-mini'
+
             payload = {
-                'model': 'deepseek-chat',
+                'model': model,
                 'messages': [{'role': 'user', 'content': prompt}],
                 'stream': False,
                 'max_tokens': 256,
@@ -460,14 +537,13 @@ Respond in JSON only:
                 'response_format': {'type': 'json_object'},
             }
 
-            api_key = os.environ.get('DEEPSEEK_API_KEY', '')
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json',
             }
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(DEEPSEEK_URL, json=payload, headers=headers)
+                response = await client.post(api_url, json=payload, headers=headers)
                 response.raise_for_status()
                 result = response.json()
 
@@ -494,7 +570,10 @@ Respond in JSON only:
                     position = trader.position_manager.get_position(ticker)
                     if position and position.quantity > 0:
                         await self._close_position(
-                            ticker, trader, position.quantity, current_price,
+                            ticker,
+                            trader,
+                            position.quantity,
+                            current_price,
                             action='CLOSE_REEVAL',
                             reasoning=(
                                 f'LLM revised: {old_prob:.0%}→{new_prob:.0%}, '
@@ -511,7 +590,10 @@ Respond in JSON only:
                     position = trader.position_manager.get_position(ticker)
                     if position and position.quantity > 0:
                         await self._close_position(
-                            ticker, trader, position.quantity, current_price,
+                            ticker,
+                            trader,
+                            position.quantity,
+                            current_price,
                             action='CLOSE_REEVAL',
                             reasoning=(
                                 f'LLM revised: {old_prob:.0%}→{new_prob:.0%}, '
@@ -524,24 +606,39 @@ Respond in JSON only:
             self.logger.error(f'Re-eval error for {meta.title[:25]}: {e}')
 
     async def _close_position(
-        self, ticker: Ticker, trader: Trader,
-        quantity: Decimal, current_price: float,
-        action: str, reasoning: str, llm_prob: float,
+        self,
+        ticker: Ticker,
+        trader: Trader,
+        quantity: Decimal,
+        current_price: float,
+        action: str,
+        reasoning: str,
+        llm_prob: float,
     ) -> None:
         """Close a position and record the decision."""
         self._closing_in_progress.add(ticker.symbol)
         try:
             await self._do_close(
-                ticker, trader, quantity, current_price,
-                action, reasoning, llm_prob,
+                ticker,
+                trader,
+                quantity,
+                current_price,
+                action,
+                reasoning,
+                llm_prob,
             )
         finally:
             self._closing_in_progress.discard(ticker.symbol)
 
     async def _do_close(
-        self, ticker: Ticker, trader: Trader,
-        quantity: Decimal, current_price: float,
-        action: str, reasoning: str, llm_prob: float,
+        self,
+        ticker: Ticker,
+        trader: Trader,
+        quantity: Decimal,
+        current_price: float,
+        action: str,
+        reasoning: str,
+        llm_prob: float,
     ) -> None:
         """Internal close logic."""
         result = await trader.place_order(
@@ -569,16 +666,18 @@ Respond in JSON only:
                 self._close_failures.pop(ticker.symbol, None)
 
         self.total_closes += 1
-        self.decisions.append(LLMDecision(
-            timestamp=datetime.now().strftime('%H:%M:%S'),
-            ticker_name=f'{action[:12]}: {ticker.name[:25]}',
-            action=action,
-            confidence=0.0,
-            executed=executed,
-            reasoning=reasoning,
-            llm_prob=llm_prob,
-            market_price=current_price,
-        ))
+        self.decisions.append(
+            LLMDecision(
+                timestamp=datetime.now().strftime('%H:%M:%S'),
+                ticker_name=f'{action[:12]}: {ticker.name[:25]}',
+                action=action,
+                confidence=0.0,
+                executed=executed,
+                reasoning=reasoning,
+                llm_prob=llm_prob,
+                market_price=current_price,
+            )
+        )
         self.total_decisions += 1
 
     # ------------------------------------------------------------------
@@ -608,7 +707,9 @@ Respond in JSON only:
             relevant_news = self._find_relevant_news(event.title or '')
             news_section = ''
             if relevant_news:
-                news_section = '\n\nRecent relevant news:\n' + '\n'.join(f'- {n}' for n in relevant_news)
+                news_section = '\n\nRecent relevant news:\n' + '\n'.join(
+                    f'- {n}' for n in relevant_news
+                )
 
             details_text = (event.news or '')[:500]
             prompt = f"""You are a prediction market analyst. Estimate the TRUE probability that this event will happen.
@@ -629,8 +730,16 @@ Respond in JSON only:
 }}
 """
 
+            # Auto-select API: prefer DeepSeek, fallback to OpenAI
+            deepseek_key = os.environ.get('DEEPSEEK_API_KEY', '')
+            openai_key = os.environ.get('OPENAI_API_KEY', '')
+            if deepseek_key:
+                api_key, api_url, model = deepseek_key, DEEPSEEK_URL, 'deepseek-chat'
+            else:
+                api_key, api_url, model = openai_key, OPENAI_URL, 'gpt-4o-mini'
+
             payload = {
-                'model': 'deepseek-chat',
+                'model': model,
                 'messages': [{'role': 'user', 'content': prompt}],
                 'stream': False,
                 'max_tokens': 256,
@@ -638,14 +747,13 @@ Respond in JSON only:
                 'response_format': {'type': 'json_object'},
             }
 
-            api_key = os.environ.get('DEEPSEEK_API_KEY', '')
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json',
             }
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(DEEPSEEK_URL, json=payload, headers=headers)
+                response = await client.post(api_url, json=payload, headers=headers)
                 response.raise_for_status()
                 result = response.json()
 
@@ -754,9 +862,7 @@ Respond in JSON only:
                     self.logger.info(f'No ask for {ticker.name[:30]}, skip')
                     return False, 0.0
 
-                self.logger.info(
-                    f'BUY YES {ticker.name[:30]} @ ${level.price}'
-                )
+                self.logger.info(f'BUY YES {ticker.name[:30]} @ ${level.price}')
                 result = await trader.place_order(
                     side=TradeSide.BUY,
                     ticker=ticker,
@@ -765,7 +871,11 @@ Respond in JSON only:
                 )
                 self.logger.info(f'BUY YES result: {result}')
                 if result.order is not None:
-                    fill = float(result.order.average_price) if result.order.average_price > 0 else float(level.price)
+                    fill = (
+                        float(result.order.average_price)
+                        if result.order.average_price > 0
+                        else float(level.price)
+                    )
                     return True, fill
                 return False, 0.0
 
@@ -812,15 +922,17 @@ Respond in JSON only:
                         quantity=self.trade_size,
                     )
                     if result.order is not None:
-                        fill = float(result.order.average_price) if result.order.average_price > 0 else float(no_price)
+                        fill = (
+                            float(result.order.average_price)
+                            if result.order.average_price > 0
+                            else float(no_price)
+                        )
                         return True, fill
                     return False, 0.0
                 self.logger.info('No price for NO token, skip')
                 return False, 0.0
 
-            self.logger.info(
-                f'BUY NO {ticker.name[:30]} @ ${level.price}'
-            )
+            self.logger.info(f'BUY NO {ticker.name[:30]} @ ${level.price}')
             result = await trader.place_order(
                 side=TradeSide.BUY,
                 ticker=no_ticker,
@@ -829,7 +941,11 @@ Respond in JSON only:
             )
             self.logger.info(f'BUY NO result: {result}')
             if result.order is not None:
-                fill = float(result.order.average_price) if result.order.average_price > 0 else float(level.price)
+                fill = (
+                    float(result.order.average_price)
+                    if result.order.average_price > 0
+                    else float(level.price)
+                )
                 return True, fill
             return False, 0.0
 
@@ -839,9 +955,7 @@ Respond in JSON only:
             level = trader.market_data.get_best_bid(ticker)
             if level is None:
                 return False, 0.0
-            self.logger.info(
-                f'SELL YES {ticker.name[:30]} @ ${level.price} (bearish)'
-            )
+            self.logger.info(f'SELL YES {ticker.name[:30]} @ ${level.price} (bearish)')
             result = await trader.place_order(
                 side=TradeSide.SELL,
                 ticker=ticker,
@@ -849,9 +963,15 @@ Respond in JSON only:
                 quantity=self.trade_size,
             )
             if result.order is not None:
-                fill = float(result.order.average_price) if result.order.average_price > 0 else float(level.price)
+                fill = (
+                    float(result.order.average_price)
+                    if result.order.average_price > 0
+                    else float(level.price)
+                )
                 return True, fill
             return False, 0.0
 
-        self.logger.info(f'BUY_NO skipped — no NO token and no YES position for {ticker.name[:30]}')
+        self.logger.info(
+            f'BUY_NO skipped — no NO token and no YES position for {ticker.name[:30]}'
+        )
         return False, 0.0
