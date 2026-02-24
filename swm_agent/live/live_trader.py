@@ -1,7 +1,9 @@
 import asyncio
+import logging
 from decimal import Decimal
 
 from swm_agent.core.trading_engine import TradingEngine
+from swm_agent.data.live.kalshi_data_source import LiveKalshiDataSource
 from swm_agent.data.live.live_data_source import (
     LiveNewsDataSource,
     LivePolyMarketDataSource,
@@ -12,13 +14,19 @@ from swm_agent.position.position_manager import Position, PositionManager
 from swm_agent.risk.risk_manager import NoRiskManager, RiskManager, StandardRiskManager
 from swm_agent.strategy.strategy import Strategy
 from swm_agent.ticker.ticker import CashTicker
+from swm_agent.trader.kalshi_trader import KalshiTrader
 from swm_agent.trader.paper_trader import PaperTrader
 from swm_agent.trader.polymarket_trader import PolymarketTrader
 from swm_agent.trader.trader import Trader
 
+logger = logging.getLogger(__name__)
+
 
 async def run_live_trading(
-    data_source: LivePolyMarketDataSource | LiveNewsDataSource | LiveRSSNewsDataSource,
+    data_source: LivePolyMarketDataSource
+    | LiveNewsDataSource
+    | LiveRSSNewsDataSource
+    | LiveKalshiDataSource,
     strategy: Strategy,
     trader: Trader,
     duration: float | None = None,
@@ -173,6 +181,122 @@ async def run_live_polymarket_trading(
     print(f'Cash positions: {position_manager.get_cash_positions()}')
     print(f'Non-cash positions: {position_manager.get_non_cash_positions()}')
     print(f'Total realized PnL: {position_manager.get_total_realized_pnl()}')
+
+
+async def run_live_kalshi_paper_trading(
+    data_source: LiveKalshiDataSource,
+    strategy: Strategy,
+    initial_capital: Decimal,
+    risk_manager: RiskManager | None = None,
+    duration: float | None = None,
+) -> None:
+    """
+    Run live paper trading on Kalshi markets (simulated).
+
+    Args:
+        data_source: The Kalshi live data source
+        strategy: The trading strategy to execute
+        initial_capital: Starting capital in USD
+        risk_manager: Optional risk manager (defaults to NoRiskManager)
+        duration: Optional duration in seconds to run
+    """
+    market_data = MarketDataManager()
+    position_manager = PositionManager()
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.KALSHI_USD,
+            quantity=initial_capital,
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+
+    if risk_manager is None:
+        risk_manager = NoRiskManager()
+
+    trader = PaperTrader(
+        market_data=market_data,
+        risk_manager=risk_manager,
+        position_manager=position_manager,
+        min_fill_rate=Decimal('0.5'),
+        max_fill_rate=Decimal('1.0'),
+        commission_rate=Decimal('0.0'),
+    )
+
+    await run_live_trading(data_source, strategy, trader, duration)
+
+    print('\n--- Final Portfolio Status ---')
+    print(f'Cash positions: {position_manager.get_cash_positions()}')
+    print(f'Non-cash positions: {position_manager.get_non_cash_positions()}')
+    print(f'Total realized PnL: {position_manager.get_total_realized_pnl()}')
+
+
+async def run_live_kalshi_trading(
+    data_source: LiveKalshiDataSource,
+    strategy: Strategy,
+    api_key_id: str | None = None,
+    private_key_path: str | None = None,
+    risk_manager: RiskManager | None = None,
+    duration: float | None = None,
+    max_position_size: Decimal = Decimal('1000'),
+    max_total_exposure: Decimal = Decimal('10000'),
+) -> None:
+    """
+    Run live trading on Kalshi with real orders.
+
+    Args:
+        data_source: The Kalshi live data source
+        strategy: The trading strategy to execute
+        api_key_id: Kalshi API key ID (or set KALSHI_API_KEY_ID env)
+        private_key_path: Path to RSA private key PEM file (or set KALSHI_PRIVATE_KEY_PATH env)
+        risk_manager: Optional risk manager (defaults to StandardRiskManager)
+        duration: Optional duration in seconds to run
+        max_position_size: Maximum position size per trade
+        max_total_exposure: Maximum total portfolio exposure
+    """
+    market_data = MarketDataManager()
+    position_manager = PositionManager()
+
+    if risk_manager is None:
+        risk_manager = StandardRiskManager(
+            position_manager=position_manager,
+            market_data=market_data,
+            max_position_size=max_position_size,
+            max_total_exposure=max_total_exposure,
+            max_single_trade_size=max_position_size / Decimal('2'),
+            max_drawdown_pct=Decimal('0.2'),
+        )
+
+    trader = KalshiTrader(
+        market_data=market_data,
+        risk_manager=risk_manager,
+        position_manager=position_manager,
+        api_key_id=api_key_id,
+        private_key_path=private_key_path,
+    )
+
+    # Fetch initial balance from Kalshi (via the trader's portfolio API)
+    balance_response = await asyncio.to_thread(lambda: trader._portfolio_api.get_balance())
+    # Balance is in cents
+    initial_balance = Decimal(str(balance_response.balance)) / Decimal('100')
+
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.KALSHI_USD,
+            quantity=initial_balance,
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+
+    logger.info('Starting live Kalshi trading with balance: $%s', initial_balance)
+
+    await run_live_trading(data_source, strategy, trader, duration)
+
+    logger.info('--- Final Portfolio Status ---')
+    logger.info('Cash positions: %s', position_manager.get_cash_positions())
+    logger.info('Non-cash positions: %s', position_manager.get_non_cash_positions())
+    logger.info('Total realized PnL: %s', position_manager.get_total_realized_pnl())
 
 
 if __name__ == '__main__':

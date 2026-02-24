@@ -44,6 +44,7 @@ class CashTicker(Ticker):
     name: str
 
     POLYMARKET_USDC: ClassVar[CashTicker]
+    KALSHI_USD: ClassVar[CashTicker]
 
     @property
     def collateral(self) -> Ticker:
@@ -54,3 +55,19 @@ class CashTicker(Ticker):
 CashTicker.POLYMARKET_USDC = CashTicker(
     symbol='PolyMarket_USDC', name='PolyMarket USDC'
 )
+
+
+@dataclass(eq=True, frozen=True)
+class KalshiTicker(Ticker):
+    symbol: str
+    name: str = ''
+    market_ticker: str = ''
+    event_ticker: str = ''
+    series_ticker: str = ''
+
+    @property
+    def collateral(self) -> Ticker:
+        return CashTicker.KALSHI_USD
+
+
+CashTicker.KALSHI_USD = CashTicker(symbol='Kalshi_USD', name='Kalshi USD')

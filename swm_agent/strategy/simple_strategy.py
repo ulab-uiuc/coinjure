@@ -40,7 +40,7 @@ class SimpleStrategy(Strategy):
         elif isinstance(event, NewsEvent):
             self.logger.info(f'NewsEvent: {event.title}')
 
-            ticker = Ticker(event.ticker)
+            ticker = event.ticker
 
             # Call LLM to analyze the news
             analysis = await self._analyze_news_with_llm(event)

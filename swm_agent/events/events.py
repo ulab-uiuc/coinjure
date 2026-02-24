@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
 
-from swm_agent.ticker.ticker import PolyMarketTicker
+from swm_agent.ticker.ticker import Ticker
 
 
 class Event(ABC):
@@ -20,14 +20,14 @@ class Event(ABC):
 
 
 class OrderBookEvent(Event):
-    ticker: PolyMarketTicker
+    ticker: Ticker
     price: Decimal
     size: Decimal
     size_delta: Decimal
 
     def __init__(
         self,
-        ticker: PolyMarketTicker,
+        ticker: Ticker,
         price: Decimal,
         size: Decimal,
         size_delta: Decimal,
@@ -58,7 +58,7 @@ class NewsEvent(Event):
     image_url: str
     uuid: str
     event_id: str
-    ticker: PolyMarketTicker
+    ticker: Ticker
 
     def __init__(
         self,
@@ -72,7 +72,7 @@ class NewsEvent(Event):
         image_url: str = '',
         uuid: str = '',
         event_id: str = '',
-        ticker: PolyMarketTicker = None,
+        ticker: Ticker = None,
     ):
         self.news = news
         self.title = title
@@ -101,7 +101,7 @@ class NewsEvent(Event):
 class PriceChangeEvent(Event):
     def __init__(
         self,
-        ticker: PolyMarketTicker,
+        ticker: Ticker,
         price: Decimal,
         timestamp: datetime = None,
     ):
