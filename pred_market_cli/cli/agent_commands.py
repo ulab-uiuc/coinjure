@@ -6,6 +6,7 @@ import asyncio
 import importlib
 import importlib.util
 import json
+import logging
 import os
 import uuid
 from decimal import Decimal
@@ -13,7 +14,10 @@ from pathlib import Path
 
 import click
 
+from pred_market_cli.alerts.alerter import CompositeAlerter, LogAlerter
+from pred_market_cli.alerts.telegram_alerter import TelegramAlerter
 from pred_market_cli.backtest.backtester import run_backtest
+from pred_market_cli.config.config import Config
 from pred_market_cli.data.live.kalshi_data_source import LiveKalshiDataSource
 from pred_market_cli.data.live.live_data_source import (
     LivePolyMarketDataSource,
@@ -25,6 +29,7 @@ from pred_market_cli.live.live_trader import (
     run_live_paper_trading,
     run_live_polymarket_trading,
 )
+from pred_market_cli.storage.state_store import StateStore
 from pred_market_cli.strategy.strategy import Strategy
 from pred_market_cli.ticker.ticker import PolyMarketTicker
 
@@ -333,6 +338,67 @@ def live() -> None:
     default=None,
     help='Kalshi private key path (or KALSHI_PRIVATE_KEY_PATH)',
 )
+@click.option(
+    '--config',
+    'config_path',
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help='Config JSON file (overrides defaults for all settings)',
+)
+@click.option(
+    '--state-dir',
+    default=None,
+    type=click.Path(),
+    help='State persistence directory (default: ./trading_data)',
+)
+@click.option(
+    '--telegram-token',
+    default=None,
+    help='Telegram Bot Token (or TELEGRAM_BOT_TOKEN env var)',
+)
+@click.option(
+    '--chat-id',
+    default=None,
+    help='Telegram Chat ID (or TELEGRAM_CHAT_ID env var)',
+)
+@click.option(
+    '--max-position-size',
+    default=None,
+    type=str,
+    help='Max position size per trade (default: 1000)',
+)
+@click.option(
+    '--max-exposure',
+    default=None,
+    type=str,
+    help='Max total portfolio exposure (default: 10000)',
+)
+@click.option(
+    '--max-drawdown',
+    default=None,
+    type=str,
+    help='Max drawdown as decimal, e.g. 0.20 for 20% (default: 0.20)',
+)
+@click.option(
+    '--daily-loss-limit',
+    default=None,
+    type=str,
+    help='Daily loss limit in USD (optional)',
+)
+@click.option(
+    '--drawdown-alert-pct',
+    default=None,
+    type=str,
+    help='Drawdown alert threshold as decimal, e.g. 0.10 for 10% (optional)',
+)
+@click.option(
+    '--log-level',
+    default=None,
+    type=click.Choice(
+        ['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False
+    ),
+    help='Logging level (default: INFO)',
+)
 def live_run(
     exchange: str,
     duration: float | None,
@@ -343,8 +409,60 @@ def live_run(
     funder: str | None,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
+    config_path: str | None,
+    state_dir: str | None,
+    telegram_token: str | None,
+    chat_id: str | None,
+    max_position_size: str | None,
+    max_exposure: str | None,
+    max_drawdown: str | None,
+    daily_loss_limit: str | None,
+    drawdown_alert_pct: str | None,
+    log_level: str | None,
 ) -> None:
     """Run live mode with real order placement."""
+
+    # 1. Load config (file or defaults)
+    config = Config.from_file(config_path) if config_path else Config.defaults()
+
+    # 2. CLI flags override config values
+    resolved_state_dir = state_dir or config.storage.data_dir
+    resolved_max_position = Decimal(max_position_size) if max_position_size else config.risk.max_position_size
+    resolved_max_exposure = Decimal(max_exposure) if max_exposure else config.risk.max_total_exposure
+    resolved_max_drawdown = Decimal(max_drawdown) if max_drawdown else config.risk.max_drawdown_pct
+    resolved_daily_loss = Decimal(daily_loss_limit) if daily_loss_limit else config.risk.daily_loss_limit
+    resolved_drawdown_alert = Decimal(drawdown_alert_pct) if drawdown_alert_pct else (
+        Decimal(str(config.alerts.thresholds.drawdown_pct_alert))
+        if config.alerts.thresholds.drawdown_pct_alert is not None
+        else None
+    )
+    resolved_log_level = log_level or 'INFO'
+
+    # 3. Configure logging
+    logging.basicConfig(
+        level=getattr(logging, resolved_log_level.upper(), logging.INFO),
+        format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    )
+
+    # 4. Initialize StateStore
+    state_store = StateStore(resolved_state_dir)
+
+    # 5. Initialize Alerter
+    alerters = [LogAlerter(state_store.data_dir)]
+    tg_token = (
+        telegram_token
+        or os.environ.get('TELEGRAM_BOT_TOKEN')
+        or config.alerts.telegram.bot_token
+    )
+    tg_chat = (
+        chat_id
+        or os.environ.get('TELEGRAM_CHAT_ID')
+        or config.alerts.telegram.chat_id
+    )
+    if tg_token and tg_chat:
+        alerters.append(TelegramAlerter(tg_token, tg_chat))
+    alerter = CompositeAlerter(alerters)
+
     strategy_obj = _load_strategy(strategy_ref)
     _emit(
         {
@@ -376,7 +494,12 @@ def live_run(
                 signature_type=signature_type,
                 funder=funder,
                 duration=duration,
+                max_position_size=resolved_max_position,
+                max_total_exposure=resolved_max_exposure,
+                state_store=state_store,
+                alerter=alerter,
                 continuous=True,
+                drawdown_alert_pct=resolved_drawdown_alert,
             )
         )
     else:
@@ -394,8 +517,42 @@ def live_run(
                 api_key_id=kalshi_api_key_id,
                 private_key_path=kalshi_private_key_path,
                 duration=duration,
+                max_position_size=resolved_max_position,
+                max_total_exposure=resolved_max_exposure,
+                state_store=state_store,
+                alerter=alerter,
                 continuous=True,
+                drawdown_alert_pct=resolved_drawdown_alert,
             )
         )
 
     _emit({'mode': 'live', 'message': 'Live session ended'}, as_json=as_json)
+
+
+# ---------------------------------------------------------------------------
+# config command group
+# ---------------------------------------------------------------------------
+
+
+@click.group('config')
+def config_cmd() -> None:
+    """Configuration commands."""
+
+
+@config_cmd.command('init')
+@click.option(
+    '--output',
+    default='config.json',
+    show_default=True,
+    type=click.Path(),
+    help='Output path for the config file',
+)
+def config_init(output: str) -> None:
+    """Generate a default config.json template."""
+    output_path = Path(output)
+    if output_path.exists():
+        raise click.ClickException(
+            f'File already exists: {output_path}. Remove it first or choose a different path.'
+        )
+    Config.defaults().to_file(output_path)
+    click.echo(f'Created {output_path}')

@@ -2,7 +2,7 @@
 
 import click
 
-from pred_market_cli.cli.agent_commands import backtest, live, paper, strategy
+from pred_market_cli.cli.agent_commands import backtest, config_cmd, live, paper, strategy
 from pred_market_cli.cli.monitor import monitor
 from pred_market_cli.cli.token import token
 from pred_market_cli.cli.trade_commands import trade
@@ -54,6 +54,7 @@ cli.add_command(strategy)
 cli.add_command(backtest)
 cli.add_command(paper)
 cli.add_command(live)
+cli.add_command(config_cmd)
 
 
 if __name__ == '__main__':
