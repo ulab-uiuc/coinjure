@@ -2,7 +2,7 @@
 
 Key bindings (native, zero-latency):
   q / Ctrl+C  — quit
-  p           — pause / resume data refresh
+  s           — emergency stop (double-press confirm)
   Tab         — focus next panel
   Shift+Tab   — focus previous panel
   Arrow keys  — scroll / navigate within focused panel
@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
@@ -619,6 +620,7 @@ class TradingMonitorApp(App[None]):
     # Monitor is read-only for keyboard — buttons and swm-agent trade CLI control engine.
     BINDINGS = [
         Binding('q', 'quit', 'Close Monitor', show=True),
+        Binding('s', 'estop', 'E-Stop', show=True),
         Binding('tab', 'focus_next', 'Next Panel', show=True),
         Binding('shift+tab', 'focus_previous', 'Prev Panel', show=True),
         Binding('j', 'scroll_down_panel', 'Scroll ↓', show=False),
@@ -627,9 +629,9 @@ class TradingMonitorApp(App[None]):
 
     def __init__(
         self,
-        engine: 'TradingEngine',
+        engine: TradingEngine,
         exchange_name: str = '',
-        control_server: 'ControlServer | None' = None,
+        control_server: ControlServer | None = None,
     ) -> None:
         super().__init__()
         self.engine = engine
@@ -682,10 +684,15 @@ class TradingMonitorApp(App[None]):
         if self.control_server is None:
             return
         paused = self.control_server.paused
+        activity_log = list(getattr(self.engine, '_activity_log', []))
+        last_activity = activity_log[-1][1] if activity_log else 'No activity yet'
         self.sub_title = (
             '⏸  PAUSED — click ▶ Resume or: swm-agent trade resume'
             if paused
             else '▶  Running — click ⏸ Pause or: swm-agent trade pause'
+        )
+        self.sub_title = (
+            f'{self.sub_title}  |  Last: {last_activity[:60]}  |  E-Stop: s'
         )
         try:
             self.query_one('#ctrl-bar', ControlBar).update_state(paused, connected=True)
@@ -759,6 +766,21 @@ class TradingMonitorApp(App[None]):
         """q — exit the app (worker and engine stop automatically)."""
         self.exit()
 
+    def action_estop(self) -> None:
+        """s — keyboard emergency stop (same two-step guard as button)."""
+        if not self._stop_armed:
+            self._stop_armed = True
+            self.notify(
+                '⚠  Press s again within 3 s to confirm emergency stop',
+                severity='warning',
+                timeout=3,
+            )
+            self.set_timer(3.0, self._disarm_stop)
+            return
+        self._stop_armed = False
+        self.notify('⏹  Stopping engine…', severity='error', timeout=5)
+        self.exit()
+
 
 # ── Standalone socket monitor (independent process) ────────────────────
 
@@ -776,15 +798,14 @@ class SocketTradingMonitorApp(App[None]):
 
     BINDINGS = [
         Binding('q', 'quit', 'Close Monitor', show=True),
+        Binding('s', 'e_stop', 'E-Stop', show=True),
         Binding('tab', 'focus_next', 'Next Panel', show=True),
         Binding('shift+tab', 'focus_previous', 'Prev Panel', show=True),
         Binding('j', 'scroll_down_panel', 'Scroll ↓', show=False),
         Binding('k', 'scroll_up_panel', 'Scroll ↑', show=False),
     ]
 
-    def __init__(self, socket_path: 'pathlib.Path | None' = None) -> None:
-        import pathlib
-
+    def __init__(self, socket_path: Path | None = None) -> None:
         from swm_agent.cli.control import SOCKET_PATH
 
         super().__init__()
@@ -837,6 +858,9 @@ class SocketTradingMonitorApp(App[None]):
             if self._paused
             else '▶  Engine running — click ⏸ Pause or: swm-agent trade pause'
         )
+        last_activity = state.get('activity_log') or []
+        last_msg = last_activity[-1][1] if last_activity else 'No activity yet'
+        self.sub_title = f'{self.sub_title}  |  Last: {last_msg[:60]}  |  E-Stop: s'
 
         try:
             ctrl = self.query_one('#ctrl-bar', ControlBar)
@@ -910,3 +934,24 @@ class SocketTradingMonitorApp(App[None]):
         focused = self.focused
         if focused is not None:
             focused.scroll_up()
+
+    async def action_e_stop(self) -> None:
+        """s — keyboard emergency stop over socket (same two-step guard)."""
+        from swm_agent.cli.control import send_command
+
+        if not self._stop_armed:
+            self._stop_armed = True
+            self.notify(
+                '⚠  Press s again within 3 s to confirm emergency stop',
+                severity='warning',
+                timeout=3,
+            )
+            self.set_timer(3.0, self._disarm_stop)
+            return
+
+        self._stop_armed = False
+        try:
+            await send_command('stop', socket_path=self.socket_path)
+            self.notify('⏹  Stop signal sent', severity='error', timeout=4)
+        except Exception as exc:
+            self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)

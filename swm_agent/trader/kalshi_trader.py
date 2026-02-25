@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import uuid
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.position.position_manager import PositionManager
@@ -19,6 +21,9 @@ from swm_agent.trader.types import (
     TradeSide,
 )
 
+if TYPE_CHECKING:
+    from swm_agent.alerts.alerter import Alerter
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,8 +36,9 @@ class KalshiTrader(Trader):
         api_key_id: str | None = None,
         private_key_path: str | None = None,
         commission_rate: Decimal = Decimal('0.0'),
+        alerter: Alerter | None = None,
     ):
-        super().__init__(market_data, risk_manager, position_manager)
+        super().__init__(market_data, risk_manager, position_manager, alerter=alerter)
         self.commission_rate = commission_rate
 
         from kalshi_python import Configuration
@@ -81,9 +87,7 @@ class KalshiTrader(Trader):
         )
 
         response = await asyncio.to_thread(
-            lambda: self._portfolio_api.create_order(
-                create_order_request=request
-            )
+            lambda: self._portfolio_api.create_order(create_order_request=request)
         )
 
         if hasattr(response, 'to_dict'):
@@ -177,17 +181,26 @@ class KalshiTrader(Trader):
             commission=commission,
         )
 
+    async def _alert_rejected(self, reason: OrderFailureReason, ticker: Ticker) -> None:
+        if self.alerter:
+            try:
+                await self.alerter.on_order_rejected(reason, ticker)
+            except Exception:
+                pass
+
     async def place_order(
         self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
     ) -> PlaceOrderResult:
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
+            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
             )
 
         if not isinstance(ticker, KalshiTicker) or not ticker.market_ticker:
+            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
@@ -197,6 +210,7 @@ class KalshiTrader(Trader):
         if side == TradeSide.SELL:
             position = self.position_manager.get_position(ticker)
             if position is None or position.quantity < quantity:
+                await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
                 return PlaceOrderResult(
                     order=None,
                     failure_reason=OrderFailureReason.INVALID_ORDER,
@@ -215,6 +229,7 @@ class KalshiTrader(Trader):
                     cash_required,
                     cash_position.quantity if cash_position else 0,
                 )
+                await self._alert_rejected(OrderFailureReason.INSUFFICIENT_CASH, ticker)
                 return PlaceOrderResult(
                     order=None,
                     failure_reason=OrderFailureReason.INSUFFICIENT_CASH,
@@ -222,6 +237,7 @@ class KalshiTrader(Trader):
 
         # Risk check
         if not await self.risk_manager.check_trade(ticker, side, quantity, limit_price):
+            await self._alert_rejected(OrderFailureReason.RISK_CHECK_FAILED, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,
