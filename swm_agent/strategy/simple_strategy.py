@@ -107,6 +107,8 @@ class SimpleStrategy(Strategy):
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         """Process incoming events and make trading decisions."""
+        if self.is_paused():
+            return
         if isinstance(event, OrderBookEvent):
             # On every price update: check if positions need closing
             await self._check_position_exits(event.ticker, trader)

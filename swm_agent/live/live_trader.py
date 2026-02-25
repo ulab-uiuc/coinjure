@@ -293,6 +293,10 @@ async def run_live_kalshi_paper_trading(
     initial_capital: Decimal,
     risk_manager: RiskManager | None = None,
     duration: float | None = None,
+    state_store: StateStore | None = None,
+    alerter: Alerter | None = None,
+    continuous: bool = True,
+    drawdown_alert_pct: Decimal | None = None,
 ) -> None:
     """
     Run live paper trading on Kalshi markets (simulated).
@@ -303,17 +307,28 @@ async def run_live_kalshi_paper_trading(
         initial_capital: Starting capital in USD
         risk_manager: Optional risk manager (defaults to NoRiskManager)
         duration: Optional duration in seconds to run
+        state_store: Optional state store for persistence and state recovery.
+        alerter: Optional alerter for notifications.
+        continuous: Keep engine running when the data source is temporarily idle.
+        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
     """
     market_data = MarketDataManager()
     position_manager = PositionManager()
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.KALSHI_USD,
-            quantity=initial_capital,
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
+
+    saved_positions = state_store.load_positions() if state_store else []
+    if saved_positions:
+        logger.info('Restoring %d positions from state store', len(saved_positions))
+        for pos in saved_positions:
+            position_manager.update_position(pos)
+    else:
+        position_manager.update_position(
+            Position(
+                ticker=CashTicker.KALSHI_USD,
+                quantity=initial_capital,
+                average_cost=Decimal('0'),
+                realized_pnl=Decimal('0'),
+            )
         )
-    )
 
     if risk_manager is None:
         risk_manager = NoRiskManager()
@@ -325,9 +340,19 @@ async def run_live_kalshi_paper_trading(
         min_fill_rate=Decimal('0.5'),
         max_fill_rate=Decimal('1.0'),
         commission_rate=Decimal('0.0'),
+        alerter=alerter,
     )
 
-    await run_live_trading(data_source, strategy, trader, duration)
+    await run_live_trading(
+        data_source,
+        strategy,
+        trader,
+        duration,
+        state_store,
+        alerter,
+        continuous,
+        drawdown_alert_pct,
+    )
 
     print('\n--- Final Portfolio Status ---')
     print(f'Cash positions: {position_manager.get_cash_positions()}')
@@ -344,6 +369,10 @@ async def run_live_kalshi_trading(
     duration: float | None = None,
     max_position_size: Decimal = Decimal('1000'),
     max_total_exposure: Decimal = Decimal('10000'),
+    state_store: StateStore | None = None,
+    alerter: Alerter | None = None,
+    continuous: bool = True,
+    drawdown_alert_pct: Decimal | None = None,
 ) -> None:
     """
     Run live trading on Kalshi with real orders.
@@ -357,6 +386,10 @@ async def run_live_kalshi_trading(
         duration: Optional duration in seconds to run
         max_position_size: Maximum position size per trade
         max_total_exposure: Maximum total portfolio exposure
+        state_store: Optional state store for persistence and state recovery.
+        alerter: Optional alerter for notifications.
+        continuous: Keep engine running when the data source is temporarily idle.
+        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
     """
     market_data = MarketDataManager()
     position_manager = PositionManager()
@@ -377,6 +410,7 @@ async def run_live_kalshi_trading(
         position_manager=position_manager,
         api_key_id=api_key_id,
         private_key_path=private_key_path,
+        alerter=alerter,
     )
 
     # Fetch initial balance from Kalshi (via the trader's portfolio API)
@@ -386,18 +420,62 @@ async def run_live_kalshi_trading(
     # Balance is in cents
     initial_balance = Decimal(str(balance_response.balance)) / Decimal('100')
 
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.KALSHI_USD,
-            quantity=initial_balance,
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
+    saved_positions = state_store.load_positions() if state_store else []
+    if saved_positions:
+        logger.info('Restoring %d positions from state store', len(saved_positions))
+        for pos in saved_positions:
+            position_manager.update_position(pos)
+        saved_cash = position_manager.get_position(CashTicker.KALSHI_USD)
+        if saved_cash is not None:
+            diff_pct = abs(initial_balance - saved_cash.quantity) / max(
+                initial_balance, Decimal('1')
+            )
+            if diff_pct > Decimal('0.01'):
+                logger.warning(
+                    'Saved cash %.2f differs from live balance %.2f by %.1f%% — using live value',
+                    saved_cash.quantity,
+                    initial_balance,
+                    float(diff_pct) * 100,
+                )
+                position_manager.update_position(
+                    Position(
+                        ticker=CashTicker.KALSHI_USD,
+                        quantity=initial_balance,
+                        average_cost=Decimal('0'),
+                        realized_pnl=saved_cash.realized_pnl,
+                    )
+                )
+        else:
+            position_manager.update_position(
+                Position(
+                    ticker=CashTicker.KALSHI_USD,
+                    quantity=initial_balance,
+                    average_cost=Decimal('0'),
+                    realized_pnl=Decimal('0'),
+                )
+            )
+    else:
+        position_manager.update_position(
+            Position(
+                ticker=CashTicker.KALSHI_USD,
+                quantity=initial_balance,
+                average_cost=Decimal('0'),
+                realized_pnl=Decimal('0'),
+            )
         )
-    )
 
     logger.info('Starting live Kalshi trading with balance: $%s', initial_balance)
 
-    await run_live_trading(data_source, strategy, trader, duration)
+    await run_live_trading(
+        data_source,
+        strategy,
+        trader,
+        duration,
+        state_store,
+        alerter,
+        continuous,
+        drawdown_alert_pct,
+    )
 
     logger.info('--- Final Portfolio Status ---')
     logger.info('Cash positions: %s', position_manager.get_cash_positions())

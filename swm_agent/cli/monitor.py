@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -15,13 +14,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swm_agent.data.live.google_news_data_source import GoogleNewsDataSource
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.events.events import NewsEvent
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import NoRiskManager
+from swm_agent.position.position_manager import PositionManager
 from swm_agent.ticker.ticker import CashTicker
-from swm_agent.trader.paper_trader import PaperTrader
 from swm_agent.trader.trader import Trader
 from swm_agent.trader.types import OrderStatus
 
@@ -689,69 +683,6 @@ class TradingMonitor:
                 pass
 
 
-def _drain_news_queue(
-    news_ds: GoogleNewsDataSource,
-    headlines: list[NewsEvent],
-) -> None:
-    """Move pending events from the data source queue into *headlines*."""
-    while not news_ds.event_queue.empty():
-        try:
-            event = news_ds.event_queue.get_nowait()
-            if isinstance(event, NewsEvent):
-                headlines.append(event)
-        except asyncio.QueueEmpty:
-            break
-
-
-async def _run_monitor(watch: bool, refresh: float) -> None:
-    """Async entry point that wires components and runs the monitor."""
-    market_data = MarketDataManager()
-    position_manager = PositionManager()
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.POLYMARKET_USDC,
-            quantity=Decimal('10000'),
-            average_cost=Decimal('1'),
-            realized_pnl=Decimal('0'),
-        )
-    )
-    trader = PaperTrader(
-        market_data=market_data,
-        risk_manager=NoRiskManager(),
-        position_manager=position_manager,
-        min_fill_rate=Decimal('0.5'),
-        max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
-    )
-
-    headlines: list[NewsEvent] = []
-    news_ds = GoogleNewsDataSource(polling_interval=60.0)
-
-    mon = TradingMonitor(trader, position_manager)
-    mon.news_headlines = headlines  # type: ignore[attr-defined]
-
-    await news_ds.start()
-    try:
-        if watch:
-            with Live(
-                mon.create_layout(),
-                console=mon.console,
-                refresh_per_second=4,
-                screen=True,
-            ) as live:
-                while True:
-                    _drain_news_queue(news_ds, headlines)
-                    live.update(mon.create_layout())
-                    await asyncio.sleep(refresh)
-        else:
-            _drain_news_queue(news_ds, headlines)
-            mon.display_snapshot()
-    except asyncio.CancelledError:
-        pass
-    finally:
-        await news_ds.stop()
-
-
 @click.command()
 @click.option(
     '--socket',
@@ -760,22 +691,7 @@ async def _run_monitor(watch: bool, refresh: float) -> None:
     type=click.Path(),
     help='Path to engine control socket (default: ~/.swm/engine.sock)',
 )
-@click.option(
-    '--watch',
-    '-w',
-    is_flag=True,
-    hidden=True,  # kept for backward compatibility, now always live
-    help='[Deprecated] Always runs in live mode when engine is running.',
-)
-@click.option(
-    '--refresh',
-    '-r',
-    default=2.0,
-    type=float,
-    hidden=True,
-    help='[Deprecated] Refresh rate (socket monitor uses 2s intervals).',
-)
-def monitor(socket: str | None, watch: bool, refresh: float) -> None:
+def monitor(socket: str | None) -> None:
     """Attach a live Textual monitor to a running trading engine.
 
     Connects via Unix socket — the engine continues running when you close

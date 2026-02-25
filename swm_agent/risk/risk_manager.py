@@ -204,7 +204,8 @@ class StandardRiskManager(RiskManager):
         if not self._check_trade_size(quantity, price):
             logger.warning(
                 'Risk check failed: Trade size %s exceeds limit %s',
-                quantity * price, self.max_single_trade_size,
+                quantity * price,
+                self.max_single_trade_size,
             )
             return False
 
@@ -242,10 +243,30 @@ class StandardRiskManager(RiskManager):
 
         # Check max positions
         if not self._check_max_positions(ticker, side):
-            logger.warning('Risk check failed: Would exceed max positions %s', self.max_positions)
+            logger.warning(
+                'Risk check failed: Would exceed max positions %s', self.max_positions
+            )
             return False
 
         return True
+
+    def check_portfolio_health(self) -> tuple[bool, str]:
+        """Post-trade/runtime health check for hard risk breaches.
+
+        Returns:
+            (ok, reason) where reason is non-empty when ok is False.
+        """
+        if not self._check_drawdown():
+            return False, 'drawdown_limit_breached'
+        if not self._check_daily_loss():
+            return False, 'daily_loss_limit_breached'
+        current_exposure = self._get_portfolio_value()
+        cash_positions = self.position_manager.get_cash_positions()
+        cash_value = sum(pos.quantity for pos in cash_positions)
+        market_exposure = current_exposure - cash_value
+        if market_exposure > self.max_total_exposure:
+            return False, 'total_exposure_limit_breached'
+        return True, ''
 
     def reset_daily_tracking(self) -> None:
         """Reset daily tracking (call at start of each trading day)."""

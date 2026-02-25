@@ -137,6 +137,9 @@ class TradingEngine:
         self._drawdown_alerted: bool = False  # avoid repeated alerts
         self._SAVE_INTERVAL = 100  # save every N events
         self._save_event_counter: int = 0
+        self._consecutive_processing_errors: int = 0
+        self._MAX_CONSECUTIVE_ERRORS: int = 5
+        self._degraded_read_only: bool = False
 
         # --- monitoring helpers ---
         self._start_time: datetime | None = None
@@ -351,11 +354,15 @@ class TradingEngine:
                     (now_str, f'Error processing event #{self._event_count}')
                 )
                 logger.exception('Error processing event #%d', self._event_count)
+                self._consecutive_processing_errors += 1
                 if self._alerter:
                     try:
                         await self._alerter.on_error(exc)
                     except Exception:
                         pass
+                await self._auto_degrade_if_needed()
+            else:
+                self._consecutive_processing_errors = 0
 
             # Periodic state save and drawdown check.
             self._save_event_counter += 1
@@ -371,6 +378,7 @@ class TradingEngine:
                             'periodic state_store.save_all() failed', exc_info=True
                         )
                 await self._check_drawdown_alert()
+                await self._check_portfolio_health()
 
             # [M4] Periodically prune stale order books from MarketDataManager.
             if self._event_count - self._last_prune_event >= self._PRUNE_INTERVAL:
@@ -476,6 +484,55 @@ class TradingEngine:
                 self._drawdown_alerted = False
         except Exception:
             logger.debug('_check_drawdown_alert() failed', exc_info=True)
+
+    async def _check_portfolio_health(self) -> None:
+        """Post-trade hard risk gate. Breaches force read-only degradation."""
+        rm = self.trader.risk_manager
+        if not isinstance(rm, StandardRiskManager):
+            return
+        try:
+            ok, reason = rm.check_portfolio_health()
+        except Exception:
+            logger.debug('check_portfolio_health() failed', exc_info=True)
+            return
+        if ok or self._degraded_read_only:
+            return
+
+        now_str = datetime.now().strftime('%H:%M:%S')
+        self._activity_log.append((now_str, f'Risk breach: {reason} -> READ-ONLY'))
+        logger.error(
+            'Risk breach detected (%s). Switching trader to read-only mode.', reason
+        )
+        self.trader.set_read_only(True)
+        self.strategy.set_paused(True)
+        self._degraded_read_only = True
+        if self._alerter:
+            try:
+                await self._alerter.on_risk_limit_hit(reason)
+            except Exception:
+                pass
+
+    async def _auto_degrade_if_needed(self) -> None:
+        """Pause strategy and force read-only mode on repeated processing errors."""
+        if self._consecutive_processing_errors < self._MAX_CONSECUTIVE_ERRORS:
+            return
+        if self._degraded_read_only:
+            return
+        msg = (
+            f'Consecutive processing errors={self._consecutive_processing_errors} '
+            '-> auto-degrade READ-ONLY'
+        )
+        now_str = datetime.now().strftime('%H:%M:%S')
+        self._activity_log.append((now_str, msg))
+        logger.error(msg)
+        self.trader.set_read_only(True)
+        self.strategy.set_paused(True)
+        self._degraded_read_only = True
+        if self._alerter:
+            try:
+                await self._alerter.on_risk_limit_hit('auto_degrade_error_storm')
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------ #
     # Snapshot (non-blocking, no awaits)                                  #

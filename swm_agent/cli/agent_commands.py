@@ -281,6 +281,7 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                continuous=True,
             )
         )
     else:
@@ -393,6 +394,7 @@ def live_run(
                 api_key_id=kalshi_api_key_id,
                 private_key_path=kalshi_private_key_path,
                 duration=duration,
+                continuous=True,
             )
         )
 
