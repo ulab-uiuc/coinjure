@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from swm_agent.core.trading_engine import TradingEngine
 from swm_agent.data.live.kalshi_data_source import LiveKalshiDataSource
@@ -19,6 +22,10 @@ from swm_agent.trader.paper_trader import PaperTrader
 from swm_agent.trader.polymarket_trader import PolymarketTrader
 from swm_agent.trader.trader import Trader
 
+if TYPE_CHECKING:
+    from swm_agent.alerts.alerter import Alerter
+    from swm_agent.storage.state_store import StateStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,6 +37,10 @@ async def run_live_trading(
     strategy: Strategy,
     trader: Trader,
     duration: float | None = None,
+    state_store: StateStore | None = None,
+    alerter: Alerter | None = None,
+    continuous: bool = True,
+    drawdown_alert_pct: Decimal | None = None,
 ) -> None:
     """
     Run live trading with the given data source, strategy, and trader.
@@ -39,8 +50,20 @@ async def run_live_trading(
         strategy: The trading strategy to execute
         trader: The trader implementation (Paper or Polymarket)
         duration: Optional duration in seconds to run. If None, runs indefinitely.
+        state_store: Optional state store for persistence.
+        alerter: Optional alerter for notifications.
+        continuous: Keep engine running when the data source is temporarily idle.
+        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
     """
-    engine = TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
+    engine = TradingEngine(
+        data_source=data_source,
+        strategy=strategy,
+        trader=trader,
+        state_store=state_store,
+        alerter=alerter,
+        continuous=continuous,
+        drawdown_alert_pct=drawdown_alert_pct,
+    )
 
     # NOTE: data_source.start() is called by engine.start() internally
     # (guarded by _ds_started flag). Do NOT call it here to avoid double-starting.
@@ -65,6 +88,10 @@ async def run_live_paper_trading(
     initial_capital: Decimal,
     risk_manager: RiskManager | None = None,
     duration: float | None = None,
+    state_store: StateStore | None = None,
+    alerter: Alerter | None = None,
+    continuous: bool = True,
+    drawdown_alert_pct: Decimal | None = None,
 ) -> None:
     """
     Run live paper trading (simulated) with the given configuration.
@@ -75,17 +102,29 @@ async def run_live_paper_trading(
         initial_capital: Starting capital in USDC
         risk_manager: Optional risk manager (defaults to NoRiskManager)
         duration: Optional duration in seconds to run
+        state_store: Optional state store for persistence and state recovery.
+        alerter: Optional alerter for notifications.
+        continuous: Keep engine running when the data source is temporarily idle.
+        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
     """
     market_data = MarketDataManager()
     position_manager = PositionManager()
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.POLYMARKET_USDC,
-            quantity=initial_capital,
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
+
+    # State recovery: load saved positions if available.
+    saved_positions = state_store.load_positions() if state_store else []
+    if saved_positions:
+        logger.info('Restoring %d positions from state store', len(saved_positions))
+        for pos in saved_positions:
+            position_manager.update_position(pos)
+    else:
+        position_manager.update_position(
+            Position(
+                ticker=CashTicker.POLYMARKET_USDC,
+                quantity=initial_capital,
+                average_cost=Decimal('0'),
+                realized_pnl=Decimal('0'),
+            )
         )
-    )
 
     if risk_manager is None:
         risk_manager = NoRiskManager()
@@ -97,9 +136,19 @@ async def run_live_paper_trading(
         min_fill_rate=Decimal('0.5'),
         max_fill_rate=Decimal('1.0'),
         commission_rate=Decimal('0.0'),
+        alerter=alerter,
     )
 
-    await run_live_trading(data_source, strategy, trader, duration)
+    await run_live_trading(
+        data_source,
+        strategy,
+        trader,
+        duration,
+        state_store,
+        alerter,
+        continuous,
+        drawdown_alert_pct,
+    )
 
     # Print final portfolio status
     print('\n--- Final Portfolio Status ---')
@@ -118,6 +167,10 @@ async def run_live_polymarket_trading(
     duration: float | None = None,
     max_position_size: Decimal = Decimal('1000'),
     max_total_exposure: Decimal = Decimal('10000'),
+    state_store: StateStore | None = None,
+    alerter: Alerter | None = None,
+    continuous: bool = True,
+    drawdown_alert_pct: Decimal | None = None,
 ) -> None:
     """
     Run live trading on Polymarket with real orders.
@@ -132,6 +185,10 @@ async def run_live_polymarket_trading(
         duration: Optional duration in seconds to run
         max_position_size: Maximum position size per trade
         max_total_exposure: Maximum total portfolio exposure
+        state_store: Optional state store for persistence and state recovery.
+        alerter: Optional alerter for notifications.
+        continuous: Keep engine running when the data source is temporarily idle.
+        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
     """
     market_data = MarketDataManager()
     position_manager = PositionManager()
@@ -153,28 +210,75 @@ async def run_live_polymarket_trading(
         wallet_private_key=wallet_private_key,
         signature_type=signature_type,
         funder=funder,
+        alerter=alerter,
     )
 
-    # Initialize USDC position from Polymarket balance
+    # Initialize USDC position: prefer live exchange balance for reconciliation.
     from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
 
     balance_info = trader.clob_client.get_balance_allowance(
         params=BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
     )
-    initial_balance = Decimal(balance_info['balance']) / Decimal('1000000')
+    live_balance = Decimal(balance_info['balance']) / Decimal('1000000')
 
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.POLYMARKET_USDC,
-            quantity=initial_balance,
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
+    # State recovery: load saved positions if available, then reconcile cash.
+    saved_positions = state_store.load_positions() if state_store else []
+    if saved_positions:
+        logger.info('Restoring %d positions from state store', len(saved_positions))
+        for pos in saved_positions:
+            position_manager.update_position(pos)
+        # Reconcile cash position against live exchange balance.
+        saved_cash = position_manager.get_position(CashTicker.POLYMARKET_USDC)
+        if saved_cash is not None:
+            diff_pct = abs(live_balance - saved_cash.quantity) / max(
+                live_balance, Decimal('1')
+            )
+            if diff_pct > Decimal('0.01'):
+                logger.warning(
+                    'Saved cash %.4f differs from live balance %.4f by %.1f%% — using live value',
+                    saved_cash.quantity,
+                    live_balance,
+                    float(diff_pct) * 100,
+                )
+                position_manager.update_position(
+                    Position(
+                        ticker=CashTicker.POLYMARKET_USDC,
+                        quantity=live_balance,
+                        average_cost=Decimal('0'),
+                        realized_pnl=saved_cash.realized_pnl,
+                    )
+                )
+        else:
+            position_manager.update_position(
+                Position(
+                    ticker=CashTicker.POLYMARKET_USDC,
+                    quantity=live_balance,
+                    average_cost=Decimal('0'),
+                    realized_pnl=Decimal('0'),
+                )
+            )
+    else:
+        position_manager.update_position(
+            Position(
+                ticker=CashTicker.POLYMARKET_USDC,
+                quantity=live_balance,
+                average_cost=Decimal('0'),
+                realized_pnl=Decimal('0'),
+            )
         )
+
+    print(f'Starting live Polymarket trading with balance: {live_balance} USDC')
+
+    await run_live_trading(
+        data_source,
+        strategy,
+        trader,
+        duration,
+        state_store,
+        alerter,
+        continuous,
+        drawdown_alert_pct,
     )
-
-    print(f'Starting live Polymarket trading with balance: {initial_balance} USDC')
-
-    await run_live_trading(data_source, strategy, trader, duration)
 
     # Print final portfolio status
     print('\n--- Final Portfolio Status ---')
@@ -276,7 +380,9 @@ async def run_live_kalshi_trading(
     )
 
     # Fetch initial balance from Kalshi (via the trader's portfolio API)
-    balance_response = await asyncio.to_thread(lambda: trader._portfolio_api.get_balance())
+    balance_response = await asyncio.to_thread(
+        lambda: trader._portfolio_api.get_balance()
+    )
     # Balance is in cents
     initial_balance = Decimal(str(balance_response.balance)) / Decimal('100')
 

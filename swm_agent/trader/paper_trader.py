@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import random
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from swm_agent.data.market_data_manager import MarketDataManager
 from swm_agent.position.position_manager import PositionManager
@@ -16,6 +19,9 @@ from .types import (
     TradeSide,
 )
 
+if TYPE_CHECKING:
+    from swm_agent.alerts.alerter import Alerter
+
 
 class PaperTrader(Trader):
     def __init__(
@@ -26,8 +32,9 @@ class PaperTrader(Trader):
         min_fill_rate: Decimal,
         max_fill_rate: Decimal,
         commission_rate: Decimal,
+        alerter: Alerter | None = None,
     ):
-        super().__init__(market_data, risk_manager, position_manager)
+        super().__init__(market_data, risk_manager, position_manager, alerter=alerter)
         self.orders: list[Order] = []
         self.min_fill_rate = min_fill_rate
         self.max_fill_rate = max_fill_rate
@@ -104,20 +111,30 @@ class PaperTrader(Trader):
             commission=commission,
         )
 
+    async def _alert_rejected(self, reason: OrderFailureReason, ticker: Ticker) -> None:
+        if self.alerter:
+            try:
+                await self.alerter.on_order_rejected(reason, ticker)
+            except Exception:
+                pass
+
     async def place_order(
         self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
     ) -> PlaceOrderResult:
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
-            return PlaceOrderResult(
+            result = PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
             )
+            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
+            return result
 
         # Don't allow short selling
         if side == TradeSide.SELL:
             position = self.position_manager.get_position(ticker)
             if position is None or position.quantity < quantity:
+                await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
                 return PlaceOrderResult(
                     order=None,
                     failure_reason=OrderFailureReason.INVALID_ORDER,
@@ -128,6 +145,7 @@ class PaperTrader(Trader):
             cash_position = self.position_manager.get_position(ticker.collateral)
             cash_required = quantity * limit_price * (1 + self.commission_rate)
             if cash_position is None or cash_position.quantity < cash_required:
+                await self._alert_rejected(OrderFailureReason.INSUFFICIENT_CASH, ticker)
                 return PlaceOrderResult(
                     order=None,
                     failure_reason=OrderFailureReason.INSUFFICIENT_CASH,
@@ -135,6 +153,7 @@ class PaperTrader(Trader):
 
         # Check risk limits
         if not await self.risk_manager.check_trade(ticker, side, quantity, limit_price):
+            await self._alert_rejected(OrderFailureReason.RISK_CHECK_FAILED, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,

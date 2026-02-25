@@ -41,9 +41,7 @@ class ControlServer:
     Designed to run *inside* the engine process, started as an asyncio task.
     """
 
-    def __init__(
-        self, engine: 'TradingEngine', socket_path: Path = SOCKET_PATH
-    ) -> None:
+    def __init__(self, engine: TradingEngine, socket_path: Path = SOCKET_PATH) -> None:
         self.engine = engine
         self.socket_path = socket_path
         self.paused: bool = False
@@ -291,6 +289,8 @@ class ControlServer:
         strategy = getattr(self.engine, 'strategy', None)
         trader = getattr(self.engine, 'trader', None)
         runtime = str(datetime.now() - self._start_time).split('.')[0]
+        activity_log = list(getattr(self.engine, '_activity_log', []))
+        last_activity = activity_log[-1][1] if activity_log else ''
 
         return {
             'ok': True,
@@ -306,6 +306,7 @@ class ControlServer:
                 getattr(getattr(self.engine, 'market_data', None), 'order_books', {})
             ),
             'orders': len(list(getattr(trader, 'orders', []))),
+            'last_activity': last_activity,
         }
 
 
