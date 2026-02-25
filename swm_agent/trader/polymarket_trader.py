@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import (
@@ -29,6 +31,9 @@ from swm_agent.trader.types import (
     TradeSide,
 )
 
+if TYPE_CHECKING:
+    from swm_agent.alerts.alerter import Alerter
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,8 +49,9 @@ class PolymarketTrader(Trader):
         clob_api_url: str = 'https://clob.polymarket.com',
         chain_id: int = POLYGON,
         commission_rate: Decimal = Decimal('0.0'),
+        alerter: Alerter | None = None,
     ):
-        super().__init__(market_data, risk_manager, position_manager)
+        super().__init__(market_data, risk_manager, position_manager, alerter=alerter)
 
         self.commission_rate = commission_rate
 
@@ -196,11 +202,19 @@ class PolymarketTrader(Trader):
             commission=commission,
         )
 
+    async def _alert_rejected(self, reason: OrderFailureReason, ticker: Ticker) -> None:
+        if self.alerter:
+            try:
+                await self.alerter.on_order_rejected(reason, ticker)
+            except Exception:
+                pass
+
     async def place_order(  # noqa: C901
         self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
     ) -> PlaceOrderResult:
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
+            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
@@ -208,6 +222,7 @@ class PolymarketTrader(Trader):
 
         # Verify ticker is a PolyMarketTicker with token_id
         if not isinstance(ticker, PolyMarketTicker) or not ticker.token_id:
+            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
@@ -217,6 +232,7 @@ class PolymarketTrader(Trader):
         if side == TradeSide.SELL:
             position = self.position_manager.get_position(ticker)
             if position is None or position.quantity < quantity:
+                await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
                 return PlaceOrderResult(
                     order=None,
                     failure_reason=OrderFailureReason.INVALID_ORDER,
@@ -229,6 +245,7 @@ class PolymarketTrader(Trader):
                 quantity * limit_price * (Decimal('1') + self.commission_rate)
             )
             if cash_position is None or cash_position.quantity < cash_required:
+                await self._alert_rejected(OrderFailureReason.INSUFFICIENT_CASH, ticker)
                 return PlaceOrderResult(
                     order=None,
                     failure_reason=OrderFailureReason.INSUFFICIENT_CASH,
@@ -236,6 +253,7 @@ class PolymarketTrader(Trader):
 
         # Check risk limits
         if not await self.risk_manager.check_trade(ticker, side, quantity, limit_price):
+            await self._alert_rejected(OrderFailureReason.RISK_CHECK_FAILED, ticker)
             return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,

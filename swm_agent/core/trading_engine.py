@@ -1,11 +1,14 @@
 """Trading engine with snapshot support for live monitoring."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from swm_agent.analytics.performance_analyzer import PerformanceAnalyzer
 from swm_agent.data.data_source import DataSource
@@ -15,6 +18,10 @@ from swm_agent.strategy.strategy import Strategy
 from swm_agent.ticker.ticker import CashTicker
 from swm_agent.trader.trader import Trader
 from swm_agent.trader.types import OrderStatus
+
+if TYPE_CHECKING:
+    from swm_agent.alerts.alerter import Alerter
+    from swm_agent.storage.state_store import StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +115,9 @@ class TradingEngine:
         *,
         initial_capital: Decimal = Decimal('10000'),
         continuous: bool = False,
+        state_store: StateStore | None = None,
+        alerter: Alerter | None = None,
+        drawdown_alert_pct: Decimal | None = None,
     ) -> None:
         self.data_source = data_source
         self.strategy = strategy
@@ -119,6 +129,14 @@ class TradingEngine:
         # ``get_next_event()`` returns ``None`` (live data sources use
         # ``None`` to signal "nothing right now", not "data exhausted").
         self._continuous = continuous
+
+        # --- persistence & alerting ---
+        self._state_store = state_store
+        self._alerter = alerter
+        self._drawdown_alert_pct = drawdown_alert_pct
+        self._drawdown_alerted: bool = False  # avoid repeated alerts
+        self._SAVE_INTERVAL = 100  # save every N events
+        self._save_event_counter: int = 0
 
         # --- monitoring helpers ---
         self._start_time: datetime | None = None
@@ -152,6 +170,12 @@ class TradingEngine:
         if not self._ds_started:
             self._ds_started = True
             await self.data_source.start()
+
+        if self._alerter:
+            try:
+                await self._alerter.on_engine_start()
+            except Exception:
+                logger.debug('alerter.on_engine_start() failed', exc_info=True)
 
         logger.info('TradingEngine started (continuous=%s)', self._continuous)
 
@@ -209,7 +233,8 @@ class TradingEngine:
                 while True:
                     try:
                         peek = await asyncio.wait_for(
-                            self.data_source.get_next_event(), timeout=0.05,
+                            self.data_source.get_next_event(),
+                            timeout=0.05,
                         )
                     except (asyncio.TimeoutError, Exception):
                         break
@@ -233,7 +258,10 @@ class TradingEngine:
                 now_str = datetime.now().strftime('%H:%M:%S')
                 ob_count = len(self.market_data.order_books)
                 self._activity_log.append(
-                    (now_str, f'Milestone: {self._event_count} events processed, {ob_count} order books')
+                    (
+                        now_str,
+                        f'Milestone: {self._event_count} events processed, {ob_count} order books',
+                    )
                 )
 
             try:
@@ -271,7 +299,9 @@ class TradingEngine:
                         exec_mark = 'TRADED' if d.executed else 'no trade'
                         llm_p = getattr(d, 'llm_prob', 0)
                         mkt_p = getattr(d, 'market_price', 0)
-                        prob_str = f'LLM={llm_p:.0%} vs Mkt={mkt_p:.0%}' if mkt_p > 0 else ''
+                        prob_str = (
+                            f'LLM={llm_p:.0%} vs Mkt={mkt_p:.0%}' if mkt_p > 0 else ''
+                        )
                         name = d.ticker_name[:30]
                         self._activity_log.append(
                             (now_str, f'{d.action} {prob_str} [{exec_mark}] "{name}"')
@@ -279,14 +309,19 @@ class TradingEngine:
                     self._last_decisions_count = total_d
 
                 # Log new trades and register tokens for priority refresh
-                self._sync_trades()
+                await self._sync_trades()
                 new_orders = self.trader.orders[prev_orders:]
                 for order in new_orders:
                     status = order.status.value.upper()
                     side = order.side.value.upper()
-                    ticker_name = getattr(order.ticker, 'name', '') or order.ticker.symbol[:25]
+                    ticker_name = (
+                        getattr(order.ticker, 'name', '') or order.ticker.symbol[:25]
+                    )
                     self._activity_log.append(
-                        (now_str, f'{side} {order.filled_quantity} @ ${order.average_price:.4f} → {status} "{ticker_name[:25]}"')
+                        (
+                            now_str,
+                            f'{side} {order.filled_quantity} @ ${order.average_price:.4f} → {status} "{ticker_name[:25]}"',
+                        )
                     )
                     # Tell data source to prioritize this token's order book
                     if hasattr(order.ticker, 'token_id'):
@@ -301,15 +336,41 @@ class TradingEngine:
                                     watch(no_token_id)
                         elif order.side.value.upper() == 'SELL':
                             # Unwatch tokens when position is fully closed
-                            pos = self.trader.position_manager.get_position(order.ticker)
+                            pos = self.trader.position_manager.get_position(
+                                order.ticker
+                            )
                             if pos is None or pos.quantity <= 0:
-                                unwatch = getattr(self.data_source, 'unwatch_token', None)
+                                unwatch = getattr(
+                                    self.data_source, 'unwatch_token', None
+                                )
                                 if unwatch:
                                     unwatch(order.ticker.token_id)
-            except Exception:
+            except Exception as exc:
                 now_str = datetime.now().strftime('%H:%M:%S')
-                self._activity_log.append((now_str, f'Error processing event #{self._event_count}'))
+                self._activity_log.append(
+                    (now_str, f'Error processing event #{self._event_count}')
+                )
                 logger.exception('Error processing event #%d', self._event_count)
+                if self._alerter:
+                    try:
+                        await self._alerter.on_error(exc)
+                    except Exception:
+                        pass
+
+            # Periodic state save and drawdown check.
+            self._save_event_counter += 1
+            if self._save_event_counter >= self._SAVE_INTERVAL:
+                self._save_event_counter = 0
+                if self._state_store:
+                    try:
+                        self._state_store.save_all(
+                            self.trader.position_manager, self._perf
+                        )
+                    except Exception:
+                        logger.debug(
+                            'periodic state_store.save_all() failed', exc_info=True
+                        )
+                await self._check_drawdown_alert()
 
             # [M4] Periodically prune stale order books from MarketDataManager.
             if self._event_count - self._last_prune_event >= self._PRUNE_INTERVAL:
@@ -324,7 +385,10 @@ class TradingEngine:
                 if known is not None:
                     removed = self.market_data.prune_stale_tickers(set(known.keys()))
                     if removed:
-                        logger.info('Pruned %d stale order books from MarketDataManager', removed)
+                        logger.info(
+                            'Pruned %d stale order books from MarketDataManager',
+                            removed,
+                        )
 
         logger.info('TradingEngine stopped  (events=%d)', self._event_count)
 
@@ -338,6 +402,18 @@ class TradingEngine:
         except Exception:
             logger.debug('data_source.stop() error (ignored)', exc_info=True)
 
+        if self._state_store:
+            try:
+                self._state_store.save_all(self.trader.position_manager, self._perf)
+            except Exception:
+                logger.debug('state_store.save_all() on stop failed', exc_info=True)
+
+        if self._alerter:
+            try:
+                await self._alerter.on_engine_stop('stopped')
+            except Exception:
+                pass
+
     def request_stop(self) -> None:
         """Non-async flag-flip — safe to call from any context."""
         self.running = False
@@ -346,8 +422,12 @@ class TradingEngine:
     # Trade tracking                                                      #
     # ------------------------------------------------------------------ #
 
-    def _sync_trades(self) -> None:
-        """Feed newly-appeared orders into the performance analyser."""
+    async def _sync_trades(self) -> None:
+        """Feed newly-appeared orders into the performance analyser.
+
+        Also persists new trades/orders to the state store and fires
+        alerter.on_trade() for filled orders.
+        """
         # [M3] Now that Trader base-class declares ``orders``, we can
         # access it directly instead of using getattr().
         orders = self.trader.orders
@@ -357,7 +437,45 @@ class TradingEngine:
             self._order_times.append(now_str)
             for trade in order.trades:
                 self._perf.add_trade(trade)
+                if self._state_store:
+                    try:
+                        self._state_store.append_trade(trade)
+                    except Exception:
+                        logger.debug('state_store.append_trade() failed', exc_info=True)
+                if self._alerter and order.status in (
+                    OrderStatus.FILLED,
+                    OrderStatus.PARTIALLY_FILLED,
+                ):
+                    try:
+                        await self._alerter.on_trade(trade)
+                    except Exception:
+                        logger.debug('alerter.on_trade() failed', exc_info=True)
+            if self._state_store:
+                try:
+                    self._state_store.append_order(order)
+                except Exception:
+                    logger.debug('state_store.append_order() failed', exc_info=True)
             self._last_orders_idx += 1
+
+    async def _check_drawdown_alert(self) -> None:
+        """Fire a drawdown alert if the current drawdown exceeds the threshold."""
+        if not self._alerter or self._drawdown_alert_pct is None:
+            return
+        rm = self.trader.risk_manager
+        if not isinstance(rm, StandardRiskManager):
+            return
+        try:
+            current_dd = rm.get_current_drawdown()
+            if current_dd >= self._drawdown_alert_pct and not self._drawdown_alerted:
+                self._drawdown_alerted = True
+                await self._alerter.on_drawdown_alert(
+                    current_dd, self._drawdown_alert_pct
+                )
+            elif current_dd < self._drawdown_alert_pct:
+                # Reset so we can alert again if drawdown recovers then worsens
+                self._drawdown_alerted = False
+        except Exception:
+            logger.debug('_check_drawdown_alert() failed', exc_info=True)
 
     # ------------------------------------------------------------------ #
     # Snapshot (non-blocking, no awaits)                                  #
@@ -448,7 +566,8 @@ class TradingEngine:
             pos_snaps.append(
                 PositionSnapshot(
                     ticker_symbol=pos.ticker.symbol,
-                    ticker_name=getattr(pos.ticker, 'name', '') or pos.ticker.symbol[:30],
+                    ticker_name=getattr(pos.ticker, 'name', '')
+                    or pos.ticker.symbol[:30],
                     quantity=pos.quantity,
                     average_cost=pos.average_cost,
                     current_price=cur_price,
@@ -502,7 +621,8 @@ class TradingEngine:
                         time=ts,
                         side=side_str,
                         ticker_symbol=order.ticker.symbol,
-                        ticker_name=getattr(order.ticker, 'name', '') or order.ticker.symbol[:30],
+                        ticker_name=getattr(order.ticker, 'name', '')
+                        or order.ticker.symbol[:30],
                         price=(
                             order.average_price
                             if order.average_price > 0
@@ -517,7 +637,8 @@ class TradingEngine:
                     OrderSnapshot(
                         side=side_str,
                         ticker_symbol=order.ticker.symbol,
-                        ticker_name=getattr(order.ticker, 'name', '') or order.ticker.symbol[:30],
+                        ticker_name=getattr(order.ticker, 'name', '')
+                        or order.ticker.symbol[:30],
                         limit_price=order.limit_price,
                         quantity=order.remaining + order.filled_quantity,
                         filled_quantity=order.filled_quantity,

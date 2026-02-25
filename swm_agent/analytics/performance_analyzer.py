@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass
 from decimal import Decimal
@@ -305,3 +307,30 @@ class PerformanceAnalyzer:
         ]
         self._stats = None
         self._pnl_per_trade = []
+
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Serialize trades, initial_capital, and equity_curve to a JSON-safe dict."""
+        from swm_agent.storage.serializers import (
+            serialize_equity_point,
+            serialize_trade,
+        )
+
+        return {
+            'initial_capital': str(self.initial_capital),
+            'trades': [serialize_trade(t) for t in self.trades],
+            'equity_curve': [serialize_equity_point(pt) for pt in self.equity_curve],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> PerformanceAnalyzer:
+        """Reconstruct a PerformanceAnalyzer from a previously serialized dict."""
+        from swm_agent.storage.serializers import deserialize_trade
+
+        analyzer = cls(initial_capital=Decimal(d['initial_capital']))
+        for trade_data in d.get('trades', []):
+            analyzer.add_trade(deserialize_trade(trade_data))
+        return analyzer
