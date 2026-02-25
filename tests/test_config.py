@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from swm_agent.config.config import (
+from pred_market_cli.config.config import (
     AlertConfig,
     Config,
     EngineConfig,

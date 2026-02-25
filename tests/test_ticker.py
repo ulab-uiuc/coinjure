@@ -1,6 +1,6 @@
 import pytest
 
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
 
 
 class TestPolyMarketTicker:

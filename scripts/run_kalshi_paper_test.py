@@ -12,14 +12,14 @@ from decimal import Decimal
 
 from dotenv import load_dotenv
 
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.data.live.kalshi_data_source import LiveKalshiDataSource
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import StandardRiskManager
-from swm_agent.strategy.simple_strategy import SimpleStrategy
-from swm_agent.ticker.ticker import CashTicker
-from swm_agent.trader.paper_trader import PaperTrader
+from pred_market_cli.core.trading_engine import TradingEngine
+from pred_market_cli.data.live.kalshi_data_source import LiveKalshiDataSource
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import StandardRiskManager
+from pred_market_cli.strategy.simple_strategy import SimpleStrategy
+from pred_market_cli.ticker.ticker import CashTicker
+from pred_market_cli.trader.paper_trader import PaperTrader
 
 load_dotenv()
 

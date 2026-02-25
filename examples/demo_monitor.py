@@ -15,10 +15,10 @@ from decimal import Decimal
 
 import click
 
-from swm_agent.cli.monitor import TradingMonitor
-from swm_agent.ticker.ticker import CashTicker, Ticker
-from swm_agent.trader.paper_trader import PaperTrader
-from swm_agent.trader.types import TradeSide
+from pred_market_cli.cli.monitor import TradingMonitor
+from pred_market_cli.ticker.ticker import CashTicker, Ticker
+from pred_market_cli.trader.paper_trader import PaperTrader
+from pred_market_cli.trader.types import TradeSide
 
 
 async def simulate_trading_session(trader: PaperTrader, num_trades: int = 10) -> None:
@@ -167,7 +167,7 @@ def main(watch: bool, refresh: float) -> None:
         python examples/demo_monitor.py --watch      # Live monitoring
         python examples/demo_monitor.py -w -r 1.0    # Live with 1s refresh
     """
-    print('=== SWM Agent Trading Monitor Demo ===')
+    print('=== Pred Market CLI Trading Monitor Demo ===')
     print('This demo simulates a trading session with random trades.')
     print('The monitor will display portfolio, positions, orders, and statistics.\n')
 
