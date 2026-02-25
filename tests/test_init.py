@@ -1,7 +1,7 @@
 """
-SWM Agent Test Suite
+Pred Market CLI Test Suite
 
-This package contains unit tests for all components of the SWM Agent framework.
+This package contains unit tests for all components of the Pred Market CLI framework.
 
 Test modules:
 - test_position_manager: Tests for position tracking and PnL calculation
@@ -15,7 +15,7 @@ Test modules:
 - test_ticker: Tests for ticker types
 
 Run all tests with: pytest tests/
-Run with coverage: pytest tests/ --cov=swm_agent --cov-report=html
+Run with coverage: pytest tests/ --cov=pred_market_cli --cov-report=html
 """
 
 

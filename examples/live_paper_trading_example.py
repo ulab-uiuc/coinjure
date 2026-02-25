@@ -3,7 +3,7 @@
 Live Paper Trading Example
 
 This example demonstrates how to run live paper trading (simulated) with
-the SWM Agent framework. It shows how to:
+the Pred Market CLI framework. It shows how to:
 1. Set up live data sources (RSS news feed)
 2. Configure paper trading with risk management
 3. Run a live simulation
@@ -13,13 +13,13 @@ the SWM Agent framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from swm_agent.data.live.live_data_source import LiveRSSNewsDataSource
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.live.live_trader import run_live_paper_trading
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import ConservativeRiskManager
-from swm_agent.strategy.test_strategy import TestStrategy
-from swm_agent.ticker.ticker import CashTicker
+from pred_market_cli.data.live.live_data_source import LiveRSSNewsDataSource
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.live.live_trader import run_live_paper_trading
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import ConservativeRiskManager
+from pred_market_cli.strategy.test_strategy import TestStrategy
+from pred_market_cli.ticker.ticker import CashTicker
 
 
 async def run_rss_paper_trading():
@@ -124,7 +124,7 @@ async def run_paper_trading_with_risk_management():
 
 async def main():
     """Run all examples."""
-    print('SWM Agent - Live Paper Trading Examples\n')
+    print('Pred Market CLI - Live Paper Trading Examples\n')
     print('This example will run paper trading simulations using live RSS news feeds.')
     print('No real money is involved - all trades are simulated.\n')
 

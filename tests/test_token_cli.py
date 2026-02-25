@@ -6,9 +6,9 @@ from decimal import Decimal
 
 from click.testing import CliRunner
 
-from swm_agent.cli.cli import cli
-from swm_agent.cli.token import PaperTokenAdapter
-from swm_agent.trader.types import TradeSide
+from pred_market_cli.cli.cli import cli
+from pred_market_cli.cli.token import PaperTokenAdapter
+from pred_market_cli.trader.types import TradeSide
 
 # -- PaperTokenAdapter unit tests -------------------------------------------
 
@@ -87,7 +87,7 @@ class TestTokenCLI:
     def test_positions_empty(self) -> None:
         runner = CliRunner()
         # Need to reset module-level adapter for isolation
-        import swm_agent.cli.token as token_mod
+        import pred_market_cli.cli.token as token_mod
 
         token_mod._adapter = PaperTokenAdapter(initial_capital=Decimal('0'))
         result = runner.invoke(cli, ['token', 'positions'])
@@ -96,7 +96,7 @@ class TestTokenCLI:
 
     def test_place_buy_no_liquidity(self) -> None:
         runner = CliRunner()
-        import swm_agent.cli.token as token_mod
+        import pred_market_cli.cli.token as token_mod
 
         token_mod._adapter = None  # fresh adapter
         result = runner.invoke(

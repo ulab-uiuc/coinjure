@@ -2,17 +2,22 @@ from decimal import Decimal
 
 import pytest
 
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.data.data_source import DataSource
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
-from swm_agent.order.order_book import Level, OrderBook
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import NoRiskManager
-from swm_agent.strategy.strategy import Strategy
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
-from swm_agent.trader.paper_trader import PaperTrader
-from swm_agent.trader.trader import Trader
+from pred_market_cli.core.trading_engine import TradingEngine
+from pred_market_cli.data.data_source import DataSource
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.events.events import (
+    Event,
+    NewsEvent,
+    OrderBookEvent,
+    PriceChangeEvent,
+)
+from pred_market_cli.order.order_book import Level, OrderBook
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import NoRiskManager
+from pred_market_cli.strategy.strategy import Strategy
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pred_market_cli.trader.paper_trader import PaperTrader
+from pred_market_cli.trader.trader import Trader
 
 
 @pytest.fixture
@@ -290,7 +295,7 @@ class TestTradingEngineWithRealStrategy:
         market_data: MarketDataManager,
     ):
         """Test engine with the actual TestStrategy."""
-        from swm_agent.strategy.test_strategy import TestStrategy
+        from pred_market_cli.strategy.test_strategy import TestStrategy
 
         # Create price change events that trigger the strategy
         events = [

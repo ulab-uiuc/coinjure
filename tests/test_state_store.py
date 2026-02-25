@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from swm_agent.position.position_manager import Position
-from swm_agent.storage.serializers import (
+from pred_market_cli.position.position_manager import Position
+from pred_market_cli.storage.serializers import (
     deserialize_equity_point,
     deserialize_order,
     deserialize_position,
@@ -19,9 +19,9 @@ from swm_agent.storage.serializers import (
     serialize_ticker,
     serialize_trade,
 )
-from swm_agent.storage.state_store import StateStore
-from swm_agent.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker
-from swm_agent.trader.types import Order, OrderStatus, Trade, TradeSide
+from pred_market_cli.storage.state_store import StateStore
+from pred_market_cli.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker
+from pred_market_cli.trader.types import Order, OrderStatus, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -141,7 +141,7 @@ def test_trade_without_timestamp(sample_trade):
 
 
 def test_save_load_positions_roundtrip(tmp_store, sample_position):
-    from swm_agent.position.position_manager import PositionManager
+    from pred_market_cli.position.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -202,7 +202,7 @@ def test_load_trades_missing_file_returns_empty(tmp_store):
 
 
 def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
-    from swm_agent.position.position_manager import PositionManager
+    from pred_market_cli.position.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -224,7 +224,7 @@ def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
 
 
 def test_roundtrip_equity_point():
-    from swm_agent.analytics.performance_analyzer import EquityPoint
+    from pred_market_cli.analytics.performance_analyzer import EquityPoint
 
     pt = EquityPoint(timestamp=5, equity=Decimal('10500.75'), trade_index=4)
     d = serialize_equity_point(pt)

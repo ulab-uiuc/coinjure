@@ -2,13 +2,13 @@ from decimal import Decimal
 
 import pytest
 
-from swm_agent.analytics.performance_analyzer import (
+from pred_market_cli.analytics.performance_analyzer import (
     EquityPoint,
     PerformanceAnalyzer,
     TradeStats,
 )
-from swm_agent.ticker.ticker import PolyMarketTicker
-from swm_agent.trader.types import Trade, TradeSide
+from pred_market_cli.ticker.ticker import PolyMarketTicker
+from pred_market_cli.trader.types import Trade, TradeSide
 
 
 @pytest.fixture

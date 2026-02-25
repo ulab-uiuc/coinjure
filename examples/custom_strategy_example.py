@@ -3,7 +3,7 @@
 Custom Strategy Example
 
 This example demonstrates how to create custom trading strategies with
-the SWM Agent framework. It shows how to:
+the Pred Market CLI framework. It shows how to:
 1. Implement the Strategy interface
 2. Handle different event types
 3. Make trading decisions based on events
@@ -13,16 +13,21 @@ the SWM Agent framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
-from swm_agent.order.order_book import Level, OrderBook
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import NoRiskManager
-from swm_agent.strategy.strategy import Strategy
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
-from swm_agent.trader.paper_trader import PaperTrader
-from swm_agent.trader.trader import Trader
-from swm_agent.trader.types import TradeSide
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.events.events import (
+    Event,
+    NewsEvent,
+    OrderBookEvent,
+    PriceChangeEvent,
+)
+from pred_market_cli.order.order_book import Level, OrderBook
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import NoRiskManager
+from pred_market_cli.strategy.strategy import Strategy
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pred_market_cli.trader.paper_trader import PaperTrader
+from pred_market_cli.trader.trader import Trader
+from pred_market_cli.trader.types import TradeSide
 
 
 class MomentumStrategy(Strategy):
@@ -417,7 +422,7 @@ async def test_mean_reversion_strategy():
 
 async def main():
     """Run all strategy examples."""
-    print('SWM Agent - Custom Strategy Examples\n')
+    print('Pred Market CLI - Custom Strategy Examples\n')
     print('This example demonstrates how to create custom trading strategies.\n')
 
     await test_momentum_strategy()
