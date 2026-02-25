@@ -62,3 +62,26 @@ def test_trade_error_returns_nonzero(monkeypatch):
     result = runner.invoke(cli, ['trade', 'pause'])
     assert result.exit_code == 1
     assert 'error: no socket' in result.output
+
+
+def test_trade_killswitch_toggle(tmp_path):
+    runner = CliRunner()
+    kill_file = tmp_path / 'kill.switch'
+
+    enable = runner.invoke(
+        cli, ['trade', 'killswitch', '--on', '--path', str(kill_file)]
+    )
+    assert enable.exit_code == 0
+    assert kill_file.exists()
+
+    status = runner.invoke(
+        cli, ['trade', 'killswitch', '--path', str(kill_file), '--json']
+    )
+    assert status.exit_code == 0
+    assert '"status": "enabled"' in status.output
+
+    disable = runner.invoke(
+        cli, ['trade', 'killswitch', '--off', '--path', str(kill_file)]
+    )
+    assert disable.exit_code == 0
+    assert not kill_file.exists()

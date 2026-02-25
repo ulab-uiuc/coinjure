@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -23,6 +24,15 @@ def _print_response(resp: dict, as_json: bool) -> None:
 
 def _resolve_socket(socket: str | None) -> Path:
     return Path(socket) if socket else SOCKET_PATH
+
+
+def _resolve_kill_switch_file(path: str | None) -> Path:
+    if path:
+        return Path(path)
+    env_path = os.environ.get('SWM_KILL_SWITCH_FILE', '').strip()
+    if env_path:
+        return Path(env_path)
+    return Path.home() / '.swm' / 'kill.switch'
 
 
 @click.group()
@@ -128,3 +138,39 @@ def estop_cmd(socket: str | None, as_json: bool) -> None:
         else:
             click.echo(f"error: {resp.get('error', 'unknown')}")
             raise SystemExit(1)
+
+
+@trade.command('killswitch')
+@click.option(
+    '--on', 'enable', is_flag=True, default=False, help='Enable global kill-switch'
+)
+@click.option(
+    '--off', 'disable', is_flag=True, default=False, help='Disable global kill-switch'
+)
+@click.option('--path', default=None, type=click.Path(), help='Kill-switch file path')
+@click.option(
+    '--json', 'as_json', is_flag=True, default=False, help='Emit JSON response'
+)
+def killswitch_cmd(
+    enable: bool, disable: bool, path: str | None, as_json: bool
+) -> None:
+    """Toggle/query global kill-switch file used by all traders."""
+    if enable and disable:
+        raise click.ClickException('Use either --on or --off, not both.')
+    kill_file = _resolve_kill_switch_file(path)
+    kill_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if enable:
+        kill_file.write_text('1\n')
+        resp = {'ok': True, 'status': 'enabled', 'path': str(kill_file)}
+    elif disable:
+        kill_file.unlink(missing_ok=True)
+        resp = {'ok': True, 'status': 'disabled', 'path': str(kill_file)}
+    else:
+        resp = {
+            'ok': True,
+            'status': 'enabled' if kill_file.exists() else 'disabled',
+            'path': str(kill_file),
+        }
+
+    _print_response(resp, as_json)

@@ -113,6 +113,10 @@ class MyStrategy(Strategy):
     async def process_event(self, event: Event, trader: Trader) -> None:
         # Your logic here
         pass
+
+    # Optional: respect control-plane pause/resume.
+    # if self.is_paused():
+    #     return
 ```
 
 ## CLI
@@ -120,26 +124,50 @@ class MyStrategy(Strategy):
 After installation, the `swm-agent` command is available:
 
 ```bash
-swm-agent monitor              # Portfolio snapshot
-swm-agent monitor --watch      # Live auto-refresh dashboard
-swm-agent monitor -w -r 1.0    # Refresh every 1 second
+# Strategy scaffolding + validation
+swm-agent strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
+swm-agent strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+
+# Backtest mode
+swm-agent backtest run \
+  --history-file ./data/history.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy
+
+# Paper trading mode (simulation with live data)
+swm-agent paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
+swm-agent paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
+swm-agent paper run --exchange rss --strategy-ref ./strategies/my_strategy.py:MyStrategy
+
+# Real trading mode
+swm-agent live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+swm-agent live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
+
+# Operator monitor + emergency control
+swm-agent monitor
+swm-agent trade status
+swm-agent trade pause
+swm-agent trade resume
+swm-agent trade estop
 ```
 
 ## Risk Management
 
 Three built-in tiers:
 
-| Setting | Conservative | Standard (custom) | Aggressive |
-|---|---|---|---|
-| Max Trade Size | $500 | configurable | $5,000 |
-| Max Position | $2,000 | configurable | $20,000 |
-| Max Exposure | $10,000 | configurable | $100,000 |
-| Max Drawdown | 10% | configurable | 30% |
+| Setting        | Conservative | Standard (custom) | Aggressive |
+| -------------- | ------------ | ----------------- | ---------- |
+| Max Trade Size | $500         | configurable      | $5,000     |
+| Max Position   | $2,000       | configurable      | $20,000    |
+| Max Exposure   | $10,000      | configurable      | $100,000   |
+| Max Drawdown   | 10%          | configurable      | 30%        |
 
 ## Environment Variables
 
 ```bash
 export POLYMARKET_PRIVATE_KEY="your_private_key"   # Required for live trading
+export KALSHI_API_KEY_ID="your_kalshi_key_id"      # Required for Kalshi live trading
+export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"     # Required for Kalshi live trading
 export NEWS_API_KEY="your_news_api_key"             # Optional, for News API source
 ```
 

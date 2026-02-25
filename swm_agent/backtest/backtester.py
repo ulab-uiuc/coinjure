@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 async def run_live_simulation(
     live_data_source: LiveNewsDataSource,
-    ticker_symbol: str,
+    ticker_symbol: PolyMarketTicker,
     initial_capital: Decimal,
     strategy: Strategy,
 ) -> None:
@@ -48,16 +48,16 @@ async def run_live_simulation(
         data_source=live_data_source, strategy=strategy, trader=trader
     )
 
-    # Start the live data source polling
-    await live_data_source.start()
-
     # Run the trading engine
     await engine.start()
     logger.info('Live simulation stopped.')
 
 
 async def run_backtest(
-    history_file: str, ticker_symbol: str, initial_capital: Decimal, strategy: Strategy
+    history_file: str,
+    ticker_symbol: PolyMarketTicker,
+    initial_capital: Decimal,
+    strategy: Strategy,
 ) -> None:
     data_source = HistoricalDataSource(history_file, ticker_symbol)
     market_data = MarketDataManager()
