@@ -9,7 +9,7 @@ Get started with trading monitoring in 5 minutes.
 poetry install
 
 # Verify installation
-swm-agent --version
+pred-market-cli --version
 ```
 
 ## Usage
@@ -30,16 +30,16 @@ python examples/demo_monitor.py
 
 ```bash
 # Single snapshot
-swm-agent monitor
+pred-market-cli monitor
 
 # Live updates (default: 2 second refresh)
-swm-agent monitor --watch
+pred-market-cli monitor --watch
 
 # Faster updates (1 second refresh)
-swm-agent monitor -w -r 1.0
+pred-market-cli monitor -w -r 1.0
 
 # Slower updates (5 second refresh)
-swm-agent monitor -w -r 5.0
+pred-market-cli monitor -w -r 5.0
 ```
 
 ### 3. Integration Patterns
@@ -47,7 +47,7 @@ swm-agent monitor -w -r 5.0
 #### Pattern A: Wrap Your Existing Engine
 
 ```python
-from swm_agent.cli.utils import add_monitoring_to_engine
+from pred_market_cli.cli.utils import add_monitoring_to_engine
 
 # Your existing code
 engine = TradingEngine(data_source, strategy, trader)
@@ -62,7 +62,7 @@ await monitored.start()
 #### Pattern B: Manual Monitor Control
 
 ```python
-from swm_agent.cli.monitor import TradingMonitor
+from pred_market_cli.cli.monitor import TradingMonitor
 
 # After initializing trader
 monitor = TradingMonitor(trader, trader.position_manager)
@@ -78,7 +78,7 @@ monitor.display_live(refresh_rate=2.0)
 
 ```python
 import threading
-from swm_agent.cli.monitor import TradingMonitor
+from pred_market_cli.cli.monitor import TradingMonitor
 
 def run_bg_monitor(trader, pm):
     monitor = TradingMonitor(trader, pm)
@@ -99,7 +99,7 @@ await engine.start()
 
 ```
 ┌────────────────────────────────────────┐
-│     SWM Agent - Trading Monitor        │
+│     Pred Market CLI - Trading Monitor        │
 └────────────────────────────────────────┘
 
 Portfolio Summary          Active Positions
@@ -127,14 +127,14 @@ python your_strategy.py --watch --refresh 1.0
 
 ```bash
 # Conservative monitoring (less CPU)
-swm-agent monitor --watch --refresh 5.0
+pred-market-cli monitor --watch --refresh 5.0
 ```
 
 ### Performance Analysis
 
 ```bash
 # Snapshot after session
-swm-agent monitor > session_report.txt
+pred-market-cli monitor > session_report.txt
 ```
 
 ## Keyboard Shortcuts
@@ -182,4 +182,4 @@ swm-agent monitor > session_report.txt
 Issues? Questions? See:
 
 - [CLI Monitoring Documentation](CLI_MONITORING.md)
-- [GitHub Issues](https://github.com/ulab-uiuc/swm-agent/issues)
+- [GitHub Issues](https://github.com/ulab-uiuc/pred-market-cli/issues)

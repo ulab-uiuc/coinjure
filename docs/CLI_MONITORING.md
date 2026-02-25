@@ -1,6 +1,6 @@
 # Trading Monitor CLI Documentation
 
-The SWM Agent CLI provides comprehensive monitoring capabilities for your trading activities, positions, and portfolio status.
+The Pred Market CLI CLI provides comprehensive monitoring capabilities for your trading activities, positions, and portfolio status.
 
 ## Features
 
@@ -20,14 +20,14 @@ After installing dependencies:
 poetry install
 ```
 
-The CLI is available via the `swm-agent` command.
+The CLI is available via the `pred-market-cli` command.
 
 ## CLI Commands
 
 ### Monitor Command
 
 ```bash
-swm-agent monitor [OPTIONS]
+pred-market-cli monitor [OPTIONS]
 ```
 
 #### Options
@@ -41,19 +41,19 @@ swm-agent monitor [OPTIONS]
 **Single snapshot:**
 
 ```bash
-swm-agent monitor
+pred-market-cli monitor
 ```
 
 **Live monitoring mode:**
 
 ```bash
-swm-agent monitor --watch
+pred-market-cli monitor --watch
 ```
 
 **Live mode with custom refresh rate:**
 
 ```bash
-swm-agent monitor -w -r 1.0  # Update every 1 second
+pred-market-cli monitor -w -r 1.0  # Update every 1 second
 ```
 
 ## Integration with Trading Engine
@@ -63,8 +63,8 @@ swm-agent monitor -w -r 1.0  # Update every 1 second
 The simplest way to add monitoring to your trading workflow:
 
 ```python
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.cli.utils import add_monitoring_to_engine
+from pred_market_cli.core.trading_engine import TradingEngine
+from pred_market_cli.cli.utils import add_monitoring_to_engine
 
 # Create your trading engine
 engine = TradingEngine(
@@ -89,7 +89,7 @@ await monitored_engine.start()
 For more control, use the `TradingMonitor` class directly:
 
 ```python
-from swm_agent.cli.monitor import TradingMonitor
+from pred_market_cli.cli.monitor import TradingMonitor
 
 # After initializing your trader and position manager
 monitor = TradingMonitor(
@@ -111,7 +111,7 @@ Run the monitor in a separate thread while your trading engine runs:
 ```python
 import asyncio
 import threading
-from swm_agent.cli.monitor import TradingMonitor
+from pred_market_cli.cli.monitor import TradingMonitor
 
 def run_monitor(trader, position_manager, refresh_rate=2.0):
     monitor = TradingMonitor(trader, position_manager)
@@ -201,7 +201,7 @@ Session statistics:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│            SWM Agent - Trading Monitor                          │
+│            Pred Market CLI - Trading Monitor                          │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────┐  ┌──────────────────────────────────┐

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
-from swm_agent.cli.cli import cli
+from pred_market_cli.cli.cli import cli
 
 
 def test_strategy_create_and_validate(tmp_path):
@@ -48,7 +48,9 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
     async def fake_run_backtest(**kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr('swm_agent.cli.agent_commands.run_backtest', fake_run_backtest)
+    monkeypatch.setattr(
+        'pred_market_cli.cli.agent_commands.run_backtest', fake_run_backtest
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -63,7 +65,7 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
             '--event-id',
             'E1',
             '--strategy-ref',
-            'swm_agent.strategy.test_strategy:TestStrategy',
+            'pred_market_cli.strategy.test_strategy:TestStrategy',
         ],
     )
     assert result.exit_code == 0
@@ -85,13 +87,13 @@ def test_paper_and_live_commands_invokable(monkeypatch):
         captured['live_kwargs'] = kwargs
 
     monkeypatch.setattr(
-        'swm_agent.cli.agent_commands.LivePolyMarketDataSource', DummySource
+        'pred_market_cli.cli.agent_commands.LivePolyMarketDataSource', DummySource
     )
     monkeypatch.setattr(
-        'swm_agent.cli.agent_commands.run_live_paper_trading', fake_paper
+        'pred_market_cli.cli.agent_commands.run_live_paper_trading', fake_paper
     )
     monkeypatch.setattr(
-        'swm_agent.cli.agent_commands.run_live_polymarket_trading', fake_live
+        'pred_market_cli.cli.agent_commands.run_live_polymarket_trading', fake_live
     )
 
     runner = CliRunner()
@@ -105,7 +107,7 @@ def test_paper_and_live_commands_invokable(monkeypatch):
             '--duration',
             '1',
             '--strategy-ref',
-            'swm_agent.strategy.test_strategy:TestStrategy',
+            'pred_market_cli.strategy.test_strategy:TestStrategy',
         ],
     )
     assert paper_res.exit_code == 0
@@ -123,7 +125,7 @@ def test_paper_and_live_commands_invokable(monkeypatch):
             '--duration',
             '1',
             '--strategy-ref',
-            'swm_agent.strategy.test_strategy:TestStrategy',
+            'pred_market_cli.strategy.test_strategy:TestStrategy',
         ],
     )
     assert live_res.exit_code == 0

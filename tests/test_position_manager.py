@@ -2,11 +2,11 @@ from decimal import Decimal
 
 import pytest
 
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.order.order_book import Level, OrderBook
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
-from swm_agent.trader.types import Trade, TradeSide
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.order.order_book import Level, OrderBook
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pred_market_cli.trader.types import Trade, TradeSide
 
 
 @pytest.fixture
