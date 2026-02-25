@@ -6,10 +6,10 @@ from decimal import Decimal
 
 import pytest
 
-from swm_agent.live import live_trader
-from swm_agent.position.position_manager import Position
-from swm_agent.risk.risk_manager import NoRiskManager
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
+from pred_market_cli.live import live_trader
+from pred_market_cli.position.position_manager import Position
+from pred_market_cli.risk.risk_manager import NoRiskManager
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,12 @@
-# SWM Agent: Social World Model Trading Agent
+# Pred Market CLI: Social World Model Trading Agent
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyPI version](https://img.shields.io/pypi/v/swm-agent.svg)](https://pypi.org/project/swm-agent/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/swm-agent/blob/main/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/pred-market-cli.svg)](https://pypi.org/project/pred-market-cli/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/pred-market-cli/blob/main/LICENSE)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 
-**SWM Agent** is an intelligent trading agent for [Polymarket](https://polymarket.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
+**Pred Market CLI** is an intelligent trading agent for [Polymarket](https://polymarket.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
 
 ## Key Features
 
@@ -32,14 +32,14 @@ TradingEngine
 ## Installation
 
 ```bash
-pip install swm-agent
+pip install pred-market-cli
 ```
 
 Or install from source with [Poetry](https://python-poetry.org/):
 
 ```bash
-git clone https://github.com/ulab-uiuc/swm-agent.git
-cd swm-agent
+git clone https://github.com/ulab-uiuc/pred-market-cli.git
+cd pred-market-cli
 pip install poetry
 poetry install
 ```
@@ -54,14 +54,14 @@ poetry install
 import asyncio
 from decimal import Decimal
 
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.data.backtest.historical_data_source import HistoricalDataSource
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import NoRiskManager
-from swm_agent.strategy.test_strategy import TestStrategy
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
-from swm_agent.trader.paper_trader import PaperTrader
+from pred_market_cli.core.trading_engine import TradingEngine
+from pred_market_cli.data.backtest.historical_data_source import HistoricalDataSource
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import NoRiskManager
+from pred_market_cli.strategy.test_strategy import TestStrategy
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pred_market_cli.trader.paper_trader import PaperTrader
 
 async def run():
     ticker = PolyMarketTicker(symbol="my_market", name="My Market",
@@ -90,9 +90,9 @@ asyncio.run(run())
 import asyncio
 from decimal import Decimal
 
-from swm_agent.data.live.live_data_source import LiveRSSNewsDataSource
-from swm_agent.live.live_trader import run_live_paper_trading
-from swm_agent.strategy.test_strategy import TestStrategy
+from pred_market_cli.data.live.live_data_source import LiveRSSNewsDataSource
+from pred_market_cli.live.live_trader import run_live_paper_trading
+from pred_market_cli.strategy.test_strategy import TestStrategy
 
 asyncio.run(run_live_paper_trading(
     data_source=LiveRSSNewsDataSource(polling_interval=60.0, max_articles_per_poll=5),
@@ -105,9 +105,9 @@ asyncio.run(run_live_paper_trading(
 ### Custom Strategy
 
 ```python
-from swm_agent.strategy.strategy import Strategy
-from swm_agent.events.events import Event
-from swm_agent.trader.trader import Trader
+from pred_market_cli.strategy.strategy import Strategy
+from pred_market_cli.events.events import Event
+from pred_market_cli.trader.trader import Trader
 
 class MyStrategy(Strategy):
     async def process_event(self, event: Event, trader: Trader) -> None:
@@ -121,62 +121,62 @@ class MyStrategy(Strategy):
 
 ## CLI
 
-After installation, the `swm-agent` command is available:
+After installation, the `pred-market-cli` command is available:
 
 ```bash
 # Strategy scaffolding + validation
-swm-agent strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
-swm-agent strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pred-market-cli strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
+pred-market-cli strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Backtest mode
-swm-agent backtest run \
+pred-market-cli backtest run \
   --history-file ./data/history.jsonl \
   --market-id M1 --event-id E1 \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Paper trading mode (simulation with live data)
-swm-agent paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
-swm-agent paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
-swm-agent paper run --exchange rss --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pred-market-cli paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pred-market-cli paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pred-market-cli paper run --exchange rss --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Real trading mode
-swm-agent live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
-swm-agent live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
+pred-market-cli live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+pred-market-cli live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
 
 # Operator monitor + emergency control
-swm-agent monitor
-swm-agent trade status
-swm-agent trade pause
-swm-agent trade resume
-swm-agent trade estop
+pred-market-cli monitor
+pred-market-cli trade status
+pred-market-cli trade pause
+pred-market-cli trade resume
+pred-market-cli trade estop
 ```
 
 ### Minimal Commands
 
 ```bash
 # 1) Minimal backtest
-swm-agent backtest run \
+pred-market-cli backtest run \
   --history-file ./data/history.jsonl \
   --market-id M1 --event-id E1 \
-  --strategy-ref swm_agent.strategy.test_strategy:TestStrategy
+  --strategy-ref pred_market_cli.strategy.test_strategy:TestStrategy
 
 # 2) Minimal paper trading (simulation)
-swm-agent paper run \
+pred-market-cli paper run \
   --exchange polymarket \
-  --strategy-ref swm_agent.strategy.test_strategy:TestStrategy
+  --strategy-ref pred_market_cli.strategy.test_strategy:TestStrategy
 
 # 3) Minimal live trading (real orders)
-swm-agent live run \
+pred-market-cli live run \
   --exchange polymarket \
   --wallet-private-key "$POLYMARKET_PRIVATE_KEY" \
-  --strategy-ref swm_agent.strategy.test_strategy:TestStrategy
+  --strategy-ref pred_market_cli.strategy.test_strategy:TestStrategy
 ```
 
 ### Monitor (for human operator)
 
-- Start monitor: `swm-agent monitor`
-- Check/pause/resume/stop: `swm-agent trade status|pause|resume|estop`
-- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.swm/engine.sock`); closing monitor does not stop engine.
+- Start monitor: `pred-market-cli monitor`
+- Check/pause/resume/stop: `pred-market-cli trade status|pause|resume|estop`
+- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.pred-market-cli/engine.sock`); closing monitor does not stop engine.
 
 ## Risk Management
 
@@ -208,7 +208,7 @@ pre-commit install
 ruff check . && ruff format .
 
 # Type check
-mypy swm_agent/
+mypy pred_market_cli/
 
 # Test
 pytest tests/ -v
@@ -216,7 +216,7 @@ pytest tests/ -v
 
 ## License
 
-[Apache 2.0](https://github.com/ulab-uiuc/swm-agent/blob/main/LICENSE)
+[Apache 2.0](https://github.com/ulab-uiuc/pred-market-cli/blob/main/LICENSE)
 
 ## Disclaimer
 

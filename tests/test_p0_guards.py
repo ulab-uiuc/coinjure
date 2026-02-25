@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from swm_agent.cli.control import ControlServer
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.order.order_book import Level, OrderBook
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import NoRiskManager
-from swm_agent.ticker.ticker import CashTicker, PolyMarketTicker
-from swm_agent.trader.paper_trader import PaperTrader
-from swm_agent.trader.types import OrderFailureReason, TradeSide
+from pred_market_cli.cli.control import ControlServer
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.order.order_book import Level, OrderBook
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import NoRiskManager
+from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pred_market_cli.trader.paper_trader import PaperTrader
+from pred_market_cli.trader.types import OrderFailureReason, TradeSide
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ async def test_kill_switch_file_blocks_orders(
 ):
     kill_file = tmp_path / 'kill.switch'
     kill_file.write_text('1\n')
-    monkeypatch.setenv('SWM_KILL_SWITCH_FILE', str(kill_file))
+    monkeypatch.setenv('PRED_MARKET_CLI_KILL_SWITCH_FILE', str(kill_file))
 
     result = await paper_trader.place_order(
         side=TradeSide.BUY,

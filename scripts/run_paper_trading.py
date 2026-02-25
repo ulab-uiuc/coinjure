@@ -19,21 +19,21 @@ from decimal import Decimal
 import click
 from dotenv import load_dotenv
 
-from swm_agent.cli.utils import add_monitoring_to_engine
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.data.composite_data_source import CompositeDataSource
-from swm_agent.data.live.google_news_data_source import GoogleNewsDataSource
-from swm_agent.data.live.kalshi_data_source import LiveKalshiDataSource
-from swm_agent.data.live.live_data_source import (
+from pred_market_cli.cli.utils import add_monitoring_to_engine
+from pred_market_cli.core.trading_engine import TradingEngine
+from pred_market_cli.data.composite_data_source import CompositeDataSource
+from pred_market_cli.data.live.google_news_data_source import GoogleNewsDataSource
+from pred_market_cli.data.live.kalshi_data_source import LiveKalshiDataSource
+from pred_market_cli.data.live.live_data_source import (
     LivePolyMarketDataSource,
     LiveRSSNewsDataSource,
 )
-from swm_agent.data.market_data_manager import MarketDataManager
-from swm_agent.position.position_manager import Position, PositionManager
-from swm_agent.risk.risk_manager import StandardRiskManager
-from swm_agent.strategy.simple_strategy import SimpleStrategy
-from swm_agent.ticker.ticker import CashTicker
-from swm_agent.trader.paper_trader import PaperTrader
+from pred_market_cli.data.market_data_manager import MarketDataManager
+from pred_market_cli.position.position_manager import Position, PositionManager
+from pred_market_cli.risk.risk_manager import StandardRiskManager
+from pred_market_cli.strategy.simple_strategy import SimpleStrategy
+from pred_market_cli.ticker.ticker import CashTicker
+from pred_market_cli.trader.paper_trader import PaperTrader
 
 load_dotenv()
 
@@ -228,14 +228,18 @@ async def _main(exchange: str, monitor: bool, duration: int) -> None:
 
 @click.command()
 @click.option(
-    '--exchange', '-e',
+    '--exchange',
+    '-e',
     required=True,
     type=click.Choice(['kalshi', 'polymarket'], case_sensitive=False),
     help='Exchange to paper trade on.',
 )
 @click.option('--monitor', '-m', is_flag=True, help='Enable live terminal dashboard')
 @click.option(
-    '--duration', '-d', default=0, type=int,
+    '--duration',
+    '-d',
+    default=0,
+    type=int,
     help='Duration in seconds (0 = run forever, default: 0)',
 )
 def main(exchange: str, monitor: bool, duration: int) -> None:

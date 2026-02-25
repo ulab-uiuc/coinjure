@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from swm_agent.order.order_book import Level, OrderBook
+from pred_market_cli.order.order_book import Level, OrderBook
 
 
 class TestLevel:

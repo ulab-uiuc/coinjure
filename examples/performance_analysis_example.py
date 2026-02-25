@@ -12,9 +12,9 @@ and analyze trading performance. It shows how to:
 
 from decimal import Decimal
 
-from swm_agent.analytics.performance_analyzer import PerformanceAnalyzer
-from swm_agent.ticker.ticker import PolyMarketTicker
-from swm_agent.trader.types import Trade, TradeSide
+from pred_market_cli.analytics.performance_analyzer import PerformanceAnalyzer
+from pred_market_cli.ticker.ticker import PolyMarketTicker
+from pred_market_cli.trader.types import Trade, TradeSide
 
 
 def create_test_ticker() -> PolyMarketTicker:
@@ -313,7 +313,7 @@ def example_reset_and_compare():
 
 def main():
     """Run all performance analysis examples."""
-    print('SWM Agent - Performance Analysis Examples\n')
+    print('Pred Market CLI - Performance Analysis Examples\n')
 
     example_basic_analysis()
     example_extended_analysis()

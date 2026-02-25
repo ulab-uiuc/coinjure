@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from swm_agent.alerts.alerter import Alerter, CompositeAlerter, LogAlerter
-from swm_agent.alerts.telegram_alerter import TelegramAlerter
-from swm_agent.ticker.ticker import PolyMarketTicker
-from swm_agent.trader.types import OrderFailureReason, Trade, TradeSide
+from pred_market_cli.alerts.alerter import Alerter, CompositeAlerter, LogAlerter
+from pred_market_cli.alerts.telegram_alerter import TelegramAlerter
+from pred_market_cli.ticker.ticker import PolyMarketTicker
+from pred_market_cli.trader.types import OrderFailureReason, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -126,7 +126,7 @@ async def test_telegram_alerter_swallows_network_error():
     alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
 
     with patch(
-        'swm_agent.alerts.telegram_alerter.httpx.AsyncClient'
+        'pred_market_cli.alerts.telegram_alerter.httpx.AsyncClient'
     ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -151,7 +151,7 @@ async def test_telegram_alerter_sends_correct_url():
         return resp
 
     with patch(
-        'swm_agent.alerts.telegram_alerter.httpx.AsyncClient'
+        'pred_market_cli.alerts.telegram_alerter.httpx.AsyncClient'
     ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -172,7 +172,7 @@ async def test_telegram_alerter_swallows_http_error_response():
     alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
 
     with patch(
-        'swm_agent.alerts.telegram_alerter.httpx.AsyncClient'
+        'pred_market_cli.alerts.telegram_alerter.httpx.AsyncClient'
     ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)

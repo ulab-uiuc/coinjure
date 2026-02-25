@@ -3,11 +3,11 @@
 This example shows how to run a trading engine with live monitoring.
 """
 
-from swm_agent.cli.monitor import TradingMonitor
-from swm_agent.core.trading_engine import TradingEngine
-from swm_agent.data.data_source import DataSource
-from swm_agent.strategy.strategy import Strategy
-from swm_agent.trader.trader import Trader
+from pred_market_cli.cli.monitor import TradingMonitor
+from pred_market_cli.core.trading_engine import TradingEngine
+from pred_market_cli.data.data_source import DataSource
+from pred_market_cli.strategy.strategy import Strategy
+from pred_market_cli.trader.trader import Trader
 
 
 async def run_trading_with_monitor(
@@ -50,22 +50,22 @@ def main() -> None:
     # Example setup (you would replace this with your actual configuration)
 
     # 1. Initialize your data source
-    # from swm_agent.data.live.polymarket_data_source import PolymarketDataSource
+    # from pred_market_cli.data.live.polymarket_data_source import PolymarketDataSource
     # data_source = PolymarketDataSource(...)
 
     # 2. Initialize your strategy
-    # from swm_agent.strategy.simple_strategy import SimpleStrategy
+    # from pred_market_cli.strategy.simple_strategy import SimpleStrategy
     # strategy = SimpleStrategy(...)
 
     # 3. Initialize your trader
     # For paper trading:
-    # from swm_agent.ticker.ticker import CashTicker
-    # from swm_agent.trader.paper_trader import PaperTrader
+    # from pred_market_cli.ticker.ticker import CashTicker
+    # from pred_market_cli.trader.paper_trader import PaperTrader
     # initial_cash = {CashTicker('USDC'): Decimal('10000')}
     # trader = PaperTrader(initial_cash=initial_cash)
 
     # For live trading:
-    # from swm_agent.trader.polymarket_trader import PolymarketTrader
+    # from pred_market_cli.trader.polymarket_trader import PolymarketTrader
     # trader = PolymarketTrader(...)
 
     # 4. Run with monitoring
@@ -80,9 +80,9 @@ def main() -> None:
     print('This is an example integration script.')
     print('Uncomment and configure the code above to run with your trading setup.')
     print('\nFor CLI usage:')
-    print('  swm-agent monitor              # Single snapshot')
-    print('  swm-agent monitor --watch      # Live updates')
-    print('  swm-agent monitor -w -r 1.0    # Live with 1s refresh')
+    print('  pred-market-cli monitor              # Single snapshot')
+    print('  pred-market-cli monitor --watch      # Live updates')
+    print('  pred-market-cli monitor -w -r 1.0    # Live with 1s refresh')
 
 
 if __name__ == '__main__':
