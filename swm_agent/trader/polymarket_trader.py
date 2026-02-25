@@ -210,8 +210,18 @@ class PolymarketTrader(Trader):
                 pass
 
     async def place_order(  # noqa: C901
-        self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
+        self,
+        side: TradeSide,
+        ticker: Ticker,
+        limit_price: Decimal,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> PlaceOrderResult:
+        guard_failure = self._check_order_guard(client_order_id)
+        if guard_failure is not None:
+            await self._alert_rejected(guard_failure, ticker)
+            return PlaceOrderResult(order=None, failure_reason=guard_failure)
+
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
             await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)

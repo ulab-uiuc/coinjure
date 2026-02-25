@@ -32,6 +32,8 @@ class OrderFailureReason(Enum):
     RISK_CHECK_FAILED = 'risk_check_failed'
     INVALID_ORDER = 'invalid_order'
     INSUFFICIENT_CASH = 'insufficient_cash'
+    DUPLICATE_ORDER = 'duplicate_order'
+    TRADING_DISABLED = 'trading_disabled'
     UNKNOWN = 'unknown'
 
 

@@ -129,15 +129,21 @@ class ControlServer:
         self.paused = True
         # Propagate to strategy so LLM decisions are skipped
         strategy = getattr(self.engine, 'strategy', None)
+        trader = getattr(self.engine, 'trader', None)
         if strategy is not None:
-            strategy._control_paused = True
+            strategy.set_paused(True)
+        if trader is not None:
+            trader.set_read_only(True)
         return {'ok': True, 'status': 'paused'}
 
     def _cmd_resume(self) -> dict:
         self.paused = False
         strategy = getattr(self.engine, 'strategy', None)
+        trader = getattr(self.engine, 'trader', None)
         if strategy is not None:
-            strategy._control_paused = False
+            strategy.set_paused(False)
+        if trader is not None:
+            trader.set_read_only(False)
         return {'ok': True, 'status': 'running'}
 
     def _cmd_get_state(self) -> dict:  # noqa: C901  (deliberately comprehensive)
