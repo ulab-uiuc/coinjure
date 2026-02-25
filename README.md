@@ -151,6 +151,33 @@ swm-agent trade resume
 swm-agent trade estop
 ```
 
+### Minimal Commands
+
+```bash
+# 1) Minimal backtest
+swm-agent backtest run \
+  --history-file ./data/history.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref swm_agent.strategy.test_strategy:TestStrategy
+
+# 2) Minimal paper trading (simulation)
+swm-agent paper run \
+  --exchange polymarket \
+  --strategy-ref swm_agent.strategy.test_strategy:TestStrategy
+
+# 3) Minimal live trading (real orders)
+swm-agent live run \
+  --exchange polymarket \
+  --wallet-private-key "$POLYMARKET_PRIVATE_KEY" \
+  --strategy-ref swm_agent.strategy.test_strategy:TestStrategy
+```
+
+### Monitor (for human operator)
+
+- Start monitor: `swm-agent monitor`
+- Check/pause/resume/stop: `swm-agent trade status|pause|resume|estop`
+- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.swm/engine.sock`); closing monitor does not stop engine.
+
 ## Risk Management
 
 Three built-in tiers:
