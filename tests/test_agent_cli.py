@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import textwrap
+from pathlib import Path
+
 from click.testing import CliRunner
 
 from pm_cli.cli.cli import cli
@@ -69,6 +72,115 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert captured['history_file'] == str(history_file)
     assert captured['ticker_symbol'].market_id == 'M1'
+
+
+def test_strategy_validate_with_kwargs_json(tmp_path):
+    strategy_file = tmp_path / 'needs_kwargs.py'
+    strategy_file.write_text(
+        textwrap.dedent(
+            """
+            from pm_cli.events.events import Event
+            from pm_cli.strategy.strategy import Strategy
+            from pm_cli.trader.trader import Trader
+
+            class NeedsKwargs(Strategy):
+                def __init__(self, threshold: float):
+                    self.threshold = threshold
+
+                async def process_event(self, event: Event, trader: Trader) -> None:
+                    return
+            """
+        ).strip()
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'strategy',
+            'validate',
+            '--strategy-ref',
+            f'{strategy_file}:NeedsKwargs',
+            '--strategy-kwargs-json',
+            '{"threshold": 0.7}',
+            '--json',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"ok": true' in result.output
+    assert '"threshold": 0.7' in result.output
+
+
+def test_strategy_dry_run_with_kwargs_json(tmp_path):
+    strategy_file = tmp_path / 'dry_run_strategy.py'
+    strategy_file.write_text(
+        textwrap.dedent(
+            """
+            from pm_cli.events.events import Event
+            from pm_cli.strategy.strategy import Strategy
+            from pm_cli.trader.trader import Trader
+
+            class DryRunStrategy(Strategy):
+                def __init__(self, multiplier: int):
+                    self.multiplier = multiplier
+
+                async def process_event(self, event: Event, trader: Trader) -> None:
+                    return
+            """
+        ).strip()
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'strategy',
+            'dry-run',
+            '--strategy-ref',
+            f'{strategy_file}:DryRunStrategy',
+            '--strategy-kwargs-json',
+            '{"multiplier": 2}',
+            '--events',
+            '6',
+            '--json',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"ok": true' in result.output
+    assert '"events_processed": 6' in result.output
+
+
+def test_example_strategy_files_validate() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    momentum = repo_root / 'examples' / 'strategies' / 'threshold_momentum_strategy.py'
+    pressure = repo_root / 'examples' / 'strategies' / 'orderbook_pressure_strategy.py'
+
+    runner = CliRunner()
+    result1 = runner.invoke(
+        cli,
+        [
+            'strategy',
+            'validate',
+            '--strategy-ref',
+            f'{momentum}:ThresholdMomentumStrategy',
+            '--json',
+        ],
+    )
+    result2 = runner.invoke(
+        cli,
+        [
+            'strategy',
+            'validate',
+            '--strategy-ref',
+            f'{pressure}:OrderBookPressureStrategy',
+            '--json',
+        ],
+    )
+
+    assert result1.exit_code == 0
+    assert result2.exit_code == 0
 
 
 def test_paper_and_live_commands_invokable(monkeypatch):

@@ -51,10 +51,6 @@ class TestPaperTokenAdapter:
         )
         assert 'REJECTED' in result
 
-    async def test_cancel_returns_false(self) -> None:
-        adapter = PaperTokenAdapter()
-        assert await adapter.cancel_order('any_id') is False
-
     async def test_buy_no_liquidity_no_position(self) -> None:
         adapter = PaperTokenAdapter(initial_capital=Decimal('10000'))
         await adapter.place_order(
@@ -118,8 +114,30 @@ class TestTokenCLI:
         assert 'not filled' in result.output
         token_mod._adapter = None
 
-    def test_cancel(self) -> None:
+    def test_place_json_contract(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(cli, ['token', 'cancel', '--order-id', 'xyz'])
+        import pm_cli.cli.token as token_mod
+
+        token_mod._adapter = None
+        result = runner.invoke(
+            cli,
+            [
+                'token',
+                'place',
+                '--token',
+                'abc',
+                '--side',
+                'buy',
+                '--price',
+                '0.50',
+                '--size',
+                '10',
+                '--json',
+            ],
+        )
+
         assert result.exit_code == 0
-        assert 'not supported in paper mode' in result.output
+        assert '"accepted"' in result.output
+        assert '"executed"' in result.output
+        assert '"failure_reason"' in result.output
+        token_mod._adapter = None

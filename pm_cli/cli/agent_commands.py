@@ -10,6 +10,7 @@ import os
 import uuid
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -21,7 +22,7 @@ from pm_cli.data.live.live_data_source import (
     LivePolyMarketDataSource,
     LiveRSSNewsDataSource,
 )
-from pm_cli.events.events import Event
+from pm_cli.events.events import Event, OrderBookEvent, PriceChangeEvent
 from pm_cli.live.live_trader import (
     run_live_kalshi_paper_trading,
     run_live_kalshi_trading,
@@ -42,9 +43,23 @@ class _IdleStrategy(Strategy):
 
 def _emit(payload: dict, *, as_json: bool) -> None:
     if as_json:
-        click.echo(json.dumps(payload))
+        click.echo(json.dumps(payload, default=str))
     else:
         click.echo(payload.get('message', str(payload)))
+
+
+def _parse_strategy_kwargs_json(strategy_kwargs_json: str | None) -> dict[str, Any]:
+    if not strategy_kwargs_json:
+        return {}
+    try:
+        parsed = json.loads(strategy_kwargs_json)
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(
+            f'Invalid --strategy-kwargs-json: {exc.msg}'
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise click.ClickException('--strategy-kwargs-json must be a JSON object.')
+    return parsed
 
 
 def _confirm_live_trading(*, as_json: bool) -> None:
@@ -146,14 +161,53 @@ def _load_strategy_class(strategy_ref: str) -> type[Strategy]:
     return strategy_cls
 
 
-def _load_strategy(strategy_ref: str) -> Strategy:
+def _load_strategy(
+    strategy_ref: str, strategy_kwargs: dict[str, Any] | None = None
+) -> Strategy:
+    kwargs = strategy_kwargs or {}
     strategy_cls = _load_strategy_class(strategy_ref)
     try:
-        return strategy_cls()
+        return strategy_cls(**kwargs)
     except TypeError as exc:
         raise click.ClickException(
-            f'Could not instantiate strategy {strategy_ref!r} with zero arguments: {exc}'
+            f'Could not instantiate strategy {strategy_ref!r} with kwargs={kwargs}: {exc}'
         ) from exc
+
+
+def _build_mock_events(ticker: PolyMarketTicker, n_events: int) -> list[Event]:
+    prices = [
+        Decimal('0.47'),
+        Decimal('0.49'),
+        Decimal('0.46'),
+        Decimal('0.51'),
+        Decimal('0.48'),
+    ]
+    events: list[Event] = []
+    for i in range(max(1, n_events)):
+        base = prices[i % len(prices)]
+        if i % 2 == 0:
+            events.append(
+                PriceChangeEvent(
+                    ticker=ticker,
+                    price=base,
+                    timestamp=i + 1,
+                )
+            )
+            continue
+
+        side = 'bid' if i % 4 == 1 else 'ask'
+        price = base - Decimal('0.01') if side == 'bid' else base + Decimal('0.01')
+        size = Decimal('100') + Decimal(i * 10)
+        events.append(
+            OrderBookEvent(
+                ticker=ticker,
+                price=price,
+                size=size,
+                size_delta=Decimal('10'),
+                side=side,
+            )
+        )
+    return events
 
 
 @click.group()
@@ -215,18 +269,139 @@ class {class_name}(Strategy):
     required=True,
     help='Strategy ref: module:Class or /path/file.py:Class',
 )
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON result')
-def strategy_validate(strategy_ref: str, as_json: bool) -> None:
+def strategy_validate(
+    strategy_ref: str, strategy_kwargs_json: str | None, as_json: bool
+) -> None:
     """Validate that a strategy is importable and constructible."""
-    strategy_obj = _load_strategy(strategy_ref)
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
     payload = {
         'ok': True,
         'strategy_ref': strategy_ref,
+        'strategy_kwargs': strategy_kwargs,
         'class': strategy_obj.__class__.__name__,
         'module': strategy_obj.__class__.__module__,
         'message': f'Valid strategy: {strategy_ref}',
     }
     _emit(payload, as_json=as_json)
+
+
+@strategy.command('dry-run')
+@click.option(
+    '--strategy-ref',
+    required=True,
+    help='Strategy ref: module:Class or /path/file.py:Class',
+)
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
+@click.option(
+    '--events',
+    default=8,
+    show_default=True,
+    type=click.IntRange(1, 50),
+    help='Number of mock events to feed.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON result')
+def strategy_dry_run(
+    strategy_ref: str,
+    strategy_kwargs_json: str | None,
+    events: int,
+    as_json: bool,
+) -> None:
+    """Quickly validate strategy runtime behavior on mock events."""
+    from pm_cli.data.market_data_manager import MarketDataManager
+    from pm_cli.position.position_manager import Position, PositionManager
+    from pm_cli.risk.risk_manager import NoRiskManager
+    from pm_cli.ticker.ticker import CashTicker
+    from pm_cli.trader.paper_trader import PaperTrader
+
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
+    ticker = PolyMarketTicker(
+        symbol='DRYRUN_YES',
+        name='Dry Run Market',
+        token_id='DRYRUN_YES',
+        market_id='DRYRUN_MKT',
+        event_id='DRYRUN_EVT',
+        no_token_id='DRYRUN_NO',
+    )
+
+    market_data = MarketDataManager()
+    position_manager = PositionManager()
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.POLYMARKET_USDC,
+            quantity=Decimal('10000'),
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+    trader = PaperTrader(
+        market_data=market_data,
+        risk_manager=NoRiskManager(),
+        position_manager=position_manager,
+        min_fill_rate=Decimal('1.0'),
+        max_fill_rate=Decimal('1.0'),
+        commission_rate=Decimal('0.0'),
+    )
+
+    event_stream = _build_mock_events(ticker, events)
+
+    async def _run_stream() -> tuple[int, str]:
+        processed = 0
+        error_message = ''
+        for event in event_stream:
+            if isinstance(event, OrderBookEvent):
+                market_data.process_orderbook_event(event)
+            elif isinstance(event, PriceChangeEvent):
+                market_data.process_price_change_event(event)
+            try:
+                await strategy_obj.process_event(event, trader)
+                processed += 1
+            except Exception as exc:  # noqa: BLE001
+                error_message = str(exc)
+                break
+        return processed, error_message
+
+    processed, error_message = asyncio.run(_run_stream())
+
+    decision_stats = strategy_obj.get_decision_stats()
+    decisions = strategy_obj.get_decisions()
+    payload = {
+        'ok': error_message == '',
+        'strategy_ref': strategy_ref,
+        'strategy_kwargs': strategy_kwargs,
+        'events_requested': events,
+        'events_processed': processed,
+        'orders_created': len(trader.orders),
+        'decision_stats': decision_stats,
+        'decisions_sample': [
+            {
+                'timestamp': d.timestamp,
+                'ticker_name': d.ticker_name,
+                'action': d.action,
+                'executed': d.executed,
+                'confidence': d.confidence,
+                'reasoning': d.reasoning,
+                'signal_values': d.signal_values,
+            }
+            for d in decisions[-5:]
+        ],
+        'error': error_message or None,
+        'message': 'Dry-run completed' if error_message == '' else 'Dry-run failed',
+    }
+    _emit(payload, as_json=as_json)
+    if error_message:
+        raise click.ClickException(f'Dry-run failed: {error_message}')
 
 
 @click.group()
@@ -248,6 +423,11 @@ def backtest() -> None:
     default='pm_cli.strategy.test_strategy:TestStrategy',
     show_default=True,
 )
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 def backtest_run(
     history_file: str,
@@ -257,10 +437,12 @@ def backtest_run(
     event_id: str,
     initial_capital: str,
     strategy_ref: str,
+    strategy_kwargs_json: str | None,
     as_json: bool,
 ) -> None:
     """Run backtest mode with historical data + paper execution."""
-    strategy_obj = _load_strategy(strategy_ref)
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
     ticker = PolyMarketTicker(
         symbol=symbol,
         name=name,
@@ -275,6 +457,7 @@ def backtest_run(
             'message': f'Starting backtest: {strategy_ref}',
             'history_file': history_file,
             'symbol': symbol,
+            'strategy_kwargs': strategy_kwargs,
         },
         as_json=as_json,
     )
@@ -309,6 +492,11 @@ def paper() -> None:
     default=None,
     help='Strategy ref: module:Class or /path/file.py:Class. If omitted, run in idle mode (no orders).',
 )
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 @click.option(
     '--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard'
@@ -318,11 +506,21 @@ def paper_run(
     duration: float | None,
     initial_capital: str,
     strategy_ref: str,
+    strategy_kwargs_json: str | None,
     as_json: bool,
     monitor: bool,
 ) -> None:
     """Run paper trading in simulation mode."""
-    strategy_obj = _load_strategy(strategy_ref) if strategy_ref else _IdleStrategy()
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    if strategy_kwargs and not strategy_ref:
+        raise click.ClickException(
+            '--strategy-kwargs-json requires --strategy-ref (idle mode has no strategy).'
+        )
+    strategy_obj = (
+        _load_strategy(strategy_ref, strategy_kwargs)
+        if strategy_ref
+        else _IdleStrategy()
+    )
     strategy_mode = 'active' if strategy_ref else 'idle'
     capital = Decimal(initial_capital)
     _emit(
@@ -330,6 +528,7 @@ def paper_run(
             'mode': 'paper',
             'exchange': exchange,
             'strategy_ref': strategy_ref,
+            'strategy_kwargs': strategy_kwargs,
             'strategy_mode': strategy_mode,
             'message': (
                 f'Starting paper mode ({exchange})'
@@ -401,6 +600,11 @@ def live() -> None:
     default=None,
     help='Strategy ref: module:Class or /path/file.py:Class. If omitted, run in idle mode (no orders).',
 )
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 @click.option(
     '--wallet-private-key',
@@ -424,6 +628,7 @@ def live_run(
     exchange: str,
     duration: float | None,
     strategy_ref: str,
+    strategy_kwargs_json: str | None,
     as_json: bool,
     wallet_private_key: str | None,
     signature_type: int,
@@ -435,13 +640,23 @@ def live_run(
     """Run live mode with real order placement."""
     _confirm_live_trading(as_json=as_json)
 
-    strategy_obj = _load_strategy(strategy_ref) if strategy_ref else _IdleStrategy()
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    if strategy_kwargs and not strategy_ref:
+        raise click.ClickException(
+            '--strategy-kwargs-json requires --strategy-ref (idle mode has no strategy).'
+        )
+    strategy_obj = (
+        _load_strategy(strategy_ref, strategy_kwargs)
+        if strategy_ref
+        else _IdleStrategy()
+    )
     strategy_mode = 'active' if strategy_ref else 'idle'
     _emit(
         {
             'mode': 'live',
             'exchange': exchange,
             'strategy_ref': strategy_ref,
+            'strategy_kwargs': strategy_kwargs,
             'strategy_mode': strategy_mode,
             'message': (
                 f'Starting live mode ({exchange})'

@@ -122,7 +122,7 @@ pm-cli monitor
 pm-cli trade status
 pm-cli trade pause
 pm-cli trade resume
-pm-cli trade estop
+pm-cli trade stop
 ```
 
 ## Risk Management
