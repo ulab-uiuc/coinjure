@@ -1,33 +1,43 @@
-# Pred Market CLI: Social World Model Trading Agent
+# PM-CLI: The Agent-First Trading System for Prediction Markets
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://img.shields.io/pypi/v/pm-cli.svg)](https://pypi.org/project/pm-cli/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/pm-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 
-**Pred Market CLI** is an intelligent trading agent for [Polymarket](https://polymarket.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
+**PM-CLI** is an agent-first trading system for prediction markets. It provides a unified framework for building, testing, and deploying autonomous trading agents across [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) — the two leading prediction market exchanges — without changing a line of strategy code.
+
+## Why It Works for Both Polymarket and Kalshi
+
+Polymarket and Kalshi operate on fundamentally different rails: Polymarket is a decentralized, crypto-native exchange on Polygon where positions are ERC-1155 tokens settled in USDC, while Kalshi is a regulated US exchange with a traditional order book settled in USD. Despite these differences, both markets share the same core mechanics — binary outcomes, probability-priced contracts, and CLOB-based trading.
+
+PM CLI abstracts over these differences at the exchange layer, exposing a single `Trader` interface to your strategy. Your agent sees the same event stream and issues the same order objects regardless of which venue it is connected to. Swapping exchanges is a one-line change in your run command — your strategy, risk rules, and performance analytics remain identical across both platforms.
 
 ## Key Features
 
-- **Real-time Market Integration** -- Connects to Polymarket's CLOB API for live order book data and trading
-- **LLM-Powered Strategies** -- Analyzes news events with Large Language Models to generate trading signals
-- **Multi-Source Data Ingestion** -- Polymarket live data, News API, and RSS feeds (WSJ, etc.)
-- **Risk Management** -- Configurable limits on trade size, position size, drawdown, daily loss, and more
-- **Backtesting** -- Test strategies against historical data before going live
-- **Paper Trading** -- Simulate live trading without real capital
+- **Exchange-Agnostic Strategies** -- Write one strategy, deploy it on Polymarket or Kalshi without modification
+- **Agent-First Design** -- Strategies are async event handlers; the engine drives the loop and your agent just reacts
+- **LLM-Powered Decision Making** -- Plug in Large Language Models to analyze news and generate trading signals
+- **Multi-Source Data Ingestion** -- Live exchange feeds, News API, and RSS feeds (WSJ, etc.)
+- **Risk Management** -- Configurable limits on trade size, position size, drawdown, and daily loss
+- **Backtesting** -- Replay historical data through any strategy before going live
+- **Paper Trading** -- Simulate live trading on real market data without risking capital
 - **Performance Analytics** -- Sharpe ratio, max drawdown, win rate, profit factor, equity curve
+- **Operator Controls** -- Real-time monitor UI with pause, resume, and emergency stop over a Unix socket
 
 ## Architecture
 
 ```
 TradingEngine
-  ├── DataSource          (Live / Historical / RSS / News API)
-  ├── Strategy            (LLM-based / Custom)
-  └── Trader              (PaperTrader / PolymarketTrader)
-       ├── RiskManager    (Standard / Conservative / Aggressive)
+  ├── DataSource          (Live Exchange / Historical / RSS / News API)
+  ├── Strategy            (LLM-based / Custom agent)
+  └── Trader              (PaperTrader / PolymarketTrader / KalshiTrader)
+       ├── RiskManager    (Conservative / Standard / Aggressive)
        └── PositionManager
 ```
+
+The engine is the only stateful loop. Strategies are pure event handlers — they receive an `Event`, call methods on the `Trader` interface, and return. Swapping exchanges means swapping the `Trader` and `DataSource` implementations; the strategy and risk layer remain identical.
 
 ## Installation
 
@@ -38,8 +48,8 @@ pip install pm-cli
 Or install from source with [Poetry](https://python-poetry.org/):
 
 ```bash
-git clone https://github.com/ulab-uiuc/pm-cli.git
-cd pm-cli
+git clone https://github.com/ulab-uiuc/prediction-market-cli.git
+cd prediction-market-cli
 pip install poetry
 poetry install
 ```
@@ -111,12 +121,8 @@ from pm_cli.trader.trader import Trader
 
 class MyStrategy(Strategy):
     async def process_event(self, event: Event, trader: Trader) -> None:
-        # Your logic here
+        # Your agent logic here — same code runs on Polymarket or Kalshi
         pass
-
-    # Optional: respect control-plane pause/resume.
-    # if self.is_paused():
-    #     return
 ```
 
 ## CLI
@@ -176,7 +182,7 @@ pm-cli live run \
 
 - Start monitor: `pm-cli monitor`
 - Check/pause/resume/stop: `pm-cli trade status|pause|resume|estop`
-- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.pm-cli/engine.sock`); closing monitor does not stop engine.
+- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.pm-cli/engine.sock`); closing monitor does not stop the engine.
 
 ## Risk Management
 
@@ -192,7 +198,7 @@ Three built-in tiers:
 ## Environment Variables
 
 ```bash
-export POLYMARKET_PRIVATE_KEY="your_private_key"   # Required for live trading
+export POLYMARKET_PRIVATE_KEY="your_private_key"   # Required for Polymarket live trading
 export KALSHI_API_KEY_ID="your_kalshi_key_id"      # Required for Kalshi live trading
 export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"     # Required for Kalshi live trading
 export NEWS_API_KEY="your_news_api_key"             # Optional, for News API source
@@ -216,7 +222,7 @@ pytest tests/ -v
 
 ## License
 
-[Apache 2.0](https://github.com/ulab-uiuc/pm-cli/blob/main/LICENSE)
+[Apache 2.0](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
 
 ## Disclaimer
 
