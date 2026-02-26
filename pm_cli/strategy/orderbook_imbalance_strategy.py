@@ -15,10 +15,10 @@ from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
-from pred_market_cli.events.events import Event, OrderBookEvent
-from pred_market_cli.ticker.ticker import Ticker
-from pred_market_cli.trader.trader import Trader
-from pred_market_cli.trader.types import TradeSide
+from pm_cli.events.events import Event, OrderBookEvent
+from pm_cli.ticker.ticker import Ticker
+from pm_cli.trader.trader import Trader
+from pm_cli.trader.types import TradeSide
 
 from .strategy import Strategy, StrategyDecision
 
@@ -26,15 +26,16 @@ from .strategy import Strategy, StrategyDecision
 class OrderBookImbalanceStrategy(Strategy):
     def __init__(
         self,
-        tickers: list[Ticker],
+        tickers: list[Ticker] | None = None,
         depth: int = 3,
         entry_threshold: float = 0.3,
         exit_threshold: float = -0.1,
         position_size: Decimal = Decimal('10'),
         max_hold_seconds: int = 300,
     ) -> None:
-        self.tickers: set[str] = {t.symbol for t in tickers}
-        self._ticker_map: dict[str, Ticker] = {t.symbol: t for t in tickers}
+        ticker_list = tickers or []
+        self.tickers: set[str] = {t.symbol for t in ticker_list}
+        self._ticker_map: dict[str, Ticker] = {t.symbol: t for t in ticker_list}
         self.depth = depth
         self.entry_threshold = entry_threshold
         self.exit_threshold = exit_threshold
@@ -59,7 +60,7 @@ class OrderBookImbalanceStrategy(Strategy):
         if not isinstance(event, OrderBookEvent):
             return
         ticker = event.ticker
-        if ticker.symbol not in self.tickers:
+        if self.tickers and ticker.symbol not in self.tickers:
             return
 
         ob = trader.market_data.order_books.get(ticker)

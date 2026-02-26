@@ -92,16 +92,24 @@ async def run_live_trading(
                 print(f'Live trading stopped after {duration} seconds.')
         else:
             await monitored.start()
-    elif duration:
-        # Run for specified duration
-        try:
-            await asyncio.wait_for(engine.start(), timeout=duration)
-        except asyncio.TimeoutError:
-            await engine.stop()
-            print(f'Live trading stopped after {duration} seconds.')
     else:
-        # Run indefinitely
-        await engine.start()
+        # In headless mode, still run the control socket server so
+        # `pm-cli monitor` and `pm-cli trade` can attach to this process.
+        from pm_cli.cli.utils import add_monitoring_to_engine
+
+        monitored = add_monitoring_to_engine(
+            engine,
+            watch=False,
+            exchange_name=exchange_name,
+        )
+        if duration:
+            try:
+                await asyncio.wait_for(monitored.start(), timeout=duration)
+            except asyncio.TimeoutError:
+                await monitored.stop()
+                print(f'Live trading stopped after {duration} seconds.')
+        else:
+            await monitored.start()
 
     print('Live trading session ended.')
 

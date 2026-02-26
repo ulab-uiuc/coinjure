@@ -12,7 +12,7 @@ from pathlib import Path
 
 import click
 
-from pred_market_cli.events.events import (
+from pm_cli.events.events import (
     Event,
     NewsEvent,
     OrderBookEvent,
@@ -203,8 +203,8 @@ def data_record(
       pred-market-cli data record --exchange rss --output events.jsonl --duration 60
       pred-market-cli backtest run --history-file events.jsonl --market-id X --event-id Y ...
     """
-    from pred_market_cli.data.live.kalshi_data_source import LiveKalshiDataSource
-    from pred_market_cli.data.live.live_data_source import (
+    from pm_cli.data.live.kalshi_data_source import LiveKalshiDataSource
+    from pm_cli.data.live.live_data_source import (
         LivePolyMarketDataSource,
         LiveRSSNewsDataSource,
     )

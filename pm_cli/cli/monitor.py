@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import click
-from rich.console import Console
+from rich.console import Console, Group
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
@@ -39,7 +39,7 @@ class TradingMonitor:
         self.decisions: list = []
         self.decision_stats: dict[str, int | float] = {}
         self.activity_log: list[tuple[str, str]] = []
-        self.news_headlines: list[tuple[str, str]] = []
+        self.news_headlines: list[dict[str, str] | tuple[str, str]] = []
         self.event_count: int = 0
         self.news_buffer_count: int = 0
         self.perf_stats = None
@@ -303,7 +303,10 @@ class TradingMonitor:
             table.add_row(f'Strategy {label}', str(value))
 
         # News buffer stats
-        news_count = getattr(self, 'news_buffer_count', 0)
+        news_count = max(
+            int(getattr(self, 'news_buffer_count', 0) or 0),
+            len(getattr(self, 'news_headlines', [])),
+        )
         table.add_row('  News Buffered', str(news_count))
 
         # Performance analyzer stats
@@ -340,10 +343,14 @@ class TradingMonitor:
         return Panel(table, title='[bold]Statistics[/bold]', border_style='cyan')
 
     def _create_trading_panel(self, limit: int = 10) -> Panel:
-        """Create combined positions + recent orders panel."""
+        """Create a position-first panel with clear per-market exposure."""
         # Snapshot shared collections to avoid RuntimeError
         try:
-            positions = list(self.position_manager.get_non_cash_positions())
+            positions = [
+                p
+                for p in self.position_manager.get_non_cash_positions()
+                if p.quantity > 0
+            ]
         except RuntimeError:
             positions = []
         try:
@@ -351,15 +358,14 @@ class TradingMonitor:
         except RuntimeError:
             orders = []
 
-        text_parts: list[Text] = []
-
-        # Positions section
+        pos_table = Table(show_header=True, header_style='bold', expand=True)
+        pos_table.add_column('Market', ratio=2)
+        pos_table.add_column('Qty', justify='right', width=8)
+        pos_table.add_column('Avg', justify='right', width=8)
+        pos_table.add_column('Mark', justify='right', width=8)
+        pos_table.add_column('uPnL', justify='right', width=10)
         if positions:
-            text_parts.append(Text('── Positions ──\n', style='bold green'))
             for pos in positions:
-                if pos.quantity <= 0:
-                    continue
-                # Try bid first, fallback to ask
                 md = self.trader.market_data
                 best_bid = md.get_best_bid(pos.ticker)
                 cur = best_bid.price if best_bid else Decimal('0')
@@ -369,53 +375,47 @@ class TradingMonitor:
                 pnl = (
                     (cur - pos.average_cost) * pos.quantity if cur > 0 else Decimal('0')
                 )
-                pnl_style = 'green' if pnl >= 0 else 'red'
-                line = Text()
                 display_name = getattr(pos.ticker, 'name', '') or pos.ticker.symbol
-                line.append(f'  {display_name[:28]:<28}', style='cyan')
-                line.append(f' qty={pos.quantity:<6}', style='white')
-                line.append(f' cost=${pos.average_cost:.4f}', style='dim')
-                if cur > 0:
-                    line.append(f' now=${cur:.4f}', style='white')
-                    line.append(f' pnl=${pnl:+.2f}', style=pnl_style)
-                else:
-                    line.append(' now=N/A', style='dim')
-                    line.append(' pnl=N/A', style='dim')
-                line.append('\n')
-                text_parts.append(line)
+                pos_table.add_row(
+                    display_name[:34],
+                    str(pos.quantity),
+                    f'${pos.average_cost:.4f}',
+                    f'${cur:.4f}' if cur > 0 else '—',
+                    Text(f'${pnl:+.2f}', style='green' if pnl >= 0 else 'red')
+                    if cur > 0
+                    else Text('—', style='dim'),
+                )
         else:
-            text_parts.append(Text('── Positions ──\n', style='bold green'))
-            text_parts.append(Text('  No positions yet\n', style='dim'))
+            pos_table.add_row('No active positions', '—', '—', '—', '—')
 
-        text_parts.append(Text('\n'))
-
-        # Orders section
+        orders_table = Table(show_header=True, header_style='bold', expand=True)
+        orders_table.add_column('Recent Orders', ratio=2)
+        orders_table.add_column('Px', justify='right', width=8)
+        orders_table.add_column('Fill', justify='right', width=8)
+        orders_table.add_column('St', justify='right', width=10)
         if orders:
-            text_parts.append(Text('── Recent Orders ──\n', style='bold yellow'))
-            for order in reversed(orders[-8:]):
+            for order in reversed(orders[-5:]):
                 side_style = 'green' if order.side.value == 'buy' else 'red'
                 status_style = (
                     'green' if order.status == OrderStatus.FILLED else 'yellow'
                 )
-                line = Text()
-                line.append(f'  {order.side.value.upper():<5}', style=side_style)
                 order_name = getattr(order.ticker, 'name', '') or order.ticker.symbol
-                line.append(f' {order_name[:25]:<25}', style='cyan')
-                line.append(f' ${order.limit_price:.4f}', style='white')
-                line.append(f' filled={order.filled_quantity}', style='dim')
-                line.append(f' [{order.status.value.upper()}]', style=status_style)
-                line.append('\n')
-                text_parts.append(line)
+                orders_table.add_row(
+                    Text(
+                        f'{order.side.value.upper()} {order_name[:28]}',
+                        style=side_style,
+                    ),
+                    f'${order.limit_price:.4f}',
+                    str(order.filled_quantity),
+                    Text(order.status.value.upper(), style=status_style),
+                )
         else:
-            text_parts.append(Text('── Recent Orders ──\n', style='bold yellow'))
-            text_parts.append(Text('  No orders yet\n', style='dim'))
-
-        combined = Text()
-        for part in text_parts:
-            combined.append_text(part)
+            orders_table.add_row('No recent orders', '—', '—', '—')
 
         return Panel(
-            combined, title='[bold]Trading Activity[/bold]', border_style='yellow'
+            Group(pos_table, Text(''), orders_table),
+            title='[bold]Positions By Market[/bold]',
+            border_style='yellow',
         )
 
     def _create_orderbook_panel(
@@ -495,7 +495,7 @@ class TradingMonitor:
         self, limit: int = 10, scroll_offset: int = 0, is_focused: bool = False
     ) -> Panel:
         """Create news headlines panel."""
-        news: list[tuple[str, str]] = getattr(self, 'news_headlines', [])
+        news: list = getattr(self, 'news_headlines', [])
 
         border_style = 'bold bright_white' if is_focused else 'bright_yellow'
         focus_tag = ' [●]' if is_focused else ''
@@ -514,10 +514,31 @@ class TradingMonitor:
 
         table = Table(show_header=False, box=None, padding=(0, 1))
         table.add_column('Time', style='dim', width=8)
-        table.add_column('Headline')
+        table.add_column('News')
 
-        for ts, headline in visible:
-            table.add_row(ts, Text(headline[:70], style='white'))
+        for item in visible:
+            if isinstance(item, dict):
+                ts = str(item.get('timestamp', ''))
+                title = str(item.get('title', ''))
+                source = str(item.get('source', ''))
+                url = str(item.get('url', ''))
+            elif isinstance(item, (tuple, list)) and len(item) >= 2:
+                ts = str(item[0])
+                title = str(item[1])
+                source = ''
+                url = ''
+            else:
+                ts = ''
+                title = str(item)
+                source = ''
+                url = ''
+            meta = source if source else ''
+            if url:
+                meta = f'{meta} | {url}' if meta else url
+            body = title[:80]
+            if meta:
+                body = f'{body}\n{meta[:100]}'
+            table.add_row(ts, Text(body, style='white'))
 
         return Panel(
             table,
@@ -707,6 +728,13 @@ def monitor(socket: str | None) -> None:
             click.style('✗ ', fg='red')
             + f'No engine running — socket not found: {sock}\n\n'
             'Start an engine first:\n'
+            '  pm-cli paper run --exchange <polymarket|kalshi|rss>\n'
+            '\n'
+            'Examples:\n'
+            '  pm-cli paper run --exchange polymarket\n'
+            '  pm-cli paper run --exchange kalshi\n'
+            '\n'
+            'Or (dev script):\n'
             '  python scripts/run_paper_trading.py -e polymarket\n'
         )
         raise SystemExit(1)

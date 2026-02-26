@@ -8,8 +8,8 @@ from pathlib import Path
 
 import click
 
-from pred_market_cli.analytics.performance_analyzer import PerformanceAnalyzer
-from pred_market_cli.storage.state_store import StateStore
+from pm_cli.analytics.performance_analyzer import PerformanceAnalyzer
+from pm_cli.storage.state_store import StateStore
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -126,7 +126,7 @@ def analytics_trades(state_dir: str, limit: int, as_json: bool) -> None:
     display = trades[-limit:] if len(trades) > limit else trades
 
     if as_json:
-        from pred_market_cli.storage.serializers import serialize_trade
+        from pm_cli.storage.serializers import serialize_trade
 
         payload = {
             'total': len(trades),
@@ -169,7 +169,7 @@ def analytics_positions(state_dir: str, as_json: bool) -> None:
         return
 
     if as_json:
-        from pred_market_cli.storage.serializers import serialize_position
+        from pm_cli.storage.serializers import serialize_position
 
         payload = {
             'count': len(positions),

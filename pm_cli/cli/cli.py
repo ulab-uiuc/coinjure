@@ -2,14 +2,14 @@
 
 import click
 
-from pred_market_cli.cli.agent_commands import backtest, live, paper, strategy
-from pred_market_cli.cli.analytics_commands import analytics
-from pred_market_cli.cli.data_commands import data
-from pred_market_cli.cli.market_commands import market
-from pred_market_cli.cli.monitor import monitor
-from pred_market_cli.cli.news_commands import news
-from pred_market_cli.cli.token import token
-from pred_market_cli.cli.trade_commands import trade
+from pm_cli.cli.agent_commands import backtest, live, paper, strategy
+from pm_cli.cli.analytics_commands import analytics
+from pm_cli.cli.data_commands import data
+from pm_cli.cli.market_commands import market
+from pm_cli.cli.monitor import monitor
+from pm_cli.cli.news_commands import news
+from pm_cli.cli.token import token
+from pm_cli.cli.trade_commands import trade
 
 
 @click.group()
