@@ -119,27 +119,6 @@ def stop_cmd(socket: str | None, as_json: bool) -> None:
         raise SystemExit(1)
 
 
-@trade.command('estop')
-@click.option(
-    '--socket', '-s', default=None, type=click.Path(), help='Control socket path'
-)
-@click.option(
-    '--json', 'as_json', is_flag=True, default=False, help='Emit JSON response'
-)
-def estop_cmd(socket: str | None, as_json: bool) -> None:
-    """Emergency stop alias (sends the same stop signal immediately)."""
-    sock = _resolve_socket(socket)
-    resp = run_command('stop', socket_path=sock)
-    if as_json:
-        click.echo(json.dumps(resp))
-    else:
-        if resp.get('ok'):
-            click.echo('EMERGENCY STOP signal sent')
-        else:
-            click.echo(f"error: {resp.get('error', 'unknown')}")
-            raise SystemExit(1)
-
-
 @trade.command('killswitch')
 @click.option(
     '--on', 'enable', is_flag=True, default=False, help='Enable global kill-switch'

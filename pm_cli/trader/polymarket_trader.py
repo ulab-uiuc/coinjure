@@ -285,6 +285,10 @@ class PolymarketTrader(Trader):
 
             # Store order
             self.orders.append(order)
+            if order.status == OrderStatus.REJECTED:
+                failure_reason = OrderFailureReason.UNKNOWN
+                await self._alert_rejected(failure_reason, ticker)
+                return PlaceOrderResult(order=order, failure_reason=failure_reason)
 
             return PlaceOrderResult(order=order)
 

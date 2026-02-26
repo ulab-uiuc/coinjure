@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
 
 import click
 import feedparser
@@ -111,7 +110,7 @@ async def _fetch_rss(query: str | None, limit: int) -> list[dict]:
     feedparser._check_cache = lambda *a, **kw: None  # noqa: SLF001
 
     articles: list[dict] = []
-    for feed_url, tags in WSJ_RSS_FEEDS.items():
+    for feed_url, _tags in WSJ_RSS_FEEDS.items():
         if len(articles) >= limit:
             break
         try:
@@ -251,65 +250,6 @@ def news_fetch(
         return
 
     click.echo(f'Fetched {len(articles)} article(s) from {source}:\n')
-    for i, article in enumerate(articles, 1):
-        click.echo(f'[{i}]')
-        click.echo(_format_article(article))
-        click.echo()
-
-
-@news.command('search')
-@click.option('--query', required=True, help='Search query string.')
-@click.option(
-    '--source',
-    type=click.Choice(['google', 'rss', 'thenewsapi']),
-    default='google',
-    show_default=True,
-)
-@click.option('--limit', default=10, show_default=True, type=int)
-@click.option('--api-token', default=None)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def news_search(
-    query: str, source: str, limit: int, api_token: str | None, as_json: bool
-) -> None:
-    """Search for news articles matching a query string."""
-    import os
-
-    token = api_token or os.environ.get('THENEWSAPI_TOKEN', '')
-
-    try:
-        if source == 'google':
-            articles = asyncio.run(_fetch_google_news(query, limit))
-        elif source == 'rss':
-            articles = asyncio.run(_fetch_rss(query, limit))
-        else:
-            if not token:
-                raise click.ClickException(
-                    'TheNewsAPI requires a token. Pass --api-token or set THENEWSAPI_TOKEN.'
-                )
-            articles = asyncio.run(_fetch_thenewsapi(query, limit, token))
-    except click.ClickException:
-        raise
-    except Exception as exc:
-        raise click.ClickException(f'Failed to search news: {exc}') from exc
-
-    if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    'query': query,
-                    'source': source,
-                    'count': len(articles),
-                    'articles': articles,
-                }
-            )
-        )
-        return
-
-    if not articles:
-        click.echo(f'No articles found for query: {query!r}')
-        return
-
-    click.echo(f'Found {len(articles)} article(s) matching {query!r} from {source}:\n')
     for i, article in enumerate(articles, 1):
         click.echo(f'[{i}]')
         click.echo(_format_article(article))

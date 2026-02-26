@@ -103,7 +103,7 @@ pm-cli market search --exchange polymarket --query "election" --limit 20
 pm-cli market info --exchange polymarket --market-id <market_id>
 
 pm-cli news fetch --source google --query "prediction market" --limit 10
-pm-cli news search --source rss --query "fed rates" --limit 10
+pm-cli news fetch --source rss --query "fed rates" --limit 10
 ```
 
 ### 2) Scaffold and validate a strategy
@@ -113,12 +113,40 @@ pm-cli strategy create --output ./strategies/my_strategy.py --class-name MyStrat
 pm-cli strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
 ```
 
+Use constructor kwargs when needed:
+
+```bash
+pm-cli strategy validate \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --strategy-kwargs-json '{"trade_size": "25", "entry_imbalance": 0.35}'
+```
+
+Quick runtime smoke check before backtest/paper run:
+
+```bash
+pm-cli strategy dry-run \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --strategy-kwargs-json '{"trade_size": "25"}' \
+  --events 10 --json
+```
+
+Built-in example strategy files (good templates for agents):
+
+```bash
+pm-cli strategy validate \
+  --strategy-ref ./examples/strategies/threshold_momentum_strategy.py:ThresholdMomentumStrategy
+
+pm-cli strategy validate \
+  --strategy-ref ./examples/strategies/orderbook_pressure_strategy.py:OrderBookPressureStrategy
+```
+
 ### 3) Run paper trading with monitor
 
 ```bash
 pm-cli paper run \
   --exchange polymarket \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --strategy-kwargs-json '{"trade_size": "25"}' \
   --monitor
 ```
 
@@ -128,7 +156,7 @@ pm-cli paper run \
 pm-cli trade status
 pm-cli trade pause
 pm-cli trade resume
-pm-cli trade estop
+pm-cli trade stop
 ```
 
 ### 5) Record and backtest
@@ -143,12 +171,57 @@ pm-cli backtest run \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy
 ```
 
+### 6) Agent strategy-discovery toolkit (`research`)
+
+Use these composable tools when an agent needs to discover strategies on yes/no time-series:
+
+```bash
+# 1) build a clean per-market slice
+pm-cli research slice \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --output ./data/m1_e1_slice.jsonl
+
+# 2) build features + labels
+pm-cli research features \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --output ./data/m1_e1_features.jsonl
+
+pm-cli research labels \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --horizon-steps 5 \
+  --threshold 0.01 \
+  --output ./data/m1_e1_labels.jsonl
+
+# 3) run parameter sweeps, rank, and persist memory
+pm-cli research backtest-batch \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --params-jsonl ./data/params.jsonl \
+  --output ./data/batch_runs.jsonl
+
+pm-cli research compare-runs \
+  --input-file ./data/batch_runs.jsonl \
+  --sort-key sharpe_ratio \
+  --top 20 \
+  --output ./data/top_runs.jsonl
+
+pm-cli research memory add \
+  --input-file ./data/top_runs.jsonl \
+  --tag m1_e1
+```
+
+Also available: `research universe`, `research walk-forward`, `research stress-test`, `research strategy-gate`, and `research memory list`.
+
 ## Human-in-the-Loop Model
 
 The operator is intentionally lightweight:
 
 - Use `pm-cli monitor` for live visibility.
-- Use `pm-cli trade pause|resume|estop` for intervention.
+- Use `pm-cli trade pause|resume|stop` for intervention.
 
 The operator should not need to manually place/cancel orders in normal operation.
 
@@ -160,10 +233,11 @@ Primary command groups:
 - `pm-cli paper`: paper trading with live feeds.
 - `pm-cli backtest`: historical replay.
 - `pm-cli monitor`: attach monitor UI to running engine.
-- `pm-cli trade`: runtime control (`status`, `pause`, `resume`, `stop`, `estop`).
+- `pm-cli trade`: runtime control (`status`, `pause`, `resume`, `stop`, `killswitch`).
 - `pm-cli market`: market discovery and metadata.
 - `pm-cli news`: standalone news fetching.
 - `pm-cli data`: live event recording.
+- `pm-cli research`: strategy-discovery tools (slice/features/labels/batch/walk-forward/stress/gate/memory).
 
 ## Environment Variables
 
