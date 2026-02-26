@@ -3,7 +3,7 @@
 Live Paper Trading Example
 
 This example demonstrates how to run live paper trading (simulated) with
-the Pred Market CLI framework. It shows how to:
+the Coinjure framework. It shows how to:
 1. Set up live data sources (RSS news feed)
 2. Configure paper trading with risk management
 3. Run a live simulation
@@ -124,7 +124,7 @@ async def run_paper_trading_with_risk_management():
 
 async def main():
     """Run all examples."""
-    print('Pred Market CLI - Live Paper Trading Examples\n')
+    print('Coinjure - Live Paper Trading Examples\n')
     print('This example will run paper trading simulations using live RSS news feeds.')
     print('No real money is involved - all trades are simulated.\n')
 

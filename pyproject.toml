@@ -5,8 +5,8 @@ description = "An intelligent trading agent for Polymarket prediction markets, p
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/ulab-uiuc/pm-cli"
-homepage = "https://github.com/ulab-uiuc/pm-cli"
+repository = "https://github.com/ulab-uiuc/coinjure"
+homepage = "https://github.com/ulab-uiuc/coinjure"
 keywords = [
     "polymarket",
     "trading",
@@ -65,7 +65,7 @@ pytest-mock = "^3.12.0"
 hypothesis = "^6.98.0"
 
 [tool.poetry.scripts]
-pm-cli = "coinjure.cli.cli:cli"
+coinjure = "coinjure.cli.cli:cli"
 
 [build-system]
 requires = ["poetry-core>=1.9.0"]

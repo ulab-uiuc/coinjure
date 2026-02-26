@@ -32,7 +32,7 @@ def _resolve_kill_switch_file(path: str | None) -> Path:
     env_path = os.environ.get('PRED_MARKET_CLI_KILL_SWITCH_FILE', '').strip()
     if env_path:
         return Path(env_path)
-    return Path.home() / '.pm-cli' / 'kill.switch'
+    return Path.home() / '.coinjure' / 'kill.switch'
 
 
 @click.group()

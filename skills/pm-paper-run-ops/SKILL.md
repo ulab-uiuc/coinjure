@@ -1,6 +1,6 @@
 ---
 name: pm-paper-run-ops
-description: Use this skill when the user asks to launch, monitor, and safely operate paper trading runs with pm-cli.
+description: Use this skill when the user asks to launch, monitor, and safely operate paper trading runs with coinjure.
 ---
 
 # PM Paper Run Ops
@@ -18,25 +18,25 @@ Use this skill for paper-trading execution loops.
 
 1. Preflight:
 
-- `pm-cli strategy validate --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --json`
-- `pm-cli strategy dry-run --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --events 10 --json`
+- `coinjure strategy validate --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --json`
+- `coinjure strategy dry-run --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --events 10 --json`
 
 2. Launch paper run:
 
-- `pm-cli paper run --exchange <exchange> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --monitor`
+- `coinjure paper run --exchange <exchange> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --monitor`
 
 3. Operational control (separate terminal):
 
-- `pm-cli trade status --json`
-- `pm-cli trade pause`
-- `pm-cli trade resume`
-- `pm-cli trade stop`
+- `coinjure trade status --json`
+- `coinjure trade pause`
+- `coinjure trade resume`
+- `coinjure trade stop`
 
 4. Optional token-level checks:
 
-- `pm-cli token orderbook <token_id>`
-- `pm-cli token positions`
-- `pm-cli token place --token <token_id> --side buy --price <p> --size <q> --json`
+- `coinjure token orderbook <token_id>`
+- `coinjure token positions`
+- `coinjure token place --token <token_id> --side buy --price <p> --size <q> --json`
 
 ## Hard Rules
 

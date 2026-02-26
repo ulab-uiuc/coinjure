@@ -1,1 +1,1 @@
-"""CLI module for Pred Market CLI trading monitoring."""
+"""CLI module for Coinjure trading monitoring."""

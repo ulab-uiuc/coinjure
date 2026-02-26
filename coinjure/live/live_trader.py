@@ -94,7 +94,7 @@ async def run_live_trading(
             await monitored.start()
     else:
         # In headless mode, still run the control socket server so
-        # `pm-cli monitor` and `pm-cli trade` can attach to this process.
+        # `coinjure monitor` and `coinjure trade` can attach to this process.
         from coinjure.cli.utils import add_monitoring_to_engine
 
         monitored = add_monitoring_to_engine(

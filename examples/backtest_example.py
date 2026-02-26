@@ -2,7 +2,7 @@
 """
 Backtest Example
 
-This example demonstrates how to run a backtest with the Pred Market CLI framework.
+This example demonstrates how to run a backtest with the Coinjure framework.
 It shows how to:
 1. Set up a historical data source
 2. Configure a trading strategy
@@ -220,7 +220,7 @@ async def run_backtest_with_risk_management():
 
 
 if __name__ == '__main__':
-    print('Pred Market CLI - Backtest Example\n')
+    print('Coinjure - Backtest Example\n')
 
     asyncio.run(run_basic_backtest())
     asyncio.run(run_backtest_with_risk_management())

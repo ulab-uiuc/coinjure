@@ -1,7 +1,7 @@
 """
-Pred Market CLI Test Suite
+Coinjure Test Suite
 
-This package contains unit tests for all components of the Pred Market CLI framework.
+This package contains unit tests for all components of the Coinjure framework.
 
 Test modules:
 - test_position_manager: Tests for position tracking and PnL calculation

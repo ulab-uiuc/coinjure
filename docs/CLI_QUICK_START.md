@@ -9,7 +9,7 @@ Get started with trading monitoring in 5 minutes.
 poetry install
 
 # Verify installation
-pm-cli --version
+coinjure --version
 ```
 
 ## Usage
@@ -30,16 +30,16 @@ python examples/demo_monitor.py
 
 ```bash
 # Single snapshot
-pm-cli monitor
+coinjure monitor
 
 # Live updates (default: 2 second refresh)
-pm-cli monitor --watch
+coinjure monitor --watch
 
 # Faster updates (1 second refresh)
-pm-cli monitor -w -r 1.0
+coinjure monitor -w -r 1.0
 
 # Slower updates (5 second refresh)
-pm-cli monitor -w -r 5.0
+coinjure monitor -w -r 5.0
 ```
 
 ### 3. Integration Patterns
@@ -99,7 +99,7 @@ await engine.start()
 
 ```
 ┌────────────────────────────────────────┐
-│     Pred Market CLI - Trading Monitor        │
+│     Coinjure - Trading Monitor        │
 └────────────────────────────────────────┘
 
 Portfolio Summary          Active Positions
@@ -127,14 +127,14 @@ python your_strategy.py --watch --refresh 1.0
 
 ```bash
 # Conservative monitoring (less CPU)
-pm-cli monitor --watch --refresh 5.0
+coinjure monitor --watch --refresh 5.0
 ```
 
 ### Performance Analysis
 
 ```bash
 # Snapshot after session
-pm-cli monitor > session_report.txt
+coinjure monitor > session_report.txt
 ```
 
 ## Keyboard Shortcuts
@@ -182,4 +182,4 @@ pm-cli monitor > session_report.txt
 Issues? Questions? See:
 
 - [CLI Monitoring Documentation](CLI_MONITORING.md)
-- [GitHub Issues](https://github.com/ulab-uiuc/pm-cli/issues)
+- [GitHub Issues](https://github.com/ulab-uiuc/coinjure/issues)

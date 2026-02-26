@@ -200,8 +200,8 @@ def data_record(
 
     \b
     Example workflow:
-      pred-market-cli data record --exchange rss --output events.jsonl --duration 60
-      pred-market-cli backtest run --history-file events.jsonl --market-id X --event-id Y ...
+      coinjure data record --exchange rss --output events.jsonl --duration 60
+      coinjure backtest run --history-file events.jsonl --market-id X --event-id Y ...
     """
     from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
     from coinjure.data.live.live_data_source import (

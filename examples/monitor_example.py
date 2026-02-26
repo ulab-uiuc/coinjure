@@ -80,9 +80,9 @@ def main() -> None:
     print('This is an example integration script.')
     print('Uncomment and configure the code above to run with your trading setup.')
     print('\nFor CLI usage:')
-    print('  pm-cli monitor              # Single snapshot')
-    print('  pm-cli monitor --watch      # Live updates')
-    print('  pm-cli monitor -w -r 1.0    # Live with 1s refresh')
+    print('  coinjure monitor              # Single snapshot')
+    print('  coinjure monitor --watch      # Live updates')
+    print('  coinjure monitor -w -r 1.0    # Live with 1s refresh')
 
 
 if __name__ == '__main__':

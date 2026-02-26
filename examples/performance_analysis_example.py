@@ -313,7 +313,7 @@ def example_reset_and_compare():
 
 def main():
     """Run all performance analysis examples."""
-    print('Pred Market CLI - Performance Analysis Examples\n')
+    print('Coinjure - Performance Analysis Examples\n')
 
     example_basic_analysis()
     example_extended_analysis()

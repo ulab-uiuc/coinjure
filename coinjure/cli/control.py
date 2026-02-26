@@ -1,4 +1,4 @@
-"""Unix socket control server/client for the pm-cli trading engine.
+"""Unix socket control server/client for the coinjure trading engine.
 
 Protocol: newline-delimited JSON over a Unix domain socket.
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Default socket location; callers can override by subclassing or passing path.
-SOCKET_DIR = Path.home() / '.pm-cli'
+SOCKET_DIR = Path.home() / '.coinjure'
 SOCKET_PATH = SOCKET_DIR / 'engine.sock'
 
 
