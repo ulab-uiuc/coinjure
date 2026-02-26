@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pred_market_cli.config.config import (
+from pm_cli.config.config import (
     AlertConfig,
     Config,
     EngineConfig,

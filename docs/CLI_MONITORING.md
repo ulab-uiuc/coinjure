@@ -20,14 +20,14 @@ After installing dependencies:
 poetry install
 ```
 
-The CLI is available via the `pred-market-cli` command.
+The CLI is available via the `pm-cli` command.
 
 ## CLI Commands
 
 ### Monitor Command
 
 ```bash
-pred-market-cli monitor [OPTIONS]
+pm-cli monitor [OPTIONS]
 ```
 
 #### Options
@@ -41,19 +41,19 @@ pred-market-cli monitor [OPTIONS]
 **Single snapshot:**
 
 ```bash
-pred-market-cli monitor
+pm-cli monitor
 ```
 
 **Live monitoring mode:**
 
 ```bash
-pred-market-cli monitor --watch
+pm-cli monitor --watch
 ```
 
 **Live mode with custom refresh rate:**
 
 ```bash
-pred-market-cli monitor -w -r 1.0  # Update every 1 second
+pm-cli monitor -w -r 1.0  # Update every 1 second
 ```
 
 ## Integration with Trading Engine
@@ -63,8 +63,8 @@ pred-market-cli monitor -w -r 1.0  # Update every 1 second
 The simplest way to add monitoring to your trading workflow:
 
 ```python
-from pred_market_cli.core.trading_engine import TradingEngine
-from pred_market_cli.cli.utils import add_monitoring_to_engine
+from pm_cli.core.trading_engine import TradingEngine
+from pm_cli.cli.utils import add_monitoring_to_engine
 
 # Create your trading engine
 engine = TradingEngine(
@@ -89,7 +89,7 @@ await monitored_engine.start()
 For more control, use the `TradingMonitor` class directly:
 
 ```python
-from pred_market_cli.cli.monitor import TradingMonitor
+from pm_cli.cli.monitor import TradingMonitor
 
 # After initializing your trader and position manager
 monitor = TradingMonitor(
@@ -111,7 +111,7 @@ Run the monitor in a separate thread while your trading engine runs:
 ```python
 import asyncio
 import threading
-from pred_market_cli.cli.monitor import TradingMonitor
+from pm_cli.cli.monitor import TradingMonitor
 
 def run_monitor(trader, position_manager, refresh_rate=2.0):
     monitor = TradingMonitor(trader, position_manager)

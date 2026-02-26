@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "pred-market-cli"
+name = "pm-cli"
 version = "0.0.1"
 description = "An intelligent trading agent for Polymarket prediction markets, powered by Social World Models and LLM-driven decision making."
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/ulab-uiuc/pred-market-cli"
-homepage = "https://github.com/ulab-uiuc/pred-market-cli"
+repository = "https://github.com/ulab-uiuc/pm-cli"
+homepage = "https://github.com/ulab-uiuc/pm-cli"
 keywords = [
     "polymarket",
     "trading",
@@ -29,7 +29,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-packages = [{include = "pred_market_cli"}]
+packages = [{include = "pm_cli"}]
 
 
 [tool.poetry.dependencies]
@@ -65,7 +65,7 @@ pytest-mock = "^3.12.0"
 hypothesis = "^6.98.0"
 
 [tool.poetry.scripts]
-pred-market-cli = "pred_market_cli.cli.cli:cli"
+pm-cli = "pm_cli.cli.cli:cli"
 
 [build-system]
 requires = ["poetry-core>=1.9.0"]
@@ -86,29 +86,29 @@ no_implicit_optional = false
 exclude = "(examples/|scripts/|tests/)"
 
 [[tool.mypy.overrides]]
-module = "pred_market_cli.strategy.simple_strategy"
+module = "pm_cli.strategy.simple_strategy"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-    "pred_market_cli.events.events",
-    "pred_market_cli.analytics.performance_analyzer",
-    "pred_market_cli.data.market_data_manager",
-    "pred_market_cli.data.backtest.historical_data_source",
-    "pred_market_cli.data.live.live_data_source",
-    "pred_market_cli.data.live.google_news_data_source",
-    "pred_market_cli.data.live.kalshi_data_source",
-    "pred_market_cli.trader.kalshi_trader",
-    "pred_market_cli.trader.paper_trader",
-    "pred_market_cli.core.trading_engine",
-    "pred_market_cli.backtest.backtester",
+    "pm_cli.events.events",
+    "pm_cli.analytics.performance_analyzer",
+    "pm_cli.data.market_data_manager",
+    "pm_cli.data.backtest.historical_data_source",
+    "pm_cli.data.live.live_data_source",
+    "pm_cli.data.live.google_news_data_source",
+    "pm_cli.data.live.kalshi_data_source",
+    "pm_cli.trader.kalshi_trader",
+    "pm_cli.trader.paper_trader",
+    "pm_cli.core.trading_engine",
+    "pm_cli.backtest.backtester",
 ]
 disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value", "import-untyped", "misc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-addopts = "-v --cov=pred_market_cli --cov-report=term-missing"
+addopts = "-v --cov=pm_cli --cov-report=term-missing"
 asyncio_mode = "auto"
 markers = [
     "slow: marks tests as slow",
@@ -116,7 +116,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["pred_market_cli"]
+source = ["pm_cli"]
 omit = ["tests/*", "**/__init__.py"]
 
 [tool.coverage.report]
@@ -162,9 +162,9 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["S101"]
-"pred_market_cli/strategy/simple_strategy.py" = ["C901"]
-"pred_market_cli/data/live/live_data_source.py" = ["C901"]
-"pred_market_cli/cli/monitor.py" = ["C901"]
+"pm_cli/strategy/simple_strategy.py" = ["C901"]
+"pm_cli/data/live/live_data_source.py" = ["C901"]
+"pm_cli/cli/monitor.py" = ["C901"]
 "scripts/*" = ["C901"]
 
 [tool.commitizen]
@@ -174,7 +174,7 @@ tag_format = "v$version"
 bump_message = "bump: version $current_version → $new_version"
 version_files = [
     "pyproject.toml:version",
-    "pred_market_cli/__init__.py:__version__"
+    "pm_cli/__init__.py:__version__"
 ]
 
 [[tool.poetry.source]]

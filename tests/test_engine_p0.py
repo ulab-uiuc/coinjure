@@ -4,17 +4,17 @@ from decimal import Decimal
 
 import pytest
 
-from pred_market_cli.core.trading_engine import TradingEngine
-from pred_market_cli.data.data_source import DataSource
-from pred_market_cli.data.market_data_manager import MarketDataManager
-from pred_market_cli.events.events import Event, NewsEvent
-from pred_market_cli.order.order_book import Level, OrderBook
-from pred_market_cli.position.position_manager import Position, PositionManager
-from pred_market_cli.risk.risk_manager import NoRiskManager, StandardRiskManager
-from pred_market_cli.strategy.strategy import Strategy
-from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pred_market_cli.trader.paper_trader import PaperTrader
-from pred_market_cli.trader.trader import Trader
+from pm_cli.core.trading_engine import TradingEngine
+from pm_cli.data.data_source import DataSource
+from pm_cli.data.market_data_manager import MarketDataManager
+from pm_cli.events.events import Event, NewsEvent
+from pm_cli.order.order_book import Level, OrderBook
+from pm_cli.position.position_manager import Position, PositionManager
+from pm_cli.risk.risk_manager import NoRiskManager, StandardRiskManager
+from pm_cli.strategy.strategy import Strategy
+from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pm_cli.trader.paper_trader import PaperTrader
+from pm_cli.trader.trader import Trader
 
 
 class MockDataSource(DataSource):

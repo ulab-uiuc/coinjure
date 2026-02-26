@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from pred_market_cli.order.order_book import Level, OrderBook
+from pm_cli.order.order_book import Level, OrderBook
 
 
 class TestLevel:

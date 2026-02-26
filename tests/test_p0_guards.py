@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from pred_market_cli.cli.control import ControlServer
-from pred_market_cli.data.market_data_manager import MarketDataManager
-from pred_market_cli.order.order_book import Level, OrderBook
-from pred_market_cli.position.position_manager import Position, PositionManager
-from pred_market_cli.risk.risk_manager import NoRiskManager
-from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pred_market_cli.trader.paper_trader import PaperTrader
-from pred_market_cli.trader.types import OrderFailureReason, TradeSide
+from pm_cli.cli.control import ControlServer
+from pm_cli.data.market_data_manager import MarketDataManager
+from pm_cli.order.order_book import Level, OrderBook
+from pm_cli.position.position_manager import Position, PositionManager
+from pm_cli.risk.risk_manager import NoRiskManager
+from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pm_cli.trader.paper_trader import PaperTrader
+from pm_cli.trader.types import OrderFailureReason, TradeSide
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ A comprehensive CLI monitoring system has been successfully implemented for the 
 
 ## What Was Created
 
-### 1. Core CLI Module (`pred_market_cli/cli/`)
+### 1. Core CLI Module (`pm_cli/cli/`)
 
 #### `cli.py` - Main CLI Entry Point
 
@@ -76,7 +76,7 @@ A comprehensive CLI monitoring system has been successfully implemented for the 
 #### `pyproject.toml` Updates
 
 - Added dependencies: `click` and `rich`
-- Created CLI entry point: `pred-market-cli` command
+- Created CLI entry point: `pm-cli` command
 - Updated poetry configuration
 
 #### Updated `README.md`
@@ -99,13 +99,13 @@ poetry install
 
 ```bash
 # Check CLI is available
-poetry run pred-market-cli --version
+poetry run pm-cli --version
 
 # View available commands
-poetry run pred-market-cli --help
+poetry run pm-cli --help
 
 # View monitor command help
-poetry run pred-market-cli monitor --help
+poetry run pm-cli monitor --help
 ```
 
 ## Quick Start
@@ -125,7 +125,7 @@ poetry run python examples/demo_monitor.py
 #### Method A: One-Line Integration
 
 ```python
-from pred_market_cli.cli.utils import add_monitoring_to_engine
+from pm_cli.cli.utils import add_monitoring_to_engine
 
 # Your existing setup
 engine = TradingEngine(data_source, strategy, trader)
@@ -140,7 +140,7 @@ await monitored.start()
 #### Method B: Direct Monitor Usage
 
 ```python
-from pred_market_cli.cli.monitor import TradingMonitor
+from pm_cli.cli.monitor import TradingMonitor
 
 # After initializing trader
 monitor = TradingMonitor(trader, trader.position_manager)
@@ -156,16 +156,16 @@ monitor.display_live(refresh_rate=2.0)
 
 ```bash
 # Single snapshot
-poetry run pred-market-cli monitor
+poetry run pm-cli monitor
 
 # Live monitoring (2 second refresh)
-poetry run pred-market-cli monitor --watch
+poetry run pm-cli monitor --watch
 
 # Live monitoring (1 second refresh)
-poetry run pred-market-cli monitor -w -r 1.0
+poetry run pm-cli monitor -w -r 1.0
 
 # Live monitoring (5 second refresh)
-poetry run pred-market-cli monitor -w -r 5.0
+poetry run pm-cli monitor -w -r 5.0
 ```
 
 ## Display Features
@@ -221,8 +221,8 @@ poetry run pred-market-cli monitor -w -r 5.0
 ## File Structure
 
 ```
-pred-market-cli/
-├── pred_market_cli/
+pm-cli/
+├── pm_cli/
 │   └── cli/
 │       ├── __init__.py           # CLI module init
 │       ├── cli.py                # Main CLI entry point
@@ -267,21 +267,21 @@ python your_strategy.py --paper --watch
 
 ```bash
 # Conservative refresh for production
-pred-market-cli monitor --watch --refresh 5.0
+pm-cli monitor --watch --refresh 5.0
 ```
 
 ### Post-Session Analysis
 
 ```bash
 # Generate end-of-session report
-pred-market-cli monitor > session_report.txt
+pm-cli monitor > session_report.txt
 ```
 
 ### Continuous Integration
 
 ```bash
 # Snapshot during backtest
-python backtest.py && pred-market-cli monitor
+python backtest.py && pm-cli monitor
 ```
 
 ## Performance Notes
@@ -323,14 +323,14 @@ poetry run python examples/demo_monitor.py
 poetry run python examples/demo_monitor.py -w -r 1.0
 
 # Test CLI command
-poetry run pred-market-cli monitor --help
+poetry run pm-cli monitor --help
 ```
 
 ### Integration Testing
 
 ```python
 # In your tests
-from pred_market_cli.cli.monitor import TradingMonitor
+from pm_cli.cli.monitor import TradingMonitor
 
 def test_monitor():
     monitor = TradingMonitor(trader, position_manager)
@@ -339,19 +339,19 @@ def test_monitor():
 
 ## Troubleshooting
 
-### Issue: "Command not found: pred-market-cli"
+### Issue: "Command not found: pm-cli"
 
 **Solution**: Run via poetry
 
 ```bash
-poetry run pred-market-cli monitor
+poetry run pm-cli monitor
 ```
 
 Or activate virtualenv first:
 
 ```bash
 poetry shell
-pred-market-cli monitor
+pm-cli monitor
 ```
 
 ### Issue: Monitor shows no data
@@ -391,7 +391,7 @@ await engine.start()  # Should be running
 - **Quick Start**: `docs/CLI_QUICK_START.md`
 - **Full Documentation**: `docs/CLI_MONITORING.md`
 - **Examples**: `examples/monitor_example.py`, `examples/demo_monitor.py`
-- **CLI Help**: `pred-market-cli monitor --help`
+- **CLI Help**: `pm-cli monitor --help`
 
 ## Credits
 
