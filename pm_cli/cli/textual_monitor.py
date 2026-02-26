@@ -182,6 +182,7 @@ class StatsPanel(Static):
 
     def refresh_from_state(self, state: dict) -> None:
         s = state.get('stats', {})
+        decision_stats = s.get('decision_stats', {})
         lines = [
             '[bold cyan]Statistics[/bold cyan]',
             f"Runtime:        {state.get('runtime', '—')}",
@@ -189,10 +190,10 @@ class StatsPanel(Static):
             f"Order Books:    {s.get('order_books', 0)}",
             f"News Buffered:  {s.get('news_buffered', 0)}",
             f"Orders:         {s.get('orders_total', 0)} ({s.get('orders_filled', 0)} filled)",
-            f"LLM Decisions:  {s.get('decisions', 0)}",
-            f"  YES/NO/HOLD:  {s.get('buy_yes', 0)}/{s.get('buy_no', 0)}/{s.get('holds', 0)}",
-            f"  Executed:     {s.get('executed', 0)}",
         ]
+        for key, value in decision_stats.items():
+            label = key.replace('_', ' ').title()
+            lines.append(f'Strategy {label}:  {value}')
         self.update('\n'.join(lines))
 
     def refresh_data(self, trader, position_manager, strategy, engine) -> None:
@@ -200,11 +201,7 @@ class StatsPanel(Static):
             runtime = str(datetime.now() - self.start_time).split('.')[0]
             orders = list(getattr(trader, 'orders', []))
             filled = sum(1 for o in orders if o.status.value == 'filled')
-            buy_yes = getattr(strategy, 'total_buy_yes', 0)
-            buy_no = getattr(strategy, 'total_buy_no', 0)
-            holds = getattr(strategy, 'total_holds', 0)
-            total_d = getattr(strategy, 'total_decisions', 0)
-            executed = getattr(strategy, 'total_executed', 0)
+            decision_stats = strategy.get_decision_stats()
             event_count = getattr(engine, '_event_count', 0)
             ob_count = len(trader.market_data.order_books)
             news_buf = getattr(strategy, 'news_buffer_count', 0)
@@ -216,20 +213,20 @@ class StatsPanel(Static):
                 f'Order Books:    {ob_count}',
                 f'News Buffered:  {news_buf}',
                 f'Orders:         {len(orders)} ({filled} filled)',
-                f'LLM Decisions:  {total_d}',
-                f'  YES/NO/HOLD:  {buy_yes}/{buy_no}/{holds}',
-                f'  Executed:     {executed}',
             ]
+            for key, value in decision_stats.items():
+                label = key.replace('_', ' ').title()
+                lines.append(f'Strategy {label}:  {value}')
             self.update('\n'.join(lines))
         except Exception:
             pass
 
 
-class LLMDecisionsTable(DataTable):
-    """LLM decision history — scrollable DataTable with cursor navigation."""
+class DecisionsTable(DataTable):
+    """Strategy decision history — scrollable DataTable with dynamic signals."""
 
     DEFAULT_CSS = """
-    LLMDecisionsTable {
+    DecisionsTable {
         border: solid magenta;
         border-title-color: magenta;
         height: 1fr;
@@ -239,16 +236,43 @@ class LLMDecisionsTable(DataTable):
     _last_len: int = 0
 
     def on_mount(self) -> None:
-        self.border_title = '🤖 LLM Decisions  [LLM% vs Market%]'
+        self.border_title = '🤖 Strategy Decisions'
         self.cursor_type = 'row'
         self._initialized = True
         self.zebra_stripes = True
+        self._current_signal_keys: list[str] = []
+        self._set_columns([])
+
+    def _set_columns(self, signal_keys: list[str]) -> None:
+        self.clear(columns=True)
         self.add_columns(
-            'Time', 'Action', 'LLM', 'Mkt', 'Edge', 'Market', 'Reasoning', '✓'
+            'Time', 'Action', *[k[:6] for k in signal_keys], 'Market', 'Reasoning', '✓'
         )
+        self._current_signal_keys = list(signal_keys)
+
+    def _get_signal_keys(self, decisions: list) -> list[str]:
+        keys: list[str] = []
+        for d in decisions[-40:]:
+            sig = (
+                d.get('signal_values', {})
+                if isinstance(d, dict)
+                else getattr(d, 'signal_values', {}) or {}
+            )
+            for k in sig:
+                if k not in keys:
+                    keys.append(k)
+                if len(keys) >= 3:
+                    break
+            if len(keys) >= 3:
+                break
+        return keys
 
     def refresh_from_state(self, decisions: list) -> None:
-        if len(decisions) == self._last_len:
+        signal_keys = self._get_signal_keys(decisions)
+        keys_changed = signal_keys != self._current_signal_keys
+        if signal_keys != self._current_signal_keys:
+            self._set_columns(signal_keys)
+        if len(decisions) == self._last_len and not keys_changed:
             return
         saved_row = self.cursor_row
         self.clear()
@@ -263,15 +287,15 @@ class LLMDecisionsTable(DataTable):
                 'CLOSE_REEVAL': 'bold magenta',
                 'CLOSE_TIMEOUT': 'yellow',
             }.get(action, 'white')
-            llm = d.get('llm_prob', 0.0)
-            mkt = d.get('market_price', 0.0)
-            edge = llm - mkt
+            sig = d.get('signal_values', {}) or {}
+            signal_cells: list[str] = []
+            for key in self._current_signal_keys:
+                val = sig.get(key)
+                signal_cells.append(f'{float(val):.3f}' if val is not None else '—')
             self.add_row(
                 d.get('timestamp', ''),
                 Text(action, style=action_style),
-                f'{llm:.0%}' if llm > 0 else '—',
-                f'{mkt:.0%}' if mkt > 0 else '—',
-                f'{edge:+.0%}' if mkt > 0 else '—',
+                *signal_cells,
                 d.get('ticker_name', '')[:22],
                 Text(d.get('reasoning', '')[:40], style='dim'),
                 Text('✓', style='bold green')
@@ -285,9 +309,13 @@ class LLMDecisionsTable(DataTable):
             pass
 
     def refresh_data(self, strategy) -> None:
-        decisions = list(getattr(strategy, 'decisions', []))
-        if len(decisions) == self._last_len:
-            return  # Nothing new
+        decisions = list(strategy.get_decisions())
+        signal_keys = self._get_signal_keys(decisions)
+        keys_changed = signal_keys != self._current_signal_keys
+        if signal_keys != self._current_signal_keys:
+            self._set_columns(signal_keys)
+        if len(decisions) == self._last_len and not keys_changed:
+            return  # Nothing new and no schema change
 
         # Save cursor position and restore after re-render
         saved_row = self.cursor_row
@@ -302,16 +330,15 @@ class LLMDecisionsTable(DataTable):
                 'CLOSE_REEVAL': 'bold magenta',
                 'CLOSE_TIMEOUT': 'yellow',
             }.get(d.action, 'white')
-
-            llm = getattr(d, 'llm_prob', 0.0) or 0.0
-            mkt = getattr(d, 'market_price', 0.0) or 0.0
-            edge = llm - mkt
+            sig = getattr(d, 'signal_values', {}) or {}
+            signal_cells: list[str] = []
+            for key in self._current_signal_keys:
+                val = sig.get(key)
+                signal_cells.append(f'{float(val):.3f}' if val is not None else '—')
             self.add_row(
                 d.timestamp,
                 Text(d.action, style=action_style),
-                f'{llm:.0%}' if llm > 0 else '—',
-                f'{mkt:.0%}' if mkt > 0 else '—',
-                f'{edge:+.0%}' if mkt > 0 else '—',
+                *signal_cells,
                 (d.ticker_name or '')[:22],
                 Text((getattr(d, 'reasoning', '') or '')[:40], style='dim'),
                 Text('✓', style='bold green') if d.executed else Text('—', style='dim'),
@@ -612,7 +639,7 @@ class TradingMonitorApp(App[None]):
         width: 34;
         layout: vertical;
     }
-    LLMDecisionsTable, ActivityLog, OrderBooksTable, NewsLog, TradingPanel {
+    DecisionsTable, ActivityLog, OrderBooksTable, NewsLog, TradingPanel {
         width: 1fr;
     }
     """
@@ -646,7 +673,7 @@ class TradingMonitorApp(App[None]):
             with Vertical(id='left-col'):
                 yield PortfolioPanel(id='portfolio')
                 yield StatsPanel(self._monitor_start, id='stats')
-            yield LLMDecisionsTable(id='llm')
+            yield DecisionsTable(id='decisions')
         with Horizontal(id='mid-row'):
             yield TradingPanel(id='trading')
             yield ActivityLog(id='activity', highlight=True, markup=True)
@@ -744,7 +771,7 @@ class TradingMonitorApp(App[None]):
             self.query_one('#stats', StatsPanel).refresh_data(
                 trader, pm, strategy, engine
             )
-            self.query_one('#llm', LLMDecisionsTable).refresh_data(strategy)
+            self.query_one('#decisions', DecisionsTable).refresh_data(strategy)
             self.query_one('#trading', TradingPanel).refresh_data(trader, pm)
             self.query_one('#activity', ActivityLog).refresh_data(engine)
             self.query_one('#orderbooks', OrderBooksTable).refresh_data(trader)
@@ -823,7 +850,7 @@ class SocketTradingMonitorApp(App[None]):
             with Vertical(id='left-col'):
                 yield PortfolioPanel(id='portfolio')
                 yield StatsPanel(self._monitor_start, id='stats')
-            yield LLMDecisionsTable(id='llm')
+            yield DecisionsTable(id='decisions')
         with Horizontal(id='mid-row'):
             yield TradingPanel(id='trading')
             yield ActivityLog(id='activity', highlight=True, markup=True)
@@ -873,8 +900,8 @@ class SocketTradingMonitorApp(App[None]):
         try:
             self.query_one('#portfolio', PortfolioPanel).refresh_from_state(state)
             self.query_one('#stats', StatsPanel).refresh_from_state(state)
-            self.query_one('#llm', LLMDecisionsTable).refresh_from_state(
-                state.get('llm_decisions', [])
+            self.query_one('#decisions', DecisionsTable).refresh_from_state(
+                state.get('decisions', [])
             )
             self.query_one('#trading', TradingPanel).refresh_from_state(state)
             self.query_one('#activity', ActivityLog).refresh_from_state(
