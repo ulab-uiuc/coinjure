@@ -233,12 +233,14 @@ def paper() -> None:
     show_default=True,
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
+@click.option('--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard')
 def paper_run(
     exchange: str,
     duration: float | None,
     initial_capital: str,
     strategy_ref: str,
     as_json: bool,
+    monitor: bool,
 ) -> None:
     """Run paper trading in simulation mode."""
     strategy_obj = _load_strategy(strategy_ref)
@@ -267,6 +269,8 @@ def paper_run(
                 initial_capital=capital,
                 duration=duration,
                 continuous=True,
+                monitor=monitor,
+                exchange_name='Polymarket',
             )
         )
     elif exchange == 'kalshi':
@@ -282,6 +286,8 @@ def paper_run(
                 initial_capital=capital,
                 duration=duration,
                 continuous=True,
+                monitor=monitor,
+                exchange_name='Kalshi',
             )
         )
     else:
@@ -296,6 +302,8 @@ def paper_run(
                 initial_capital=capital,
                 duration=duration,
                 continuous=True,
+                monitor=monitor,
+                exchange_name='RSS',
             )
         )
 
@@ -333,6 +341,7 @@ def live() -> None:
     default=None,
     help='Kalshi private key path (or KALSHI_PRIVATE_KEY_PATH)',
 )
+@click.option('--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard')
 def live_run(
     exchange: str,
     duration: float | None,
@@ -343,6 +352,7 @@ def live_run(
     funder: str | None,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
+    monitor: bool,
 ) -> None:
     """Run live mode with real order placement."""
     strategy_obj = _load_strategy(strategy_ref)
@@ -377,6 +387,8 @@ def live_run(
                 funder=funder,
                 duration=duration,
                 continuous=True,
+                monitor=monitor,
+                exchange_name='Polymarket',
             )
         )
     else:
@@ -395,6 +407,8 @@ def live_run(
                 private_key_path=kalshi_private_key_path,
                 duration=duration,
                 continuous=True,
+                monitor=monitor,
+                exchange_name='Kalshi',
             )
         )
 
