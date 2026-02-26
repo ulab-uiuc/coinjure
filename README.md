@@ -1,6 +1,8 @@
 ![Pred Market CLI](assets/pm-cli.png)
 
-<h1 align="center" style="font-size: 1.85em;">PM-CLI: Agent-First Trading System for Prediction Markets</h1>
+<p align="center">
+  <img src="assets/readme_title.svg" alt="PM-CLI: Agent-First Trading System for Prediction Markets" width="980">
+</p>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
@@ -27,13 +29,17 @@ pm-cli monitor
 
 ## Why Agent-First
 
-Most trading tools are built for manual operators and bolt on automation later. PM-CLI is the reverse:
+AI agents are now strong enough to self-discover alpha from messy, fast-moving market and news streams. The practical question is no longer “can an agent reason about trades,” but:
+
+Can we build the tools, infrastructure, and environment that let an agent operate like a disciplined human trader, but through command-line APIs that are easy for agents to use?
+
+PM-CLI is our answer:
 
 - Strategy is the primary interface.
 - The engine owns execution, risk checks, and lifecycle.
-- Data, simulation, and live controls are available from one CLI.
+- Data, simulation, monitoring, and live controls are unified behind CLI commands.
 
-This lets agents iterate quickly without rewriting plumbing for every strategy or exchange.
+This lets agents iterate quickly, safely, and reproducibly without rebuilding trading plumbing for every strategy or exchange.
 
 ## What We Provide for Agent Trading
 
