@@ -14,11 +14,14 @@ from pathlib import Path
 import click
 
 from pm_cli.backtest.backtester import run_backtest
+from pm_cli.data.composite_data_source import CompositeDataSource
+from pm_cli.data.live.google_news_data_source import GoogleNewsDataSource
 from pm_cli.data.live.kalshi_data_source import LiveKalshiDataSource
 from pm_cli.data.live.live_data_source import (
     LivePolyMarketDataSource,
     LiveRSSNewsDataSource,
 )
+from pm_cli.events.events import Event
 from pm_cli.live.live_trader import (
     run_live_kalshi_paper_trading,
     run_live_kalshi_trading,
@@ -27,6 +30,14 @@ from pm_cli.live.live_trader import (
 )
 from pm_cli.strategy.strategy import Strategy
 from pm_cli.ticker.ticker import PolyMarketTicker
+from pm_cli.trader.trader import Trader
+
+
+class _IdleStrategy(Strategy):
+    """No-op strategy: consume events without placing orders."""
+
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        return
 
 
 def _emit(payload: dict, *, as_json: bool) -> None:
@@ -34,6 +45,72 @@ def _emit(payload: dict, *, as_json: bool) -> None:
         click.echo(json.dumps(payload))
     else:
         click.echo(payload.get('message', str(payload)))
+
+
+def _confirm_live_trading(*, as_json: bool) -> None:
+    """Require explicit user confirmation before starting live trading."""
+    disclaimer = (
+        'DISCLAIMER: Live trading places real orders with real funds. '
+        'You are fully responsible for all losses, fees, and operational risk.'
+    )
+
+    if as_json:
+        raise click.ClickException(
+            'Live trading confirmation required in interactive mode.'
+        )
+
+    click.echo(click.style(disclaimer, fg='yellow'))
+    confirmed = click.confirm(
+        'Proceed with live trading?',
+        default=True,
+        show_default=True,
+    )
+    if not confirmed:
+        raise click.ClickException('Live trading cancelled by user.')
+
+
+def _build_news_augmented_source(exchange: str):
+    """Build market + Google/RSS news composite for paper trading."""
+    if exchange == 'polymarket':
+        market_source = LivePolyMarketDataSource(
+            event_cache_file='events_cache.jsonl',
+            polling_interval=60.0,
+            orderbook_refresh_interval=10.0,
+            reprocess_on_start=False,
+        )
+    elif exchange == 'kalshi':
+        market_source = LiveKalshiDataSource(
+            event_cache_file='kalshi_events_cache.jsonl',
+            polling_interval=60.0,
+            reprocess_on_start=False,
+        )
+    else:
+        raise click.ClickException(f'Unsupported exchange for market feed: {exchange}')
+
+    # Keep Google polling conservative to reduce block/rate-limit risk.
+    google_source = GoogleNewsDataSource(
+        queries=[
+            'polymarket prediction market',
+            'kalshi prediction market',
+            'US politics elections 2026',
+            'federal reserve inflation jobs report',
+            'geopolitics world events',
+            'crypto regulation SEC CFTC',
+        ],
+        cache_file='google_news_cache.jsonl',
+        polling_interval=600.0,
+        max_articles_per_poll=8,
+        max_pages=1,
+        min_delay=3.0,
+        max_delay=8.0,
+    )
+    rss_source = LiveRSSNewsDataSource(
+        cache_file='rss_news_cache.jsonl',
+        polling_interval=600.0,
+        max_articles_per_poll=8,
+        categories=['world', 'business', 'finance', 'politics', 'economy', 'sports'],
+    )
+    return CompositeDataSource([market_source, google_source, rss_source])
 
 
 def _load_strategy_class(strategy_ref: str) -> type[Strategy]:
@@ -229,8 +306,8 @@ def paper() -> None:
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
     '--strategy-ref',
-    default='pm_cli.strategy.test_strategy:TestStrategy',
-    show_default=True,
+    default=None,
+    help='Strategy ref: module:Class or /path/file.py:Class. If omitted, run in idle mode (no orders).',
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 @click.option(
@@ -245,25 +322,26 @@ def paper_run(
     monitor: bool,
 ) -> None:
     """Run paper trading in simulation mode."""
-    strategy_obj = _load_strategy(strategy_ref)
+    strategy_obj = _load_strategy(strategy_ref) if strategy_ref else _IdleStrategy()
+    strategy_mode = 'active' if strategy_ref else 'idle'
     capital = Decimal(initial_capital)
     _emit(
         {
             'mode': 'paper',
             'exchange': exchange,
             'strategy_ref': strategy_ref,
-            'message': f'Starting paper mode ({exchange})',
+            'strategy_mode': strategy_mode,
+            'message': (
+                f'Starting paper mode ({exchange})'
+                if strategy_ref
+                else f'Starting paper mode ({exchange}) in idle mode (no strategy orders)'
+            ),
         },
         as_json=as_json,
     )
 
     if exchange == 'polymarket':
-        data_source = LivePolyMarketDataSource(
-            event_cache_file='events_cache.jsonl',
-            polling_interval=60.0,
-            orderbook_refresh_interval=10.0,
-            reprocess_on_start=False,
-        )
+        data_source = _build_news_augmented_source('polymarket')
         asyncio.run(
             run_live_paper_trading(
                 data_source=data_source,
@@ -276,11 +354,7 @@ def paper_run(
             )
         )
     elif exchange == 'kalshi':
-        data_source = LiveKalshiDataSource(
-            event_cache_file='kalshi_events_cache.jsonl',
-            polling_interval=60.0,
-            reprocess_on_start=False,
-        )
+        data_source = _build_news_augmented_source('kalshi')
         asyncio.run(
             run_live_kalshi_paper_trading(
                 data_source=data_source,
@@ -324,8 +398,8 @@ def live() -> None:
 )
 @click.option(
     '--strategy-ref',
-    default='pm_cli.strategy.test_strategy:TestStrategy',
-    show_default=True,
+    default=None,
+    help='Strategy ref: module:Class or /path/file.py:Class. If omitted, run in idle mode (no orders).',
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 @click.option(
@@ -359,13 +433,21 @@ def live_run(
     monitor: bool,
 ) -> None:
     """Run live mode with real order placement."""
-    strategy_obj = _load_strategy(strategy_ref)
+    _confirm_live_trading(as_json=as_json)
+
+    strategy_obj = _load_strategy(strategy_ref) if strategy_ref else _IdleStrategy()
+    strategy_mode = 'active' if strategy_ref else 'idle'
     _emit(
         {
             'mode': 'live',
             'exchange': exchange,
             'strategy_ref': strategy_ref,
-            'message': f'Starting live mode ({exchange})',
+            'strategy_mode': strategy_mode,
+            'message': (
+                f'Starting live mode ({exchange})'
+                if strategy_ref
+                else f'Starting live mode ({exchange}) in idle mode (no strategy orders)'
+            ),
         },
         as_json=as_json,
     )

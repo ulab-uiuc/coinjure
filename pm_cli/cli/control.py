@@ -160,10 +160,12 @@ class ControlServer:
         # ── Stats ────────────────────────────────────────────────────
         orders_list = list(getattr(trader, 'orders', []))
         decision_stats = strategy.get_decision_stats() if strategy is not None else {}
+        strategy_news_buf = int(getattr(strategy, 'news_buffer_count', 0) or 0)
+        engine_news_buf = len(getattr(self.engine, '_news', []))
         state['stats'] = {
             'event_count': getattr(self.engine, '_event_count', 0),
             'order_books': len(getattr(md, 'order_books', {})),
-            'news_buffered': getattr(strategy, 'news_buffer_count', 0),
+            'news_buffered': max(strategy_news_buf, engine_news_buf),
             'decision_stats': decision_stats,
             'decisions': int(decision_stats.get('decisions', 0)),
             'executed': int(decision_stats.get('executed', 0)),
@@ -273,8 +275,6 @@ class ControlServer:
                 if not (bid_lvl and ask_lvl and bid_lvl.price > 0):
                     continue
                 mid = float(bid_lvl.price + ask_lvl.price) / 2
-                if mid < 0.05 or mid > 0.95:
-                    continue
                 spread = float(ask_lvl.price - bid_lvl.price)
                 books.append(
                     {

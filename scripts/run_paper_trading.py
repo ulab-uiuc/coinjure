@@ -178,10 +178,16 @@ async def _main(exchange: str, monitor: bool, duration: int) -> None:
             else:
                 await monitored.start()
         else:
+            monitored = add_monitoring_to_engine(
+                engine,
+                watch=False,
+                refresh_rate=2.0,
+                exchange_name=f'{config["display_name"]} + News',
+            )
             if duration > 0:
-                await asyncio.wait_for(engine.start(), timeout=duration)
+                await asyncio.wait_for(monitored.start(), timeout=duration)
             else:
-                await engine.start()
+                await monitored.start()
     except asyncio.TimeoutError:
         logger.info('Duration limit reached (%ds), stopping...', duration)
     except asyncio.CancelledError:

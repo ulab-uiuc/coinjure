@@ -18,10 +18,10 @@ from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
-from pred_market_cli.events.events import Event, OrderBookEvent
-from pred_market_cli.ticker.ticker import Ticker
-from pred_market_cli.trader.trader import Trader
-from pred_market_cli.trader.types import TradeSide
+from pm_cli.events.events import Event, OrderBookEvent
+from pm_cli.ticker.ticker import Ticker
+from pm_cli.trader.trader import Trader
+from pm_cli.trader.types import TradeSide
 
 from .strategy import Strategy, StrategyDecision
 
@@ -29,7 +29,7 @@ from .strategy import Strategy, StrategyDecision
 class MarketMakingStrategy(Strategy):
     def __init__(
         self,
-        tickers: list[Ticker],
+        tickers: list[Ticker] | None = None,
         min_spread: Decimal = Decimal('0.05'),
         take_profit_pct: float = 0.5,
         stop_loss_pct: float = 0.02,
@@ -37,8 +37,9 @@ class MarketMakingStrategy(Strategy):
         max_hold_seconds: int = 120,
         tick: Decimal = Decimal('0.01'),
     ) -> None:
-        self.tickers: set[str] = {t.symbol for t in tickers}
-        self._ticker_map: dict[str, Ticker] = {t.symbol: t for t in tickers}
+        ticker_list = tickers or []
+        self.tickers: set[str] = {t.symbol for t in ticker_list}
+        self._ticker_map: dict[str, Ticker] = {t.symbol: t for t in ticker_list}
         self.min_spread = min_spread
         self.take_profit_pct = take_profit_pct
         self.stop_loss_pct = stop_loss_pct
@@ -64,7 +65,7 @@ class MarketMakingStrategy(Strategy):
         if not isinstance(event, OrderBookEvent):
             return
         ticker = event.ticker
-        if ticker.symbol not in self.tickers:
+        if self.tickers and ticker.symbol not in self.tickers:
             return
 
         ob = trader.market_data.order_books.get(ticker)
