@@ -1,18 +1,18 @@
-# Pred Market CLI: The Agent-First Trading System for Prediction Markets
+# PM CLI: The Agent-First Trading System for Prediction Markets
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyPI version](https://img.shields.io/pypi/v/pred-market-cli.svg)](https://pypi.org/project/pred-market-cli/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/pred-market-cli/blob/main/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/pm-cli.svg)](https://pypi.org/project/pm-cli/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 
-**Pred Market CLI** is an agent-first trading system for prediction markets. It provides a unified framework for building, testing, and deploying autonomous trading agents across [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) — the two leading prediction market exchanges — without changing a line of strategy code.
+**PM CLI** is an agent-first trading system for prediction markets. It provides a unified framework for building, testing, and deploying autonomous trading agents across [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) — the two leading prediction market exchanges — without changing a line of strategy code.
 
 ## Why It Works for Both Polymarket and Kalshi
 
 Polymarket and Kalshi operate on fundamentally different rails: Polymarket is a decentralized, crypto-native exchange on Polygon where positions are ERC-1155 tokens settled in USDC, while Kalshi is a regulated US exchange with a traditional order book settled in USD. Despite these differences, both markets share the same core mechanics — binary outcomes, probability-priced contracts, and CLOB-based trading.
 
-Pred Market CLI abstracts over these differences at the exchange layer, exposing a single `Trader` interface to your strategy. Your agent sees the same event stream and issues the same order objects regardless of which venue it is connected to. Swapping exchanges is a one-line change in your run command — your strategy, risk rules, and performance analytics remain identical across both platforms.
+PM CLI abstracts over these differences at the exchange layer, exposing a single `Trader` interface to your strategy. Your agent sees the same event stream and issues the same order objects regardless of which venue it is connected to. Swapping exchanges is a one-line change in your run command — your strategy, risk rules, and performance analytics remain identical across both platforms.
 
 ## Key Features
 
@@ -42,14 +42,14 @@ The engine is the only stateful loop. Strategies are pure event handlers — the
 ## Installation
 
 ```bash
-pip install pred-market-cli
+pip install pm-cli
 ```
 
 Or install from source with [Poetry](https://python-poetry.org/):
 
 ```bash
-git clone https://github.com/ulab-uiuc/pred-market-cli.git
-cd pred-market-cli
+git clone https://github.com/ulab-uiuc/prediction-market-cli.git
+cd prediction-market-cli
 pip install poetry
 poetry install
 ```
@@ -64,14 +64,14 @@ poetry install
 import asyncio
 from decimal import Decimal
 
-from pred_market_cli.core.trading_engine import TradingEngine
-from pred_market_cli.data.backtest.historical_data_source import HistoricalDataSource
-from pred_market_cli.data.market_data_manager import MarketDataManager
-from pred_market_cli.position.position_manager import Position, PositionManager
-from pred_market_cli.risk.risk_manager import NoRiskManager
-from pred_market_cli.strategy.test_strategy import TestStrategy
-from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pred_market_cli.trader.paper_trader import PaperTrader
+from pm_cli.core.trading_engine import TradingEngine
+from pm_cli.data.backtest.historical_data_source import HistoricalDataSource
+from pm_cli.data.market_data_manager import MarketDataManager
+from pm_cli.position.position_manager import Position, PositionManager
+from pm_cli.risk.risk_manager import NoRiskManager
+from pm_cli.strategy.test_strategy import TestStrategy
+from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pm_cli.trader.paper_trader import PaperTrader
 
 async def run():
     ticker = PolyMarketTicker(symbol="my_market", name="My Market",
@@ -100,9 +100,9 @@ asyncio.run(run())
 import asyncio
 from decimal import Decimal
 
-from pred_market_cli.data.live.live_data_source import LiveRSSNewsDataSource
-from pred_market_cli.live.live_trader import run_live_paper_trading
-from pred_market_cli.strategy.test_strategy import TestStrategy
+from pm_cli.data.live.live_data_source import LiveRSSNewsDataSource
+from pm_cli.live.live_trader import run_live_paper_trading
+from pm_cli.strategy.test_strategy import TestStrategy
 
 asyncio.run(run_live_paper_trading(
     data_source=LiveRSSNewsDataSource(polling_interval=60.0, max_articles_per_poll=5),
@@ -115,9 +115,9 @@ asyncio.run(run_live_paper_trading(
 ### Custom Strategy
 
 ```python
-from pred_market_cli.strategy.strategy import Strategy
-from pred_market_cli.events.events import Event
-from pred_market_cli.trader.trader import Trader
+from pm_cli.strategy.strategy import Strategy
+from pm_cli.events.events import Event
+from pm_cli.trader.trader import Trader
 
 class MyStrategy(Strategy):
     async def process_event(self, event: Event, trader: Trader) -> None:
@@ -127,62 +127,62 @@ class MyStrategy(Strategy):
 
 ## CLI
 
-After installation, the `pred-market-cli` command is available:
+After installation, the `pm-cli` command is available:
 
 ```bash
 # Strategy scaffolding + validation
-pred-market-cli strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
-pred-market-cli strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pm-cli strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
+pm-cli strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Backtest mode
-pred-market-cli backtest run \
+pm-cli backtest run \
   --history-file ./data/history.jsonl \
   --market-id M1 --event-id E1 \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Paper trading mode (simulation with live data)
-pred-market-cli paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
-pred-market-cli paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
-pred-market-cli paper run --exchange rss --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pm-cli paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pm-cli paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
+pm-cli paper run --exchange rss --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Real trading mode
-pred-market-cli live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
-pred-market-cli live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
+pm-cli live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+pm-cli live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
 
 # Operator monitor + emergency control
-pred-market-cli monitor
-pred-market-cli trade status
-pred-market-cli trade pause
-pred-market-cli trade resume
-pred-market-cli trade estop
+pm-cli monitor
+pm-cli trade status
+pm-cli trade pause
+pm-cli trade resume
+pm-cli trade estop
 ```
 
 ### Minimal Commands
 
 ```bash
 # 1) Minimal backtest
-pred-market-cli backtest run \
+pm-cli backtest run \
   --history-file ./data/history.jsonl \
   --market-id M1 --event-id E1 \
-  --strategy-ref pred_market_cli.strategy.test_strategy:TestStrategy
+  --strategy-ref pm_cli.strategy.test_strategy:TestStrategy
 
 # 2) Minimal paper trading (simulation)
-pred-market-cli paper run \
+pm-cli paper run \
   --exchange polymarket \
-  --strategy-ref pred_market_cli.strategy.test_strategy:TestStrategy
+  --strategy-ref pm_cli.strategy.test_strategy:TestStrategy
 
 # 3) Minimal live trading (real orders)
-pred-market-cli live run \
+pm-cli live run \
   --exchange polymarket \
   --wallet-private-key "$POLYMARKET_PRIVATE_KEY" \
-  --strategy-ref pred_market_cli.strategy.test_strategy:TestStrategy
+  --strategy-ref pm_cli.strategy.test_strategy:TestStrategy
 ```
 
 ### Monitor (for human operator)
 
-- Start monitor: `pred-market-cli monitor`
-- Check/pause/resume/stop: `pred-market-cli trade status|pause|resume|estop`
-- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.pred-market-cli/engine.sock`); closing monitor does not stop the engine.
+- Start monitor: `pm-cli monitor`
+- Check/pause/resume/stop: `pm-cli trade status|pause|resume|estop`
+- Architecture: monitor is a separate UI process, connected to engine via Unix socket (`~/.pm-cli/engine.sock`); closing monitor does not stop the engine.
 
 ## Risk Management
 
@@ -214,7 +214,7 @@ pre-commit install
 ruff check . && ruff format .
 
 # Type check
-mypy pred_market_cli/
+mypy pm_cli/
 
 # Test
 pytest tests/ -v
@@ -222,7 +222,7 @@ pytest tests/ -v
 
 ## License
 
-[Apache 2.0](https://github.com/ulab-uiuc/pred-market-cli/blob/main/LICENSE)
+[Apache 2.0](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
 
 ## Disclaimer
 
