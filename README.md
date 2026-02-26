@@ -1,7 +1,7 @@
 ![Pred Market CLI](assets/pm-cli.png)
 
 <h1 align="center">
-  Agent-First Trading System for Prediction Markets
+  Agentic Trading Infrastructure for Prediction Markets
 </h1>
 
 <p align="center">
@@ -10,9 +10,9 @@
   <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
 </p>
 
-PM-CLI is an agent-first trading stack for prediction markets.
+PM-CLI is an **agentic trading infrastructure** project for prediction markets.
 
-The goal is simple: give an autonomous agent everything it needs to design, test, and run strategies end-to-end, while the human operator only does two things:
+Our goal is to build the infra layer that lets autonomous agents discover, test, and execute strategies end-to-end, while the human operator only does two things:
 
 1. Monitor the system.
 2. Pause or emergency-stop when needed.
