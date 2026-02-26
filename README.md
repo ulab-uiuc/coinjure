@@ -1,4 +1,4 @@
-# PM CLI: The Agent-First Trading System for Prediction Markets
+# PM-CLI: The Agent-First Trading System for Prediction Markets
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://img.shields.io/pypi/v/pm-cli.svg)](https://pypi.org/project/pm-cli/)
@@ -6,7 +6,7 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 
-**PM CLI** is an agent-first trading system for prediction markets. It provides a unified framework for building, testing, and deploying autonomous trading agents across [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) — the two leading prediction market exchanges — without changing a line of strategy code.
+**PM-CLI** is an agent-first trading system for prediction markets. It provides a unified framework for building, testing, and deploying autonomous trading agents across [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) — the two leading prediction market exchanges — without changing a line of strategy code.
 
 ## Why It Works for Both Polymarket and Kalshi
 
