@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from decimal import Decimal, InvalidOperation
 
 import click
@@ -15,7 +16,7 @@ from pm_cli.position.position_manager import Position, PositionManager
 from pm_cli.risk.risk_manager import NoRiskManager
 from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
 from pm_cli.trader.paper_trader import PaperTrader
-from pm_cli.trader.types import TradeSide
+from pm_cli.trader.types import PlaceOrderResult, TradeSide
 
 console = Console()
 
@@ -72,9 +73,24 @@ class PaperTokenAdapter:
         size: Decimal,
     ) -> str:
         """Place an order, return human-readable result string."""
-        ticker = self._ensure_ticker(token_id)
+        result = await self.place_order_result(token_id, side, price, size)
+        return self._format_result(result, price=price, size=size)
 
-        result = await self.trader.place_order(side, ticker, price, size)
+    async def place_order_result(
+        self,
+        token_id: str,
+        side: TradeSide,
+        price: Decimal,
+        size: Decimal,
+    ) -> PlaceOrderResult:
+        """Place an order and return the structured result."""
+        ticker = self._ensure_ticker(token_id)
+        return await self.trader.place_order(side, ticker, price, size)
+
+    @staticmethod
+    def _format_result(
+        result: PlaceOrderResult, *, price: Decimal, size: Decimal
+    ) -> str:
         if result.order is None:
             reason = result.failure_reason.value if result.failure_reason else 'unknown'
             return f'Order REJECTED: {reason}'
@@ -93,10 +109,6 @@ class PaperTokenAdapter:
             f'  Remaining: {o.remaining}\n'
             f'  Commission: ${o.commission}'
         )
-
-    async def cancel_order(self, order_id: str) -> bool:
-        # Paper mode does not support order cancellation.
-        return False
 
 
 # -- Click command group ----------------------------------------------------
@@ -182,7 +194,14 @@ def positions(token_id: str | None) -> None:
 )
 @click.option('--price', required=True, type=str, help='Limit price.')
 @click.option('--size', required=True, type=str, help='Quantity.')
-def place(token_id: str, side: str, price: str, size: str) -> None:
+@click.option(
+    '--json',
+    'as_json',
+    is_flag=True,
+    default=False,
+    help='Emit stable JSON payload.',
+)
+def place(token_id: str, side: str, price: str, size: str, as_json: bool) -> None:
     """Place a paper order."""
     try:
         price_d = Decimal(price)
@@ -193,17 +212,11 @@ def place(token_id: str, side: str, price: str, size: str) -> None:
 
     trade_side = TradeSide.BUY if side.lower() == 'buy' else TradeSide.SELL
     adapter = _get_adapter()
-    result = asyncio.run(adapter.place_order(token_id, trade_side, price_d, size_d))
-    console.print(result)
-
-
-@token.command()
-@click.option('--order-id', required=True, help='Order ID to cancel.')
-def cancel(order_id: str) -> None:
-    """Cancel an open order."""
-    adapter = _get_adapter()
-    ok = asyncio.run(adapter.cancel_order(order_id))
-    if ok:
-        console.print(f'Order {order_id} cancelled.')
-    else:
-        console.print('Cancel is not supported in paper mode.')
+    result = asyncio.run(
+        adapter.place_order_result(token_id, trade_side, price_d, size_d)
+    )
+    if as_json:
+        console.print(json.dumps(result.to_payload()))
+        return
+    human = adapter._format_result(result, price=price_d, size=size_d)
+    console.print(human)
