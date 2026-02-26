@@ -3,8 +3,8 @@ from decimal import Decimal
 
 import pytest
 
-from pred_market_cli.events.events import NewsEvent, OrderBookEvent, PriceChangeEvent
-from pred_market_cli.ticker.ticker import PolyMarketTicker
+from pm_cli.events.events import NewsEvent, OrderBookEvent, PriceChangeEvent
+from pm_cli.ticker.ticker import PolyMarketTicker
 
 
 @pytest.fixture

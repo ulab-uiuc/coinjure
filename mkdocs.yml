@@ -1,8 +1,8 @@
 site_name: Pred Market CLI
 site_description: An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.
-site_url: https://ulab-uiuc.github.io/pred-market-cli
-repo_url: https://github.com/ulab-uiuc/pred-market-cli
-repo_name: ulab-uiuc/pred-market-cli
+site_url: https://ulab-uiuc.github.io/pm-cli
+repo_url: https://github.com/ulab-uiuc/pm-cli
+repo_name: ulab-uiuc/pm-cli
 edit_uri: edit/main/docs/
 
 theme:

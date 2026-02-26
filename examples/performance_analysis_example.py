@@ -12,9 +12,9 @@ and analyze trading performance. It shows how to:
 
 from decimal import Decimal
 
-from pred_market_cli.analytics.performance_analyzer import PerformanceAnalyzer
-from pred_market_cli.ticker.ticker import PolyMarketTicker
-from pred_market_cli.trader.types import Trade, TradeSide
+from pm_cli.analytics.performance_analyzer import PerformanceAnalyzer
+from pm_cli.ticker.ticker import PolyMarketTicker
+from pm_cli.trader.types import Trade, TradeSide
 
 
 def create_test_ticker() -> PolyMarketTicker:

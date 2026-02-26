@@ -3,11 +3,11 @@
 This example shows how to run a trading engine with live monitoring.
 """
 
-from pred_market_cli.cli.monitor import TradingMonitor
-from pred_market_cli.core.trading_engine import TradingEngine
-from pred_market_cli.data.data_source import DataSource
-from pred_market_cli.strategy.strategy import Strategy
-from pred_market_cli.trader.trader import Trader
+from pm_cli.cli.monitor import TradingMonitor
+from pm_cli.core.trading_engine import TradingEngine
+from pm_cli.data.data_source import DataSource
+from pm_cli.strategy.strategy import Strategy
+from pm_cli.trader.trader import Trader
 
 
 async def run_trading_with_monitor(
@@ -50,22 +50,22 @@ def main() -> None:
     # Example setup (you would replace this with your actual configuration)
 
     # 1. Initialize your data source
-    # from pred_market_cli.data.live.polymarket_data_source import PolymarketDataSource
+    # from pm_cli.data.live.polymarket_data_source import PolymarketDataSource
     # data_source = PolymarketDataSource(...)
 
     # 2. Initialize your strategy
-    # from pred_market_cli.strategy.simple_strategy import SimpleStrategy
+    # from pm_cli.strategy.simple_strategy import SimpleStrategy
     # strategy = SimpleStrategy(...)
 
     # 3. Initialize your trader
     # For paper trading:
-    # from pred_market_cli.ticker.ticker import CashTicker
-    # from pred_market_cli.trader.paper_trader import PaperTrader
+    # from pm_cli.ticker.ticker import CashTicker
+    # from pm_cli.trader.paper_trader import PaperTrader
     # initial_cash = {CashTicker('USDC'): Decimal('10000')}
     # trader = PaperTrader(initial_cash=initial_cash)
 
     # For live trading:
-    # from pred_market_cli.trader.polymarket_trader import PolymarketTrader
+    # from pm_cli.trader.polymarket_trader import PolymarketTrader
     # trader = PolymarketTrader(...)
 
     # 4. Run with monitoring
@@ -80,9 +80,9 @@ def main() -> None:
     print('This is an example integration script.')
     print('Uncomment and configure the code above to run with your trading setup.')
     print('\nFor CLI usage:')
-    print('  pred-market-cli monitor              # Single snapshot')
-    print('  pred-market-cli monitor --watch      # Live updates')
-    print('  pred-market-cli monitor -w -r 1.0    # Live with 1s refresh')
+    print('  pm-cli monitor              # Single snapshot')
+    print('  pm-cli monitor --watch      # Live updates')
+    print('  pm-cli monitor -w -r 1.0    # Live with 1s refresh')
 
 
 if __name__ == '__main__':
