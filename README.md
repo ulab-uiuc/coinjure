@@ -1,4 +1,6 @@
-# PM-CLI: The Agent-First Trading System for Prediction Markets
+![Pred Market CLI](assets/pm-cli.png)
+
+<h1 align="center">PM-CLI: Agent-first Trading System for Prediction Market</h1>
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://img.shields.io/pypi/v/pm-cli.svg)](https://pypi.org/project/pm-cli/)
