@@ -8,10 +8,20 @@
 
 PM-CLI is an agent-first trading stack for prediction markets.
 
-The goal is simple: give an autonomous agent everything it needs to research, test, and run strategies end-to-end, while the human operator only does two things:
+The goal is simple: give an autonomous agent everything it needs to design, test, and run strategies end-to-end, while the human operator only does two things:
 
 1. Monitor the system.
 2. Pause or emergency-stop when needed.
+
+## 1-Minute Start
+
+```bash
+pm-cli paper run --exchange polymarket --strategy-ref pm_cli.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy
+
+pm-cli monitor
+```
+
+![PM-CLI Monitor](assets/pm_cli_monitor.png)
 
 ## Why Agent-First
 
