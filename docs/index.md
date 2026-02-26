@@ -1,7 +1,7 @@
 # Pred Market CLI
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyPI version](https://img.shields.io/pypi/v/pm-cli.svg)](https://pypi.org/project/pm-cli/)
+[![PyPI version](https://img.shields.io/pypi/v/coinjure.svg)](https://pypi.org/project/coinjure/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/pm-cli/blob/main/LICENSE)
 
 **Pred Market CLI** is an intelligent trading agent for [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
@@ -30,7 +30,7 @@ TradingEngine
 ## Installation
 
 ```bash
-pip install pm-cli
+pip install coinjure
 ```
 
 Or install from source with [Poetry](https://python-poetry.org/):
@@ -53,14 +53,14 @@ Python >= 3.10, < 3.12
 import asyncio
 from decimal import Decimal
 
-from pm_cli.core.trading_engine import TradingEngine
-from pm_cli.data.backtest.historical_data_source import HistoricalDataSource
-from pm_cli.data.market_data_manager import MarketDataManager
-from pm_cli.position.position_manager import Position, PositionManager
-from pm_cli.risk.risk_manager import NoRiskManager
-from pm_cli.strategy.test_strategy import TestStrategy
-from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pm_cli.trader.paper_trader import PaperTrader
+from coinjure.core.trading_engine import TradingEngine
+from coinjure.data.backtest.historical_data_source import HistoricalDataSource
+from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.position.position_manager import Position, PositionManager
+from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.strategy.test_strategy import TestStrategy
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.trader.paper_trader import PaperTrader
 
 async def run():
     ticker = PolyMarketTicker(symbol="my_market", name="My Market",
@@ -86,9 +86,9 @@ asyncio.run(run())
 ### Custom Strategy
 
 ```python
-from pm_cli.strategy.strategy import Strategy
-from pm_cli.events.events import Event
-from pm_cli.trader.trader import Trader
+from coinjure.strategy.strategy import Strategy
+from coinjure.events.events import Event
+from coinjure.trader.trader import Trader
 
 class MyStrategy(Strategy):
     async def process_event(self, event: Event, trader: Trader) -> None:

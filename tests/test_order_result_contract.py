@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from pm_cli.ticker.ticker import PolyMarketTicker
-from pm_cli.trader.types import (
+from coinjure.ticker.ticker import PolyMarketTicker
+from coinjure.trader.types import (
     Order,
     OrderFailureReason,
     OrderStatus,

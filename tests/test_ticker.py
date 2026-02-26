@@ -1,6 +1,6 @@
 import pytest
 
-from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
 
 
 class TestPolyMarketTicker:

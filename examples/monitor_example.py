@@ -3,11 +3,11 @@
 This example shows how to run a trading engine with live monitoring.
 """
 
-from pm_cli.cli.monitor import TradingMonitor
-from pm_cli.core.trading_engine import TradingEngine
-from pm_cli.data.data_source import DataSource
-from pm_cli.strategy.strategy import Strategy
-from pm_cli.trader.trader import Trader
+from coinjure.cli.monitor import TradingMonitor
+from coinjure.core.trading_engine import TradingEngine
+from coinjure.data.data_source import DataSource
+from coinjure.strategy.strategy import Strategy
+from coinjure.trader.trader import Trader
 
 
 async def run_trading_with_monitor(
@@ -50,22 +50,22 @@ def main() -> None:
     # Example setup (you would replace this with your actual configuration)
 
     # 1. Initialize your data source
-    # from pm_cli.data.live.polymarket_data_source import PolymarketDataSource
+    # from coinjure.data.live.polymarket_data_source import PolymarketDataSource
     # data_source = PolymarketDataSource(...)
 
     # 2. Initialize your strategy
-    # from pm_cli.strategy.simple_strategy import SimpleStrategy
+    # from coinjure.strategy.simple_strategy import SimpleStrategy
     # strategy = SimpleStrategy(...)
 
     # 3. Initialize your trader
     # For paper trading:
-    # from pm_cli.ticker.ticker import CashTicker
-    # from pm_cli.trader.paper_trader import PaperTrader
+    # from coinjure.ticker.ticker import CashTicker
+    # from coinjure.trader.paper_trader import PaperTrader
     # initial_cash = {CashTicker('USDC'): Decimal('10000')}
     # trader = PaperTrader(initial_cash=initial_cash)
 
     # For live trading:
-    # from pm_cli.trader.polymarket_trader import PolymarketTrader
+    # from coinjure.trader.polymarket_trader import PolymarketTrader
     # trader = PolymarketTrader(...)
 
     # 4. Run with monitoring

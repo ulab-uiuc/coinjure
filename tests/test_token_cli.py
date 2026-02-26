@@ -6,9 +6,9 @@ from decimal import Decimal
 
 from click.testing import CliRunner
 
-from pm_cli.cli.cli import cli
-from pm_cli.cli.token import PaperTokenAdapter
-from pm_cli.trader.types import TradeSide
+from coinjure.cli.cli import cli
+from coinjure.cli.token import PaperTokenAdapter
+from coinjure.trader.types import TradeSide
 
 # -- PaperTokenAdapter unit tests -------------------------------------------
 
@@ -83,7 +83,7 @@ class TestTokenCLI:
     def test_positions_empty(self) -> None:
         runner = CliRunner()
         # Need to reset module-level adapter for isolation
-        import pm_cli.cli.token as token_mod
+        import coinjure.cli.token as token_mod
 
         token_mod._adapter = PaperTokenAdapter(initial_capital=Decimal('0'))
         result = runner.invoke(cli, ['token', 'positions'])
@@ -92,7 +92,7 @@ class TestTokenCLI:
 
     def test_place_buy_no_liquidity(self) -> None:
         runner = CliRunner()
-        import pm_cli.cli.token as token_mod
+        import coinjure.cli.token as token_mod
 
         token_mod._adapter = None  # fresh adapter
         result = runner.invoke(
@@ -116,7 +116,7 @@ class TestTokenCLI:
 
     def test_place_json_contract(self) -> None:
         runner = CliRunner()
-        import pm_cli.cli.token as token_mod
+        import coinjure.cli.token as token_mod
 
         token_mod._adapter = None
         result = runner.invoke(

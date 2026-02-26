@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
-from pm_cli.cli.cli import cli
+from coinjure.cli.cli import cli
 
 
 def test_trade_pause_resume_stop_and_estop(monkeypatch):
@@ -12,7 +12,7 @@ def test_trade_pause_resume_stop_and_estop(monkeypatch):
         calls.append(cmd)
         return {'ok': True, 'status': 'paused' if cmd == 'pause' else 'stopping'}
 
-    monkeypatch.setattr('pm_cli.cli.trade_commands.run_command', fake_run_command)
+    monkeypatch.setattr('coinjure.cli.trade_commands.run_command', fake_run_command)
     runner = CliRunner()
 
     pause = runner.invoke(cli, ['trade', 'pause'])
@@ -41,7 +41,7 @@ def test_trade_status_human_and_json(monkeypatch):
             'orders': 3,
         }
 
-    monkeypatch.setattr('pm_cli.cli.trade_commands.run_command', fake_run_command)
+    monkeypatch.setattr('coinjure.cli.trade_commands.run_command', fake_run_command)
     runner = CliRunner()
 
     human = runner.invoke(cli, ['trade', 'status'])
@@ -57,7 +57,7 @@ def test_trade_error_returns_nonzero(monkeypatch):
     def fake_run_command(cmd, socket_path=None, **kwargs):
         return {'ok': False, 'error': 'no socket'}
 
-    monkeypatch.setattr('pm_cli.cli.trade_commands.run_command', fake_run_command)
+    monkeypatch.setattr('coinjure.cli.trade_commands.run_command', fake_run_command)
     runner = CliRunner()
     result = runner.invoke(cli, ['trade', 'pause'])
     assert result.exit_code == 1

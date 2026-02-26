@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pm_cli.config.config import (
+from coinjure.config.config import (
     AlertConfig,
     Config,
     EngineConfig,

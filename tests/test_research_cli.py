@@ -6,7 +6,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from pm_cli.cli.cli import cli
+from coinjure.cli.cli import cli
 
 
 def _write_history(path: Path) -> None:
@@ -165,7 +165,7 @@ def test_research_backtest_batch_writes_output(monkeypatch, tmp_path: Path) -> N
         }
 
     monkeypatch.setattr(
-        'pm_cli.cli.research_commands._run_backtest_once', fake_run_backtest_once
+        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
     )
 
     runner = CliRunner()
@@ -181,7 +181,7 @@ def test_research_backtest_batch_writes_output(monkeypatch, tmp_path: Path) -> N
             '--event-id',
             'E1',
             '--strategy-ref',
-            'pm_cli.strategy.test_strategy:TestStrategy',
+            'coinjure.strategy.test_strategy:TestStrategy',
             '--params-jsonl',
             str(params),
             '--output',

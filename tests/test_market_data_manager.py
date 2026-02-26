@@ -2,10 +2,10 @@ from decimal import Decimal
 
 import pytest
 
-from pm_cli.data.market_data_manager import MarketDataManager
-from pm_cli.events.events import OrderBookEvent, PriceChangeEvent
-from pm_cli.order.order_book import Level, OrderBook
-from pm_cli.ticker.ticker import PolyMarketTicker
+from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.events.events import OrderBookEvent, PriceChangeEvent
+from coinjure.order.order_book import Level, OrderBook
+from coinjure.ticker.ticker import PolyMarketTicker
 
 
 @pytest.fixture

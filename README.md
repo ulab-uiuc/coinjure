@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
-  <a href="https://pypi.org/project/pm-cli/"><img src="https://img.shields.io/pypi/v/pm-cli.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/coinjure/"><img src="https://img.shields.io/pypi/v/coinjure.svg" alt="PyPI version"></a>
   <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
 </p>
 
@@ -20,7 +20,7 @@ The goal is simple: give an autonomous agent everything it needs to design, test
 ## 1-Minute Start
 
 ```bash
-pm-cli paper run --exchange polymarket --strategy-ref pm_cli.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy
+pm-cli paper run --exchange polymarket --strategy-ref coinjure.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy
 
 pm-cli monitor
 ```
@@ -81,7 +81,7 @@ TradingEngine
 ## Installation
 
 ```bash
-pip install pm-cli
+pip install coinjure
 ```
 
 From source:
@@ -253,7 +253,7 @@ export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"
 poetry install --with dev,test
 pre-commit install
 ruff check . && ruff format .
-mypy pm_cli/
+mypy coinjure/
 pytest tests/ -v
 ```
 
