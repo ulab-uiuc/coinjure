@@ -2,7 +2,7 @@
 
 Ports the Google News scraping approach from
 ``ulab-uiuc/live-trade-bench`` (``fetchers/news_fetcher.py``) into
-the pm-cli ``DataSource`` interface.  Scrapes
+the coinjure ``DataSource`` interface.  Scrapes
 ``google.com/search?tbm=nws`` for news cards, parses them with
 BeautifulSoup, and emits ``NewsEvent`` objects through an async queue.
 """
@@ -309,7 +309,7 @@ def _fetch_google_news_rss(
 class GoogleNewsDataSource(DataSource):
     """Scrape Google News and emit ``NewsEvent`` objects.
 
-    This is the pm-cli adaptation of the ``NewsFetcher`` from
+    This is the coinjure adaptation of the ``NewsFetcher`` from
     ``ulab-uiuc/live-trade-bench``.  It polls Google News search
     results on a configurable interval, deduplicates by article URL,
     persists seen article IDs to a JSONL file, and feeds events into

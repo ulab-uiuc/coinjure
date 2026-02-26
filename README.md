@@ -1,4 +1,4 @@
-![Pred Market CLI](assets/pm-cli.png)
+![Coinjure](assets/coinjure.png)
 
 <h1 align="center">
   Agent-First Trading System for Prediction Markets
@@ -10,7 +10,7 @@
   <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
 </p>
 
-PM-CLI is an agent-first trading stack for prediction markets.
+Coinjure is an agent-first trading stack for prediction markets.
 
 The goal is simple: give an autonomous agent everything it needs to design, test, and run strategies end-to-end, while the human operator only does two things:
 
@@ -20,12 +20,12 @@ The goal is simple: give an autonomous agent everything it needs to design, test
 ## 1-Minute Start
 
 ```bash
-pm-cli paper run --exchange polymarket --strategy-ref coinjure.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy
+coinjure paper run --exchange polymarket --strategy-ref coinjure.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy
 
-pm-cli monitor
+coinjure monitor
 ```
 
-![PM-CLI Monitor](assets/pm_cli_monitor.png)
+![Coinjure Monitor](assets/coinjure_monitor.png)
 
 ## Why Agent-First
 
@@ -33,7 +33,7 @@ AI agents are now strong enough to self-discover alpha from messy, fast-moving m
 
 Can we build the tools, infrastructure, and environment that let an agent operate like a disciplined human trader, but through command-line APIs that are easy for agents to use?
 
-PM-CLI is our answer:
+Coinjure is our answer:
 
 - Strategy is the primary interface.
 - The engine owns execution, risk checks, and lifecycle.
@@ -43,7 +43,7 @@ This lets agents iterate quickly, safely, and reproducibly without rebuilding tr
 
 ## What We Provide for Agent Trading
 
-PM-CLI provides the full toolchain needed by an autonomous trading agent:
+Coinjure provides the full toolchain needed by an autonomous trading agent:
 
 - Unified strategy API across Polymarket and Kalshi.
 - Live market + news ingestion in paper mode.
@@ -98,25 +98,25 @@ poetry install
 ### 1) Explore market and news inputs
 
 ```bash
-pm-cli market list --exchange polymarket --limit 20
-pm-cli market search --exchange polymarket --query "election" --limit 20
-pm-cli market info --exchange polymarket --market-id <market_id>
+coinjure market list --exchange polymarket --limit 20
+coinjure market search --exchange polymarket --query "election" --limit 20
+coinjure market info --exchange polymarket --market-id <market_id>
 
-pm-cli news fetch --source google --query "prediction market" --limit 10
-pm-cli news fetch --source rss --query "fed rates" --limit 10
+coinjure news fetch --source google --query "prediction market" --limit 10
+coinjure news fetch --source rss --query "fed rates" --limit 10
 ```
 
 ### 2) Scaffold and validate a strategy
 
 ```bash
-pm-cli strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
-pm-cli strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
+coinjure strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
 ```
 
 Use constructor kwargs when needed:
 
 ```bash
-pm-cli strategy validate \
+coinjure strategy validate \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --strategy-kwargs-json '{"trade_size": "25", "entry_imbalance": 0.35}'
 ```
@@ -124,7 +124,7 @@ pm-cli strategy validate \
 Quick runtime smoke check before backtest/paper run:
 
 ```bash
-pm-cli strategy dry-run \
+coinjure strategy dry-run \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --strategy-kwargs-json '{"trade_size": "25"}' \
   --events 10 --json
@@ -133,17 +133,17 @@ pm-cli strategy dry-run \
 Built-in example strategy files (good templates for agents):
 
 ```bash
-pm-cli strategy validate \
+coinjure strategy validate \
   --strategy-ref ./examples/strategies/threshold_momentum_strategy.py:ThresholdMomentumStrategy
 
-pm-cli strategy validate \
+coinjure strategy validate \
   --strategy-ref ./examples/strategies/orderbook_pressure_strategy.py:OrderBookPressureStrategy
 ```
 
 ### 3) Run paper trading with monitor
 
 ```bash
-pm-cli paper run \
+coinjure paper run \
   --exchange polymarket \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --strategy-kwargs-json '{"trade_size": "25"}' \
@@ -153,18 +153,18 @@ pm-cli paper run \
 ### 4) Operator control commands (separate terminal)
 
 ```bash
-pm-cli trade status
-pm-cli trade pause
-pm-cli trade resume
-pm-cli trade stop
+coinjure trade status
+coinjure trade pause
+coinjure trade resume
+coinjure trade stop
 ```
 
 ### 5) Record and backtest
 
 ```bash
-pm-cli data record --exchange polymarket --output ./data/events.jsonl --duration 300
+coinjure data record --exchange polymarket --output ./data/events.jsonl --duration 300
 
-pm-cli backtest run \
+coinjure backtest run \
   --history-file ./data/events.jsonl \
   --market-id M1 \
   --event-id E1 \
@@ -177,18 +177,18 @@ Use these composable tools when an agent needs to discover strategies on yes/no 
 
 ```bash
 # 1) build a clean per-market slice
-pm-cli research slice \
+coinjure research slice \
   --history-file ./data/events.jsonl \
   --market-id M1 --event-id E1 \
   --output ./data/m1_e1_slice.jsonl
 
 # 2) build features + labels
-pm-cli research features \
+coinjure research features \
   --history-file ./data/events.jsonl \
   --market-id M1 --event-id E1 \
   --output ./data/m1_e1_features.jsonl
 
-pm-cli research labels \
+coinjure research labels \
   --history-file ./data/events.jsonl \
   --market-id M1 --event-id E1 \
   --horizon-steps 5 \
@@ -196,20 +196,20 @@ pm-cli research labels \
   --output ./data/m1_e1_labels.jsonl
 
 # 3) run parameter sweeps, rank, and persist memory
-pm-cli research backtest-batch \
+coinjure research backtest-batch \
   --history-file ./data/events.jsonl \
   --market-id M1 --event-id E1 \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --params-jsonl ./data/params.jsonl \
   --output ./data/batch_runs.jsonl
 
-pm-cli research compare-runs \
+coinjure research compare-runs \
   --input-file ./data/batch_runs.jsonl \
   --sort-key sharpe_ratio \
   --top 20 \
   --output ./data/top_runs.jsonl
 
-pm-cli research memory add \
+coinjure research memory add \
   --input-file ./data/top_runs.jsonl \
   --tag m1_e1
 ```
@@ -220,8 +220,8 @@ Also available: `research universe`, `research walk-forward`, `research stress-t
 
 The operator is intentionally lightweight:
 
-- Use `pm-cli monitor` for live visibility.
-- Use `pm-cli trade pause|resume|stop` for intervention.
+- Use `coinjure monitor` for live visibility.
+- Use `coinjure trade pause|resume|stop` for intervention.
 
 The operator should not need to manually place/cancel orders in normal operation.
 
@@ -229,15 +229,15 @@ The operator should not need to manually place/cancel orders in normal operation
 
 Primary command groups:
 
-- `pm-cli strategy`: create and validate strategies.
-- `pm-cli paper`: paper trading with live feeds.
-- `pm-cli backtest`: historical replay.
-- `pm-cli monitor`: attach monitor UI to running engine.
-- `pm-cli trade`: runtime control (`status`, `pause`, `resume`, `stop`, `killswitch`).
-- `pm-cli market`: market discovery and metadata.
-- `pm-cli news`: standalone news fetching.
-- `pm-cli data`: live event recording.
-- `pm-cli research`: strategy-discovery tools (slice/features/labels/batch/walk-forward/stress/gate/memory).
+- `coinjure strategy`: create and validate strategies.
+- `coinjure paper`: paper trading with live feeds.
+- `coinjure backtest`: historical replay.
+- `coinjure monitor`: attach monitor UI to running engine.
+- `coinjure trade`: runtime control (`status`, `pause`, `resume`, `stop`, `killswitch`).
+- `coinjure market`: market discovery and metadata.
+- `coinjure news`: standalone news fetching.
+- `coinjure data`: live event recording.
+- `coinjure research`: strategy-discovery tools (slice/features/labels/batch/walk-forward/stress/gate/memory).
 
 ## Environment Variables
 

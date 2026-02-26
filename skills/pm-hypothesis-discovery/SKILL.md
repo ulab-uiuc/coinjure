@@ -17,18 +17,18 @@ Use this skill to generate candidate trading hypotheses (not code yet).
 
 1. Build market universe:
 
-- `pm-cli market list --exchange <exchange> --limit 100`
-- `pm-cli market search --exchange <exchange> --query "<theme>" --limit 100`
-- `pm-cli research universe --exchange <exchange> --min-volume <v> --max-spread <s> --json`
+- `coinjure market list --exchange <exchange> --limit 100`
+- `coinjure market search --exchange <exchange> --query "<theme>" --limit 100`
+- `coinjure research universe --exchange <exchange> --min-volume <v> --max-spread <s> --json`
 
 2. Pull catalyst context:
 
-- `pm-cli news fetch --source google --query "<theme>" --limit 20 --json`
-- `pm-cli news fetch --source rss --query "<theme>" --limit 20 --json`
+- `coinjure news fetch --source google --query "<theme>" --limit 20 --json`
+- `coinjure news fetch --source rss --query "<theme>" --limit 20 --json`
 
 3. Inspect top candidates:
 
-- `pm-cli market info --exchange <exchange> --market-id <id> --json`
+- `coinjure market info --exchange <exchange> --market-id <id> --json`
 
 4. Produce hypothesis set (3-10 ideas), each with:
 

@@ -19,25 +19,25 @@ Use this skill to turn hypotheses into ranked parameterized evidence.
 
 1. Slice target series:
 
-- `pm-cli research slice --history-file <history.jsonl> --market-id <M> --event-id <E> --output <slice.jsonl> --json`
+- `coinjure research slice --history-file <history.jsonl> --market-id <M> --event-id <E> --output <slice.jsonl> --json`
 
 2. Build features/labels:
 
-- `pm-cli research features --history-file <history.jsonl> --market-id <M> --event-id <E> --output <features.jsonl> --json`
-- `pm-cli research labels --history-file <history.jsonl> --market-id <M> --event-id <E> --output <labels.jsonl> --json`
+- `coinjure research features --history-file <history.jsonl> --market-id <M> --event-id <E> --output <features.jsonl> --json`
+- `coinjure research labels --history-file <history.jsonl> --market-id <M> --event-id <E> --output <labels.jsonl> --json`
 
 3. Batch backtest params:
 
-- `pm-cli research backtest-batch --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --params-jsonl <params.jsonl> --output <runs.jsonl> --json`
+- `coinjure research backtest-batch --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --params-jsonl <params.jsonl> --output <runs.jsonl> --json`
 
 4. Rank and keep top runs:
 
-- `pm-cli research compare-runs --input-file <runs.jsonl> --sort-key sharpe_ratio --top 20 --output <top_runs.jsonl> --json`
+- `coinjure research compare-runs --input-file <runs.jsonl> --sort-key sharpe_ratio --top 20 --output <top_runs.jsonl> --json`
 
 5. Persist experiment memory:
 
-- `pm-cli research memory add --input-file <top_runs.jsonl> --tag <tag> --json`
-- `pm-cli research memory list --tag <tag> --json`
+- `coinjure research memory add --input-file <top_runs.jsonl> --tag <tag> --json`
+- `coinjure research memory list --tag <tag> --json`
 
 ## Params JSONL Row Format
 

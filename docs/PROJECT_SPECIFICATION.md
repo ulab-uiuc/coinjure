@@ -1,10 +1,10 @@
-# Pred Market CLI Project Specification
+# Coinjure Project Specification
 
 ## 1. Core Features and Problems Solved
 
 ### 1.1 Core Features
 
-**Pred Market CLI** (Social World Model Trading Agent) is an intelligent trading agent system designed for the **Polymarket prediction market**, built on the Social World Model concept. Its core features include:
+**Coinjure** (Social World Model Trading Agent) is an intelligent trading agent system designed for the **Polymarket prediction market**, built on the Social World Model concept. Its core features include:
 
 | Module                           | Description                                                                          |
 | -------------------------------- | ------------------------------------------------------------------------------------ |
@@ -143,7 +143,7 @@ Defined in `pyproject.toml`:
 
 ```toml
 [tool.poetry.scripts]
-pm-cli = "coinjure.cli.cli:cli"
+coinjure = "coinjure.cli.cli:cli"
 ```
 
 The main entry point is: **`coinjure.cli.cli:cli`**.
@@ -151,8 +151,8 @@ The main entry point is: **`coinjure.cli.cli:cli`**.
 After installation, the CLI can be invoked directly:
 
 ```bash
-pm-cli monitor           # Monitor
-pm-cli monitor --watch   # Live refresh
+coinjure monitor           # Monitor
+coinjure monitor --watch   # Live refresh
 ```
 
 ### 4.2 Entry Point Overview
@@ -219,8 +219,8 @@ asyncio.run(run_live_paper_trading(
 ### Monitoring
 
 ```bash
-pm-cli monitor
-pm-cli monitor --watch --refresh 1.0
+coinjure monitor
+coinjure monitor --watch --refresh 1.0
 ```
 
 ---

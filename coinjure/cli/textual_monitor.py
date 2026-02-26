@@ -1,4 +1,4 @@
-"""Textual-based interactive trading monitor for Pred Market CLI.
+"""Textual-based interactive trading monitor for Coinjure.
 
 Key bindings (native, zero-latency):
   q / Ctrl+C  — quit
@@ -48,7 +48,7 @@ def _fmt_pnl(v: Decimal) -> str:
 class ControlBar(Horizontal):
     """Bottom control bar: status indicator + Pause / Resume / Stop buttons.
 
-    Human operators click buttons; the agent uses ``pm-cli trade`` CLI.
+    Human operators click buttons; the agent uses ``coinjure trade`` CLI.
     Both paths talk to the same Unix socket — identical effect.
     """
 
@@ -763,7 +763,7 @@ class TradingMonitorApp(App[None]):
     }
     """
 
-    # Monitor is read-only for keyboard — buttons and pm-cli trade CLI control engine.
+    # Monitor is read-only for keyboard — buttons and coinjure trade CLI control engine.
     BINDINGS = [
         Binding('q', 'quit', 'Close Monitor', show=True),
         Binding('s', 'estop', 'E-Stop', show=True),
@@ -806,9 +806,7 @@ class TradingMonitorApp(App[None]):
 
     def on_mount(self) -> None:
         self.title = (
-            f'Pred Market CLI — {self.exchange_name}'
-            if self.exchange_name
-            else 'Pred Market CLI'
+            f'Coinjure — {self.exchange_name}' if self.exchange_name else 'Coinjure'
         )
         # Start the trading engine as a Textual worker so it runs inside
         # Textual's event loop (main thread), avoiding signal handler errors.
@@ -837,9 +835,9 @@ class TradingMonitorApp(App[None]):
         activity_log = list(getattr(self.engine, '_activity_log', []))
         last_activity = activity_log[-1][1] if activity_log else 'No activity yet'
         self.sub_title = (
-            '⏸  PAUSED — click ▶ Resume or: pm-cli trade resume'
+            '⏸  PAUSED — click ▶ Resume or: coinjure trade resume'
             if paused
-            else '▶  Running — click ⏸ Pause or: pm-cli trade pause'
+            else '▶  Running — click ⏸ Pause or: coinjure trade pause'
         )
         self.sub_title = (
             f'{self.sub_title}  |  Last: {last_activity[:60]}  |  E-Stop: s'
@@ -850,7 +848,7 @@ class TradingMonitorApp(App[None]):
             pass
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle control-bar button clicks (same effect as pm-cli trade CLI)."""
+        """Handle control-bar button clicks (same effect as coinjure trade CLI)."""
         btn_id = event.button.id
 
         if btn_id == 'btn-pause' and self.control_server:
@@ -942,7 +940,7 @@ class SocketTradingMonitorApp(App[None]):
     Runs in a completely separate process. The engine continues unaffected
     when this app is closed.
 
-    Start with:  pm-cli monitor
+    Start with:  coinjure monitor
     """
 
     CSS = TradingMonitorApp.CSS  # reuse identical layout
@@ -985,7 +983,7 @@ class SocketTradingMonitorApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title = 'Pred Market CLI — Socket Monitor'
+        self.title = 'Coinjure — Socket Monitor'
         self.sub_title = f'Connecting to {self.socket_path} …'
         self.set_interval(2.0, self._poll_state)
 
@@ -1007,9 +1005,9 @@ class SocketTradingMonitorApp(App[None]):
         self._connected = True
         self._paused = state.get('paused', False)
         self.sub_title = (
-            '⏸  Engine PAUSED — click ▶ Resume or: pm-cli trade resume'
+            '⏸  Engine PAUSED — click ▶ Resume or: coinjure trade resume'
             if self._paused
-            else '▶  Engine running — click ⏸ Pause or: pm-cli trade pause'
+            else '▶  Engine running — click ⏸ Pause or: coinjure trade pause'
         )
         last_activity = state.get('activity_log') or []
         last_msg = last_activity[-1][1] if last_activity else 'No activity yet'
@@ -1040,7 +1038,7 @@ class SocketTradingMonitorApp(App[None]):
             logger.debug('Socket monitor render error: %s', exc)
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle control-bar button clicks (same effect as pm-cli trade CLI)."""
+        """Handle control-bar button clicks (same effect as coinjure trade CLI)."""
         from coinjure.cli.control import send_command
 
         btn_id = event.button.id

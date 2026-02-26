@@ -585,9 +585,9 @@ class TradingMonitor:
         )
 
         # Header with exchange name
-        title = 'Pred Market CLI - Trading Monitor'
+        title = 'Coinjure - Trading Monitor'
         if self.exchange_name:
-            title = f'Pred Market CLI - {self.exchange_name} Trading Monitor'
+            title = f'Coinjure - {self.exchange_name} Trading Monitor'
         header_text = Text(title, justify='center', style='bold blue')
         layout['header'].update(Panel(header_text, border_style='blue'))
 
@@ -702,19 +702,19 @@ class TradingMonitor:
     '-s',
     default=None,
     type=click.Path(),
-    help='Path to engine control socket (default: ~/.pm-cli/engine.sock)',
+    help='Path to engine control socket (default: ~/.coinjure/engine.sock)',
 )
 def monitor(socket: str | None) -> None:
     """Attach a live Textual monitor to a running trading engine.
 
     Connects via Unix socket — the engine continues running when you close
-    the monitor.  Use ``pm-cli trade`` to control the engine.
+    the monitor.  Use ``coinjure trade`` to control the engine.
 
     Examples:
-        pm-cli monitor                       # attach to default socket
-        pm-cli monitor -s /tmp/eng.sock      # custom socket path
-        pm-cli trade status                  # check engine health
-        pm-cli trade pause                   # pause LLM decisions
+        coinjure monitor                       # attach to default socket
+        coinjure monitor -s /tmp/eng.sock      # custom socket path
+        coinjure trade status                  # check engine health
+        coinjure trade pause                   # pause LLM decisions
     """
     from pathlib import Path
 
@@ -728,11 +728,11 @@ def monitor(socket: str | None) -> None:
             click.style('✗ ', fg='red')
             + f'No engine running — socket not found: {sock}\n\n'
             'Start an engine first:\n'
-            '  pm-cli paper run --exchange <polymarket|kalshi|rss>\n'
+            '  coinjure paper run --exchange <polymarket|kalshi|rss>\n'
             '\n'
             'Examples:\n'
-            '  pm-cli paper run --exchange polymarket\n'
-            '  pm-cli paper run --exchange kalshi\n'
+            '  coinjure paper run --exchange polymarket\n'
+            '  coinjure paper run --exchange kalshi\n'
             '\n'
             'Or (dev script):\n'
             '  python scripts/run_paper_trading.py -e polymarket\n'

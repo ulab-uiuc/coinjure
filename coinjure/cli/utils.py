@@ -25,7 +25,7 @@ class MonitoredTradingEngine:
     ──────────────────────────────────────
     The engine and the control server run directly in the asyncio event loop
     (``asyncio.run(_main(...))``).  The process can still be controlled via
-    ``pm-cli trade pause/resume/stop/status`` from another terminal.
+    ``coinjure trade pause/resume/stop/status`` from another terminal.
     """
 
     def __init__(

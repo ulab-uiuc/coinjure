@@ -1,6 +1,6 @@
 # Trading Monitor CLI Documentation
 
-The Pred Market CLI CLI provides comprehensive monitoring capabilities for your trading activities, positions, and portfolio status.
+The Coinjure CLI provides comprehensive monitoring capabilities for your trading activities, positions, and portfolio status.
 
 ## Features
 
@@ -20,14 +20,14 @@ After installing dependencies:
 poetry install
 ```
 
-The CLI is available via the `pm-cli` command.
+The CLI is available via the `coinjure` command.
 
 ## CLI Commands
 
 ### Monitor Command
 
 ```bash
-pm-cli monitor [OPTIONS]
+coinjure monitor [OPTIONS]
 ```
 
 #### Options
@@ -41,19 +41,19 @@ pm-cli monitor [OPTIONS]
 **Single snapshot:**
 
 ```bash
-pm-cli monitor
+coinjure monitor
 ```
 
 **Live monitoring mode:**
 
 ```bash
-pm-cli monitor --watch
+coinjure monitor --watch
 ```
 
 **Live mode with custom refresh rate:**
 
 ```bash
-pm-cli monitor -w -r 1.0  # Update every 1 second
+coinjure monitor -w -r 1.0  # Update every 1 second
 ```
 
 ## Integration with Trading Engine
@@ -201,7 +201,7 @@ Session statistics:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│            Pred Market CLI - Trading Monitor                          │
+│            Coinjure - Trading Monitor                          │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────┐  ┌──────────────────────────────────┐

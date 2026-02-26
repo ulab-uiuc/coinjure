@@ -1,4 +1,4 @@
-"""Token trading CLI commands for Pred Market CLI."""
+"""Token trading CLI commands for Coinjure."""
 
 from __future__ import annotations
 
