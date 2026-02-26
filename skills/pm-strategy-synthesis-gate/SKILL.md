@@ -18,22 +18,22 @@ Use this skill after hypotheses are ranked.
 
 1. Create/update strategy file:
 
-- `pm-cli strategy create --output ./strategies/<name>.py --class-name <ClassName>`
+- `coinjure strategy create --output ./strategies/<name>.py --class-name <ClassName>`
 - implement logic by adapting `examples/strategies/*`.
 
 2. Validate constructor and imports:
 
-- `pm-cli strategy validate --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --json`
+- `coinjure strategy validate --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --json`
 
 3. Runtime sanity:
 
-- `pm-cli strategy dry-run --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --events 10 --json`
+- `coinjure strategy dry-run --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --events 10 --json`
 
 4. Robustness checks:
 
-- `pm-cli research walk-forward --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --output <wf.jsonl> --json`
-- `pm-cli research stress-test --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --output <stress.jsonl> --json`
-- `pm-cli research strategy-gate --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --json`
+- `coinjure research walk-forward --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --output <wf.jsonl> --json`
+- `coinjure research stress-test --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --output <stress.jsonl> --json`
+- `coinjure research strategy-gate --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --json`
 
 5. Promotion path:
 

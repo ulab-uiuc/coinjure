@@ -167,7 +167,7 @@ def main(watch: bool, refresh: float) -> None:
         python examples/demo_monitor.py --watch      # Live monitoring
         python examples/demo_monitor.py -w -r 1.0    # Live with 1s refresh
     """
-    print('=== Pred Market CLI Trading Monitor Demo ===')
+    print('=== Coinjure Trading Monitor Demo ===')
     print('This demo simulates a trading session with random trades.')
     print('The monitor will display portfolio, positions, orders, and statistics.\n')
 

@@ -140,7 +140,7 @@ print(f'Stayed flat: {sum(1 for c in changes if abs(c) < 0.02)} ({sum(1 for c in
 mkdir -p strategies
 
 # Use the template generator
-pm-cli strategy create --output strategies/my_strategy.py --class-name MyStrategy
+coinjure strategy create --output strategies/my_strategy.py --class-name MyStrategy
 
 # Or write directly
 ```
@@ -154,7 +154,7 @@ Key rules:
 ### Step 3: Validate
 
 ```bash
-pm-cli strategy validate \
+coinjure strategy validate \
   --strategy-ref strategies/my_strategy.py:MyStrategy --json
 ```
 
@@ -162,7 +162,7 @@ pm-cli strategy validate \
 
 ```bash
 # Single market test (fast, good for debugging)
-pm-cli backtest run \
+coinjure backtest run \
   --history-file data/backtest_data.jsonl \
   --market-id 516926 --event-id 16167 \
   --strategy-ref strategies/my_strategy.py:MyStrategy
@@ -179,7 +179,7 @@ for i, d in enumerate(markets):
     mid, eid = d['market_id'], d['event_id']
     print(f'\\n--- [{i+1}/{len(markets)}] market={mid} ---')
     subprocess.run([
-        'pm-cli', 'backtest', 'run',
+        'coinjure', 'backtest', 'run',
         '--history-file', '/tmp/bt_20.jsonl',
         '--market-id', mid, '--event-id', eid,
         '--strategy-ref', 'strategies/my_strategy.py:MyStrategy',
@@ -241,19 +241,19 @@ Read `coinjure/strategy/simple_strategy.py` for production-grade patterns:
 
 ```bash
 # Strategy development
-pm-cli strategy create --output strategies/X.py --class-name X
-pm-cli strategy validate --strategy-ref strategies/X.py:X --json
+coinjure strategy create --output strategies/X.py --class-name X
+coinjure strategy validate --strategy-ref strategies/X.py:X --json
 
 # Backtest (need market_id + event_id from the JSONL file)
-pm-cli backtest run \
+coinjure backtest run \
   --history-file data/backtest_data.jsonl \
   --market-id MID --event-id EID \
   --strategy-ref strategies/X.py:X
 
 # Paper trading (live data, simulated execution)
-pm-cli paper run --exchange polymarket --strategy-ref strategies/X.py:X
-pm-cli paper run --exchange kalshi --strategy-ref strategies/X.py:X
+coinjure paper run --exchange polymarket --strategy-ref strategies/X.py:X
+coinjure paper run --exchange kalshi --strategy-ref strategies/X.py:X
 
 # Live trading (real money)
-pm-cli live run --exchange kalshi --strategy-ref strategies/X.py:X
+coinjure live run --exchange kalshi --strategy-ref strategies/X.py:X
 ```

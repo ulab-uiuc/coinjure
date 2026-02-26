@@ -1,10 +1,10 @@
-# Pred Market CLI
+# Coinjure
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://img.shields.io/pypi/v/coinjure.svg)](https://pypi.org/project/coinjure/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/pm-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://github.com/ulab-uiuc/coinjure/blob/main/LICENSE)
 
-**Pred Market CLI** is an intelligent trading agent for [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
+**Coinjure** is an intelligent trading agent for [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
 
 ## Key Features
 
@@ -36,8 +36,8 @@ pip install coinjure
 Or install from source with [Poetry](https://python-poetry.org/):
 
 ```bash
-git clone https://github.com/ulab-uiuc/pm-cli.git
-cd pm-cli
+git clone https://github.com/ulab-uiuc/coinjure.git
+cd coinjure
 pip install poetry
 poetry install
 ```
@@ -100,29 +100,29 @@ class MyStrategy(Strategy):
 
 ```bash
 # Strategy scaffolding + validation
-pm-cli strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
-pm-cli strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
+coinjure strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Backtest mode
-pm-cli backtest run \
+coinjure backtest run \
   --history-file ./data/history.jsonl \
   --market-id M1 --event-id E1 \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Paper trading (simulation with live data)
-pm-cli paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
-pm-cli paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Real trading
-pm-cli live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
-pm-cli live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
+coinjure live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+coinjure live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
 
 # Operator monitor + emergency control
-pm-cli monitor
-pm-cli trade status
-pm-cli trade pause
-pm-cli trade resume
-pm-cli trade stop
+coinjure monitor
+coinjure trade status
+coinjure trade pause
+coinjure trade resume
+coinjure trade stop
 ```
 
 ## Risk Management
@@ -147,7 +147,7 @@ export NEWS_API_KEY="your_news_api_key"             # Optional, for News API sou
 
 ## License
 
-[Apache 2.0](https://github.com/ulab-uiuc/pm-cli/blob/main/LICENSE)
+[Apache 2.0](https://github.com/ulab-uiuc/coinjure/blob/main/LICENSE)
 
 !!! warning "Disclaimer"
 This software is for **educational and research purposes only**. Trading involves substantial risk of loss. Always test strategies with paper trading before using real funds.

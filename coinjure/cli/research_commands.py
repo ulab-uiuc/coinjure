@@ -714,7 +714,7 @@ def research_walk_forward(
         test_end = train_end + test_size
         test_series = series[train_end:test_end]
         tmp_file = tempfile.NamedTemporaryFile(
-            prefix='pm_cli_walk_forward_',
+            prefix='coinjure_walk_forward_',
             suffix='.jsonl',
             delete=False,
         )

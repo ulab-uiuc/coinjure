@@ -68,7 +68,7 @@ class Trader(ABC):
         kill_file = os.environ.get('PRED_MARKET_CLI_KILL_SWITCH_FILE', '').strip()
         if kill_file:
             return os.path.exists(kill_file)
-        default_kill_file = Path.home() / '.pm-cli' / 'kill.switch'
+        default_kill_file = Path.home() / '.coinjure' / 'kill.switch'
         return default_kill_file.exists()
 
     def _check_order_guard(

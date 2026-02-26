@@ -3,7 +3,7 @@
 Custom Strategy Example
 
 This example demonstrates how to create custom trading strategies with
-the Pred Market CLI framework. It shows how to:
+the Coinjure framework. It shows how to:
 1. Implement the Strategy interface
 2. Handle different event types
 3. Make trading decisions based on events
@@ -422,7 +422,7 @@ async def test_mean_reversion_strategy():
 
 async def main():
     """Run all strategy examples."""
-    print('Pred Market CLI - Custom Strategy Examples\n')
+    print('Coinjure - Custom Strategy Examples\n')
     print('This example demonstrates how to create custom trading strategies.\n')
 
     await test_momentum_strategy()
