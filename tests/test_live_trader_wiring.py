@@ -6,10 +6,10 @@ from decimal import Decimal
 
 import pytest
 
-from pm_cli.live import live_trader
-from pm_cli.position.position_manager import Position
-from pm_cli.risk.risk_manager import NoRiskManager
-from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.live import live_trader
+from coinjure.position.position_manager import Position
+from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 
 
 @pytest.mark.asyncio

@@ -13,13 +13,13 @@ the Pred Market CLI framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from pm_cli.data.live.live_data_source import LiveRSSNewsDataSource
-from pm_cli.data.market_data_manager import MarketDataManager
-from pm_cli.live.live_trader import run_live_paper_trading
-from pm_cli.position.position_manager import Position, PositionManager
-from pm_cli.risk.risk_manager import ConservativeRiskManager
-from pm_cli.strategy.test_strategy import TestStrategy
-from pm_cli.ticker.ticker import CashTicker
+from coinjure.data.live.live_data_source import LiveRSSNewsDataSource
+from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.live.live_trader import run_live_paper_trading
+from coinjure.position.position_manager import Position, PositionManager
+from coinjure.risk.risk_manager import ConservativeRiskManager
+from coinjure.strategy.test_strategy import TestStrategy
+from coinjure.ticker.ticker import CashTicker
 
 
 async def run_rss_paper_trading():

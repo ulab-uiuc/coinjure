@@ -47,7 +47,7 @@ pm-cli monitor -w -r 5.0
 #### Pattern A: Wrap Your Existing Engine
 
 ```python
-from pm_cli.cli.utils import add_monitoring_to_engine
+from coinjure.cli.utils import add_monitoring_to_engine
 
 # Your existing code
 engine = TradingEngine(data_source, strategy, trader)
@@ -62,7 +62,7 @@ await monitored.start()
 #### Pattern B: Manual Monitor Control
 
 ```python
-from pm_cli.cli.monitor import TradingMonitor
+from coinjure.cli.monitor import TradingMonitor
 
 # After initializing trader
 monitor = TradingMonitor(trader, trader.position_manager)
@@ -78,7 +78,7 @@ monitor.display_live(refresh_rate=2.0)
 
 ```python
 import threading
-from pm_cli.cli.monitor import TradingMonitor
+from coinjure.cli.monitor import TradingMonitor
 
 def run_bg_monitor(trader, pm):
     monitor = TradingMonitor(trader, pm)

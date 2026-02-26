@@ -2,13 +2,13 @@ from decimal import Decimal
 
 import pytest
 
-from pm_cli.analytics.performance_analyzer import (
+from coinjure.analytics.performance_analyzer import (
     EquityPoint,
     PerformanceAnalyzer,
     TradeStats,
 )
-from pm_cli.ticker.ticker import PolyMarketTicker
-from pm_cli.trader.types import Trade, TradeSide
+from coinjure.ticker.ticker import PolyMarketTicker
+from coinjure.trader.types import Trade, TradeSide
 
 
 @pytest.fixture
