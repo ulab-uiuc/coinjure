@@ -45,6 +45,8 @@ async def run_live_trading(
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
+    monitor: bool = False,
+    exchange_name: str = '',
 ) -> None:
     """
     Run live trading with the given data source, strategy, and trader.
@@ -58,6 +60,8 @@ async def run_live_trading(
         alerter: Optional alerter for notifications.
         continuous: Keep engine running when the data source is temporarily idle.
         drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
+        monitor: Enable the Textual TUI dashboard and ControlServer.
+        exchange_name: Exchange name shown in the monitor header.
     """
     engine = TradingEngine(
         data_source=data_source,
@@ -72,7 +76,21 @@ async def run_live_trading(
     # NOTE: data_source.start() is called by engine.start() internally
     # (guarded by _ds_started flag). Do NOT call it here to avoid double-starting.
 
-    if duration:
+    if monitor:
+        from pred_market_cli.cli.utils import add_monitoring_to_engine
+
+        monitored = add_monitoring_to_engine(
+            engine, watch=True, exchange_name=exchange_name,
+        )
+        if duration:
+            try:
+                await asyncio.wait_for(monitored.start(), timeout=duration)
+            except asyncio.TimeoutError:
+                await monitored.stop()
+                print(f'Live trading stopped after {duration} seconds.')
+        else:
+            await monitored.start()
+    elif duration:
         # Run for specified duration
         try:
             await asyncio.wait_for(engine.start(), timeout=duration)
@@ -96,6 +114,8 @@ async def run_live_paper_trading(
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
+    monitor: bool = False,
+    exchange_name: str = '',
 ) -> None:
     """
     Run live paper trading (simulated) with the given configuration.
@@ -152,6 +172,8 @@ async def run_live_paper_trading(
         alerter,
         continuous,
         drawdown_alert_pct,
+        monitor=monitor,
+        exchange_name=exchange_name,
     )
 
     # Print final portfolio status
@@ -175,6 +197,8 @@ async def run_live_polymarket_trading(
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
+    monitor: bool = False,
+    exchange_name: str = '',
 ) -> None:
     """
     Run live trading on Polymarket with real orders.
@@ -282,6 +306,8 @@ async def run_live_polymarket_trading(
         alerter,
         continuous,
         drawdown_alert_pct,
+        monitor=monitor,
+        exchange_name=exchange_name,
     )
 
     # Print final portfolio status
@@ -301,6 +327,8 @@ async def run_live_kalshi_paper_trading(
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
+    monitor: bool = False,
+    exchange_name: str = '',
 ) -> None:
     """
     Run live paper trading on Kalshi markets (simulated).
@@ -356,6 +384,8 @@ async def run_live_kalshi_paper_trading(
         alerter,
         continuous,
         drawdown_alert_pct,
+        monitor=monitor,
+        exchange_name=exchange_name,
     )
 
     print('\n--- Final Portfolio Status ---')
@@ -377,6 +407,8 @@ async def run_live_kalshi_trading(
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
+    monitor: bool = False,
+    exchange_name: str = '',
 ) -> None:
     """
     Run live trading on Kalshi with real orders.
@@ -479,6 +511,8 @@ async def run_live_kalshi_trading(
         alerter,
         continuous,
         drawdown_alert_pct,
+        monitor=monitor,
+        exchange_name=exchange_name,
     )
 
     logger.info('--- Final Portfolio Status ---')
