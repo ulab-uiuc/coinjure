@@ -33,8 +33,8 @@
 
 ```bash
 pip install -e .
-pred-market-cli --help
-pred-market-cli monitor --help
+pm-cli --help
+pm-cli monitor --help
 ```
 
 ### Risks / Breaking Changes
@@ -56,8 +56,8 @@ pred-market-cli monitor --help
 >
 > ```bash
 > pip install -e .
-> pred-market-cli --help
-> pred-market-cli monitor --help
+> pm-cli --help
+> pm-cli monitor --help
 > ```
 
 ---
@@ -68,8 +68,8 @@ pred-market-cli monitor --help
 
 ### Files Changed
 
-- `pred_market_cli/data/data_source.py` — Add default `start()` / `stop()` lifecycle hooks
-- `pred_market_cli/trader/trader.py` — Add `orders` attribute to base class
+- `pm_cli/data/data_source.py` — Add default `start()` / `stop()` lifecycle hooks
+- `pm_cli/trader/trader.py` — Add `orders` attribute to base class
 
 ### Why
 
@@ -80,8 +80,8 @@ pred-market-cli monitor --help
 
 ```bash
 pip install -e .
-pred-market-cli --help
-pred-market-cli monitor --help
+pm-cli --help
+pm-cli monitor --help
 ```
 
 ### Risks / Breaking Changes
@@ -103,7 +103,7 @@ pred-market-cli monitor --help
 >
 > ```bash
 > pip install -e .
-> pred-market-cli --help
+> pm-cli --help
 > ```
 
 ---
@@ -116,8 +116,8 @@ pred-market-cli monitor --help
 
 ### Files Changed
 
-- `pred_market_cli/core/trading_engine.py` — EngineSnapshot, get_snapshot(), async stop(), exception backoff, request_stop()
-- `pred_market_cli/data/live/live_data_source.py` — `_poll_task` handling, `stop()` for all three live sources
+- `pm_cli/core/trading_engine.py` — EngineSnapshot, get_snapshot(), async stop(), exception backoff, request_stop()
+- `pm_cli/data/live/live_data_source.py` — `_poll_task` handling, `stop()` for all three live sources
 
 ### Why
 
@@ -129,8 +129,8 @@ pred-market-cli monitor --help
 
 ```bash
 pip install -e .
-pred-market-cli --help
-pred-market-cli monitor --help
+pm-cli --help
+pm-cli monitor --help
 ```
 
 ### Risks / Breaking Changes
@@ -152,8 +152,8 @@ pred-market-cli monitor --help
 >
 > ```bash
 > pip install -e .
-> pred-market-cli --help
-> pred-market-cli monitor --help
+> pm-cli --help
+> pm-cli monitor --help
 > ```
 
 ---
@@ -166,7 +166,7 @@ pred-market-cli monitor --help
 
 ### Files Changed
 
-- `pred_market_cli/cli/monitor.py` — Full-screen Rich TUI, 8 panels, TUILogHandler, DemoDataSource/DemoStrategy, --demo/--live/--paper/--real-trades
+- `pm_cli/cli/monitor.py` — Full-screen Rich TUI, 8 panels, TUILogHandler, DemoDataSource/DemoStrategy, --demo/--live/--paper/--real-trades
 
 ### Why
 
@@ -178,9 +178,9 @@ pred-market-cli monitor --help
 
 ```bash
 pip install -e .   # Requires PR-1 for Python 3.12+; or use Python 3.10–3.11
-pred-market-cli --help
-pred-market-cli monitor --help
-pred-market-cli monitor --demo   # Run 10–15 s, then Ctrl+C
+pm-cli --help
+pm-cli monitor --help
+pm-cli monitor --demo   # Run 10–15 s, then Ctrl+C
 ```
 
 After Ctrl+C: no traceback, no "Task was destroyed but it is pending!", terminal returns to normal.
@@ -189,7 +189,7 @@ After Ctrl+C: no traceback, no "Task was destroyed but it is pending!", terminal
 
 - **Depends on PR-3 (and thus PR-2).** Merge in order.
 - **Backward compatibility:** Old `monitor` CLI (`-w`, `-r`, `-c`) still supported; new flags `--demo`, `--live`, `--paper`, `--real-trades` added.
-- Note: `pred-market-cli monitor` without `--live` now defaults to `--demo` (simulated data) instead of requiring a config. If external scripts relied on the old "single snapshot" default, they should use `--no-watch` explicitly.
+- Note: `pm-cli monitor` without `--live` now defaults to `--demo` (simulated data) instead of requiring a config. If external scripts relied on the old "single snapshot" default, they should use `--no-watch` explicitly.
 
 ### Secrets Scan
 
@@ -206,15 +206,15 @@ After Ctrl+C: no traceback, no "Task was destroyed but it is pending!", terminal
 >
 > ```bash
 > pip install -e .
-> pred-market-cli monitor --help
-> pred-market-cli monitor --demo   # Run 10–15 s, Ctrl+C — no traceback, no task leaks
+> pm-cli monitor --help
+> pm-cli monitor --demo   # Run 10–15 s, Ctrl+C — no traceback, no task leaks
 > ```
 
 ---
 
 ## Secrets Note
 
-- **Known risk:** `pred_market_cli/strategy/simple_strategy.py` line 89 contains a hardcoded API key. Per lead instruction, this file is **not modified** in any PR. No new secrets introduced.
+- **Known risk:** `pm_cli/strategy/simple_strategy.py` line 89 contains a hardcoded API key. Per lead instruction, this file is **not modified** in any PR. No new secrets introduced.
 
 ---
 

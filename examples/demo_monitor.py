@@ -15,10 +15,10 @@ from decimal import Decimal
 
 import click
 
-from pred_market_cli.cli.monitor import TradingMonitor
-from pred_market_cli.ticker.ticker import CashTicker, Ticker
-from pred_market_cli.trader.paper_trader import PaperTrader
-from pred_market_cli.trader.types import TradeSide
+from pm_cli.cli.monitor import TradingMonitor
+from pm_cli.ticker.ticker import CashTicker, Ticker
+from pm_cli.trader.paper_trader import PaperTrader
+from pm_cli.trader.types import TradeSide
 
 
 async def simulate_trading_session(trader: PaperTrader, num_trades: int = 10) -> None:

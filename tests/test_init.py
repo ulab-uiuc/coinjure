@@ -15,7 +15,7 @@ Test modules:
 - test_ticker: Tests for ticker types
 
 Run all tests with: pytest tests/
-Run with coverage: pytest tests/ --cov=pred_market_cli --cov-report=html
+Run with coverage: pytest tests/ --cov=pm_cli --cov-report=html
 """
 
 

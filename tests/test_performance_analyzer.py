@@ -2,13 +2,13 @@ from decimal import Decimal
 
 import pytest
 
-from pred_market_cli.analytics.performance_analyzer import (
+from pm_cli.analytics.performance_analyzer import (
     EquityPoint,
     PerformanceAnalyzer,
     TradeStats,
 )
-from pred_market_cli.ticker.ticker import PolyMarketTicker
-from pred_market_cli.trader.types import Trade, TradeSide
+from pm_cli.ticker.ticker import PolyMarketTicker
+from pm_cli.trader.types import Trade, TradeSide
 
 
 @pytest.fixture

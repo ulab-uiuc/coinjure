@@ -1,6 +1,6 @@
 import pytest
 
-from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
+from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
 
 
 class TestPolyMarketTicker:

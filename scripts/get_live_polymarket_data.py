@@ -7,8 +7,8 @@ from datetime import datetime
 
 # Adjust path to import your modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pred_market_cli.data.live.live_data_source import LivePolyMarketDataSource
-from pred_market_cli.events.events import NewsEvent, OrderBookEvent
+from pm_cli.data.live.live_data_source import LivePolyMarketDataSource
+from pm_cli.events.events import NewsEvent, OrderBookEvent
 
 
 async def test_polymarket_source(args):
