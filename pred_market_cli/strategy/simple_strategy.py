@@ -15,7 +15,7 @@ from pred_market_cli.ticker.ticker import PolyMarketTicker, Ticker
 from pred_market_cli.trader.trader import Trader
 from pred_market_cli.trader.types import TradeSide
 
-from .strategy import Strategy
+from .strategy import Strategy, StrategyDecision
 
 # API endpoint: auto-select based on available keys
 # DeepSeek: set DEEPSEEK_API_KEY; OpenAI: set OPENAI_API_KEY
@@ -977,3 +977,35 @@ Respond in JSON only:
             f'BUY_NO skipped — no NO token and no YES position for {ticker.name[:30]}'
         )
         return False, 0.0
+
+    # ------------------------------------------------------------------
+    # Generic strategy interface
+    # ------------------------------------------------------------------
+
+    def get_decisions(self) -> list[StrategyDecision]:
+        return [
+            StrategyDecision(
+                timestamp=d.timestamp,
+                ticker_name=d.ticker_name,
+                action=d.action,
+                executed=d.executed,
+                reasoning=d.reasoning,
+                confidence=d.confidence,
+                signal_values={
+                    'llm_prob': d.llm_prob,
+                    'market_price': d.market_price,
+                    'edge': round(d.llm_prob - d.market_price, 4),
+                },
+            )
+            for d in self.decisions
+        ]
+
+    def get_decision_stats(self) -> dict[str, int | float]:
+        return {
+            'decisions': self.total_decisions,
+            'executed': self.total_executed,
+            'buy_yes': self.total_buy_yes,
+            'buy_no': self.total_buy_no,
+            'holds': self.total_holds,
+            'closes': self.total_closes,
+        }

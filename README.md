@@ -1,4 +1,6 @@
-# Pred Market CLI: Social World Model Trading Agent
+![Pred Market CLI](assets/pm-cli.png)
+
+<h1 align="center">PM CLI: Social World Model Trading Agent</h1>
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://img.shields.io/pypi/v/pred-market-cli.svg)](https://pypi.org/project/pred-market-cli/)

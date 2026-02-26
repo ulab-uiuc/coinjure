@@ -159,15 +159,14 @@ class ControlServer:
 
         # ── Stats ────────────────────────────────────────────────────
         orders_list = list(getattr(trader, 'orders', []))
+        decision_stats = strategy.get_decision_stats() if strategy is not None else {}
         state['stats'] = {
             'event_count': getattr(self.engine, '_event_count', 0),
             'order_books': len(getattr(md, 'order_books', {})),
             'news_buffered': getattr(strategy, 'news_buffer_count', 0),
-            'decisions': getattr(strategy, 'total_decisions', 0),
-            'buy_yes': getattr(strategy, 'total_buy_yes', 0),
-            'buy_no': getattr(strategy, 'total_buy_no', 0),
-            'holds': getattr(strategy, 'total_holds', 0),
-            'executed': getattr(strategy, 'total_executed', 0),
+            'decision_stats': decision_stats,
+            'decisions': int(decision_stats.get('decisions', 0)),
+            'executed': int(decision_stats.get('executed', 0)),
             'orders_total': len(orders_list),
             'orders_filled': sum(1 for o in orders_list if o.status.value == 'filled'),
         }
@@ -196,15 +195,18 @@ class ControlServer:
                 'unrealized_pnl': 0,
             }
 
-        # ── LLM decisions ────────────────────────────────────────────
+        # ── Strategy decisions ───────────────────────────────────────
         try:
-            decisions = list(getattr(strategy, 'decisions', []))
-            state['llm_decisions'] = [
+            decisions = list(strategy.get_decisions()) if strategy is not None else []
+            state['decisions'] = [
                 {
                     'timestamp': d.timestamp,
                     'action': d.action,
-                    'llm_prob': float(getattr(d, 'llm_prob', 0) or 0),
-                    'market_price': float(getattr(d, 'market_price', 0) or 0),
+                    'confidence': float(getattr(d, 'confidence', 0.0) or 0.0),
+                    'signal_values': {
+                        str(k): float(v)
+                        for k, v in (getattr(d, 'signal_values', {}) or {}).items()
+                    },
                     'ticker_name': (d.ticker_name or '')[:30],
                     'reasoning': (getattr(d, 'reasoning', '') or '')[:60],
                     'executed': bool(d.executed),
@@ -212,7 +214,7 @@ class ControlServer:
                 for d in decisions[-40:]
             ]
         except Exception:
-            state['llm_decisions'] = []
+            state['decisions'] = []
 
         # ── Positions ────────────────────────────────────────────────
         try:
@@ -294,6 +296,7 @@ class ControlServer:
     def _cmd_status(self) -> dict:
         strategy = getattr(self.engine, 'strategy', None)
         trader = getattr(self.engine, 'trader', None)
+        decision_stats = strategy.get_decision_stats() if strategy is not None else {}
         runtime = str(datetime.now() - self._start_time).split('.')[0]
         activity_log = list(getattr(self.engine, '_activity_log', []))
         last_activity = activity_log[-1][1] if activity_log else ''
@@ -303,11 +306,9 @@ class ControlServer:
             'paused': self.paused,
             'runtime': runtime,
             'event_count': getattr(self.engine, '_event_count', 0),
-            'decisions': getattr(strategy, 'total_decisions', 0),
-            'buy_yes': getattr(strategy, 'total_buy_yes', 0),
-            'buy_no': getattr(strategy, 'total_buy_no', 0),
-            'holds': getattr(strategy, 'total_holds', 0),
-            'executed': getattr(strategy, 'total_executed', 0),
+            'decision_stats': decision_stats,
+            'decisions': int(decision_stats.get('decisions', 0)),
+            'executed': int(decision_stats.get('executed', 0)),
             'order_books': len(
                 getattr(getattr(self.engine, 'market_data', None), 'order_books', {})
             ),

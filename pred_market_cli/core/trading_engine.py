@@ -288,26 +288,29 @@ class TradingEngine:
                 prev_orders = len(self.trader.orders)
                 await self.strategy.process_event(event, self.trader)
 
-                # Log LLM decisions from strategy (only new ones).
-                # Uses total_decisions counter (monotonically increasing)
-                # instead of len(decisions) which plateaus at deque maxlen.
-                decisions = getattr(self.strategy, 'decisions', None)
-                total_d = getattr(self.strategy, 'total_decisions', 0)
-                if decisions is not None and total_d > self._last_decisions_count:
+                # Log strategy decisions (only new ones).
+                # Prefer strategy-reported running counter because decisions
+                # storage may be bounded (e.g. deque maxlen).
+                decisions = self.strategy.get_decisions()
+                stats = self.strategy.get_decision_stats()
+                total_d = int(stats.get('decisions', len(decisions)))
+                if total_d > self._last_decisions_count:
                     new_count = total_d - self._last_decisions_count
                     # Log the newest entries from the tail of the deque
                     start_idx = max(0, len(decisions) - new_count)
                     for i in range(start_idx, len(decisions)):
                         d = decisions[i]
                         exec_mark = 'TRADED' if d.executed else 'no trade'
-                        llm_p = getattr(d, 'llm_prob', 0)
-                        mkt_p = getattr(d, 'market_price', 0)
-                        prob_str = (
-                            f'LLM={llm_p:.0%} vs Mkt={mkt_p:.0%}' if mkt_p > 0 else ''
+                        signals = d.signal_values or {}
+                        signal_pairs = list(signals.items())[:2]
+                        signal_str = (
+                            ' '.join(f'{k}={v:.3f}' for k, v in signal_pairs)
+                            if signal_pairs
+                            else ''
                         )
                         name = d.ticker_name[:30]
                         self._activity_log.append(
-                            (now_str, f'{d.action} {prob_str} [{exec_mark}] "{name}"')
+                            (now_str, f'{d.action} {signal_str} [{exec_mark}] "{name}"')
                         )
                     self._last_decisions_count = total_d
 

@@ -36,13 +36,8 @@ class TradingMonitor:
         self.start_time = datetime.now()
 
         # Attributes synced from engine by MonitoredTradingEngine._sync_data()
-        self.llm_decisions: list = []
-        self.total_executed: int = 0
-        self.total_decisions: int = 0
-        self.total_buy_yes: int = 0
-        self.total_buy_no: int = 0
-        self.total_holds: int = 0
-        self.total_closes: int = 0
+        self.decisions: list = []
+        self.decision_stats: dict[str, int | float] = {}
         self.activity_log: list[tuple[str, str]] = []
         self.news_headlines: list[tuple[str, str]] = []
         self.event_count: int = 0
@@ -51,8 +46,8 @@ class TradingMonitor:
         self.ob_count: int = 0
 
         # Keyboard interaction state
-        self.PANELS: list[str] = ['llm_decisions', 'orderbooks', 'news', 'activity_log']
-        self.focused_panel: str = 'llm_decisions'
+        self.PANELS: list[str] = ['decisions', 'orderbooks', 'news', 'activity_log']
+        self.focused_panel: str = 'decisions'
         self.scroll_offsets: dict[str, int] = {p: 0 for p in self.PANELS}
         self.paused: bool = False
 
@@ -138,11 +133,11 @@ class TradingMonitor:
 
         return Panel(table, title='[bold]Portfolio Summary[/bold]', border_style='blue')
 
-    def _create_llm_decisions_panel(
+    def _create_decisions_panel(
         self, limit: int = 12, scroll_offset: int = 0, is_focused: bool = False
     ) -> Panel:
-        """Create LLM decisions panel showing AI probability estimates vs market."""
-        all_decisions: list = getattr(self, 'llm_decisions', [])
+        """Create strategy decisions panel with dynamic signal columns."""
+        all_decisions: list = getattr(self, 'decisions', [])
         # Newest-first, scroll_offset=0 → latest, positive → scroll back
         end_idx = max(0, len(all_decisions) - scroll_offset)
         decisions = all_decisions[max(0, end_idx - limit) : end_idx]
@@ -153,17 +148,26 @@ class TradingMonitor:
 
         if not decisions:
             return Panel(
-                '[dim]Waiting for LLM analysis...[/dim]',
-                title=f'[bold]LLM Decisions{focus_tag}[/bold]',
+                '[dim]Waiting for strategy decisions...[/dim]',
+                title=f'[bold]Strategy Decisions{focus_tag}[/bold]',
                 border_style=border_style,
             )
 
         table = Table(show_header=True, header_style='bold', expand=True)
         table.add_column('Time', style='dim', width=8)
         table.add_column('Action', width=8)
-        table.add_column('LLM', justify='right', width=5)
-        table.add_column('Mkt', justify='right', width=5)
-        table.add_column('Edge', justify='right', width=6)
+        signal_keys: list[str] = []
+        for d in decisions:
+            sig = getattr(d, 'signal_values', {}) or {}
+            for k in sig:
+                if k not in signal_keys:
+                    signal_keys.append(k)
+                if len(signal_keys) >= 3:
+                    break
+            if len(signal_keys) >= 3:
+                break
+        for key in signal_keys:
+            table.add_column(key[:6], justify='right', width=7)
         table.add_column('Market', width=22)
         table.add_column('Reasoning', ratio=1)
         table.add_column('', width=3)
@@ -179,28 +183,23 @@ class TradingMonitor:
                 'CLOSE_TIMEOUT': 'yellow',
             }.get(d.action, 'white')
 
-            llm_prob = getattr(d, 'llm_prob', 0.0) or 0.0
-            mkt_price = getattr(d, 'market_price', 0.0) or 0.0
-            edge = llm_prob - mkt_price
-
-            edge_style = 'green' if edge > 0 else 'red' if edge < 0 else 'dim'
-            edge_str = f'{edge:+.0%}' if mkt_price > 0 else '—'
-
             exec_text = (
                 Text('✓', style='bold green') if d.executed else Text('—', style='dim')
             )
             reasoning = getattr(d, 'reasoning', '') or ''
+            sig = getattr(d, 'signal_values', {}) or {}
+            signal_cells: list[str | Text] = []
+            for key in signal_keys:
+                val = sig.get(key)
+                if val is None:
+                    signal_cells.append(Text('—', style='dim'))
+                else:
+                    signal_cells.append(f'{float(val):.3f}')
 
             table.add_row(
                 d.timestamp,
                 Text(d.action, style=action_style),
-                Text(f'{llm_prob:.0%}', style='white')
-                if llm_prob > 0
-                else Text('—', style='dim'),
-                Text(f'{mkt_price:.0%}', style='white')
-                if mkt_price > 0
-                else Text('—', style='dim'),
-                Text(edge_str, style=edge_style),
+                *signal_cells,
                 d.ticker_name[:22],
                 Text(reasoning[:45], style='dim'),
                 exec_text,
@@ -208,7 +207,7 @@ class TradingMonitor:
 
         return Panel(
             table,
-            title=f'[bold]LLM Decisions (Prob vs Market){focus_tag}{scroll_tag}[/bold]',
+            title=f'[bold]Strategy Decisions{focus_tag}{scroll_tag}[/bold]',
             border_style=border_style,
         )
 
@@ -298,17 +297,10 @@ class TradingMonitor:
             active_positions = 0
         table.add_row('Active Positions', str(active_positions))
 
-        # LLM decision counts — use running counters (not deque which evicts old entries)
-        total_decisions = getattr(self, 'total_decisions', 0)
-        total_executed = getattr(self, 'total_executed', 0)
-        buy_yes = getattr(self, 'total_buy_yes', 0)
-        buy_no = getattr(self, 'total_buy_no', 0)
-        holds = getattr(self, 'total_holds', 0)
-        closes = getattr(self, 'total_closes', 0)
-        table.add_row('LLM Decisions', str(total_decisions))
-        table.add_row('  YES / NO / HOLD', f'{buy_yes} / {buy_no} / {holds}')
-        table.add_row('  Closes', str(closes))
-        table.add_row('  Executed', str(total_executed))
+        decision_stats: dict[str, int | float] = getattr(self, 'decision_stats', {})
+        for key, value in decision_stats.items():
+            label = key.replace('_', ' ').title()
+            table.add_row(f'Strategy {label}', str(value))
 
         # News buffer stats
         news_count = getattr(self, 'news_buffer_count', 0)
@@ -585,10 +577,10 @@ class TradingMonitor:
             Layout(name='bot_row', ratio=3),
         )
 
-        # Top row: Portfolio + Stats | LLM Decisions (main focus)
+        # Top row: Portfolio + Stats | Strategy Decisions (main focus)
         layout['top_row'].split_row(
             Layout(name='left_top', ratio=1),
-            Layout(name='llm_decisions', ratio=2),
+            Layout(name='decisions', ratio=2),
         )
 
         layout['left_top'].split_column(
@@ -613,10 +605,10 @@ class TradingMonitor:
         offsets = self.scroll_offsets
         layout['portfolio'].update(self._create_portfolio_summary())
         layout['stats'].update(self._create_stats_panel())
-        layout['llm_decisions'].update(
-            self._create_llm_decisions_panel(
-                scroll_offset=offsets.get('llm_decisions', 0),
-                is_focused=(focus == 'llm_decisions'),
+        layout['decisions'].update(
+            self._create_decisions_panel(
+                scroll_offset=offsets.get('decisions', 0),
+                is_focused=(focus == 'decisions'),
             )
         )
         layout['trading'].update(self._create_trading_panel())
@@ -644,7 +636,7 @@ class TradingMonitor:
 
         # Footer with keyboard shortcuts
         panel_labels = {
-            'llm_decisions': 'LLM',
+            'decisions': 'Decisions',
             'orderbooks': 'OrderBooks',
             'news': 'News',
             'activity_log': 'Activity',
