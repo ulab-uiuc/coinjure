@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from pm_cli.data.live.google_news_data_source import (
+from coinjure.data.live.google_news_data_source import (
     DEFAULT_QUERIES,
     GoogleNewsDataSource,
     _clean_google_href,
     _parse_relative_or_absolute,
     _scrape_google_news,
 )
-from pm_cli.events.events import NewsEvent
+from coinjure.events.events import NewsEvent
 
 # -- Sample HTML fragment matching real Google News card structure --------
 
@@ -83,7 +83,7 @@ class TestScrapeGoogleNews:
     """Test the HTML parser with a mocked HTTP response."""
 
     @patch(
-        'pm_cli.data.live.google_news_data_source._make_request',
+        'coinjure.data.live.google_news_data_source._make_request',
         return_value=FakeResponse(SAMPLE_HTML),
     )
     def test_parses_cards(self, mock_req) -> None:  # type: ignore[no-untyped-def]
@@ -96,7 +96,7 @@ class TestScrapeGoogleNews:
         assert results[1]['source'] == 'CoinDesk'
 
     @patch(
-        'pm_cli.data.live.google_news_data_source._make_request',
+        'coinjure.data.live.google_news_data_source._make_request',
         return_value=FakeResponse('<html><body>no cards</body></html>'),
     )
     def test_no_cards_returns_empty(self, mock_req) -> None:  # type: ignore[no-untyped-def]

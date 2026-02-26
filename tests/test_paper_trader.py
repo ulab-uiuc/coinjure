@@ -2,13 +2,13 @@ from decimal import Decimal
 
 import pytest
 
-from pm_cli.data.market_data_manager import MarketDataManager
-from pm_cli.order.order_book import Level, OrderBook
-from pm_cli.position.position_manager import Position, PositionManager
-from pm_cli.risk.risk_manager import NoRiskManager, StandardRiskManager
-from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pm_cli.trader.paper_trader import PaperTrader
-from pm_cli.trader.types import OrderFailureReason, OrderStatus, TradeSide
+from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.order.order_book import Level, OrderBook
+from coinjure.position.position_manager import Position, PositionManager
+from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.trader.paper_trader import PaperTrader
+from coinjure.trader.types import OrderFailureReason, OrderStatus, TradeSide
 
 
 @pytest.fixture

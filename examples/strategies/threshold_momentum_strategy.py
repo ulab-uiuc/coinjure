@@ -4,10 +4,10 @@ from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
-from pm_cli.events.events import Event, PriceChangeEvent
-from pm_cli.strategy.strategy import Strategy, StrategyDecision
-from pm_cli.trader.trader import Trader
-from pm_cli.trader.types import TradeSide
+from coinjure.events.events import Event, PriceChangeEvent
+from coinjure.strategy.strategy import Strategy, StrategyDecision
+from coinjure.trader.trader import Trader
+from coinjure.trader.types import TradeSide
 
 
 class ThresholdMomentumStrategy(Strategy):

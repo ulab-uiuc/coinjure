@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from pm_cli.position.position_manager import Position
-from pm_cli.storage.serializers import (
+from coinjure.position.position_manager import Position
+from coinjure.storage.serializers import (
     deserialize_equity_point,
     deserialize_order,
     deserialize_position,
@@ -19,9 +19,9 @@ from pm_cli.storage.serializers import (
     serialize_ticker,
     serialize_trade,
 )
-from pm_cli.storage.state_store import StateStore
-from pm_cli.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker
-from pm_cli.trader.types import Order, OrderStatus, Trade, TradeSide
+from coinjure.storage.state_store import StateStore
+from coinjure.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker
+from coinjure.trader.types import Order, OrderStatus, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -141,7 +141,7 @@ def test_trade_without_timestamp(sample_trade):
 
 
 def test_save_load_positions_roundtrip(tmp_store, sample_position):
-    from pm_cli.position.position_manager import PositionManager
+    from coinjure.position.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -202,7 +202,7 @@ def test_load_trades_missing_file_returns_empty(tmp_store):
 
 
 def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
-    from pm_cli.position.position_manager import PositionManager
+    from coinjure.position.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -224,7 +224,7 @@ def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
 
 
 def test_roundtrip_equity_point():
-    from pm_cli.analytics.performance_analyzer import EquityPoint
+    from coinjure.analytics.performance_analyzer import EquityPoint
 
     pt = EquityPoint(timestamp=5, equity=Decimal('10500.75'), trade_index=4)
     d = serialize_equity_point(pt)

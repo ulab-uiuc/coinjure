@@ -62,7 +62,7 @@
 
 ```
 qfj/
-├── pm_cli/                    # Main package
+├── coinjure/                    # Main package
 │   ├── cli/                     # CLI
 │   │   ├── cli.py               # CLI entry point
 │   │   ├── monitor.py           # Trading monitor command
@@ -121,17 +121,17 @@ qfj/
 
 ### 3.1 Key Directory Descriptions
 
-| Directory           | Purpose                                                                                         |
-| ------------------- | ----------------------------------------------------------------------------------------------- |
-| `pm_cli/core/`      | Trading engine: event loop, strategy invocation, trade execution scheduling                     |
-| `pm_cli/strategy/`  | Strategy definitions: implements `process_event` and calls `trader.place_order`                 |
-| `pm_cli/trader/`    | Trade execution: includes simulation (PaperTrader) and live (PolymarketTrader)                  |
-| `pm_cli/data/`      | Data source abstraction: historical, Polymarket, news, and RSS implementations                  |
-| `pm_cli/events/`    | Event types: OrderBookEvent, NewsEvent, PriceChangeEvent                                        |
-| `pm_cli/risk/`      | Risk control layer: per-trade, per-instrument, total exposure, drawdown, and daily loss limits  |
-| `pm_cli/position/`  | Position tracking and PnL computation                                                           |
-| `pm_cli/analytics/` | Sharpe ratio, win rate, maximum drawdown, profit/loss ratio, and other performance metrics      |
-| `pm_cli/live/`      | Live/paper trading entry points (`run_live_paper_trading`, `run_live_polymarket_trading`, etc.) |
+| Directory             | Purpose                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `coinjure/core/`      | Trading engine: event loop, strategy invocation, trade execution scheduling                     |
+| `coinjure/strategy/`  | Strategy definitions: implements `process_event` and calls `trader.place_order`                 |
+| `coinjure/trader/`    | Trade execution: includes simulation (PaperTrader) and live (PolymarketTrader)                  |
+| `coinjure/data/`      | Data source abstraction: historical, Polymarket, news, and RSS implementations                  |
+| `coinjure/events/`    | Event types: OrderBookEvent, NewsEvent, PriceChangeEvent                                        |
+| `coinjure/risk/`      | Risk control layer: per-trade, per-instrument, total exposure, drawdown, and daily loss limits  |
+| `coinjure/position/`  | Position tracking and PnL computation                                                           |
+| `coinjure/analytics/` | Sharpe ratio, win rate, maximum drawdown, profit/loss ratio, and other performance metrics      |
+| `coinjure/live/`      | Live/paper trading entry points (`run_live_paper_trading`, `run_live_polymarket_trading`, etc.) |
 
 ---
 
@@ -143,10 +143,10 @@ Defined in `pyproject.toml`:
 
 ```toml
 [tool.poetry.scripts]
-pm-cli = "pm_cli.cli.cli:cli"
+pm-cli = "coinjure.cli.cli:cli"
 ```
 
-The main entry point is: **`pm_cli.cli.cli:cli`**.
+The main entry point is: **`coinjure.cli.cli:cli`**.
 
 After installation, the CLI can be invoked directly:
 
@@ -157,12 +157,12 @@ pm-cli monitor --watch   # Live refresh
 
 ### 4.2 Entry Point Overview
 
-| Entry Point       | File                                                                     | Description                                  |
-| ----------------- | ------------------------------------------------------------------------ | -------------------------------------------- |
-| **CLI**           | `pm_cli/cli/cli.py`                                                      | `cli()` — registers the `monitor` subcommand |
-| **Backtesting**   | `examples/backtest_example.py`                                           | Run this script directly for backtesting     |
-| **Paper Trading** | `examples/live_paper_trading_example.py` or `pm_cli/live/live_trader.py` | Run via `run_live_paper_trading()`           |
-| **Live Trading**  | `pm_cli/live/live_trader.py`                                             | Run via `run_live_polymarket_trading()`      |
+| Entry Point       | File                                                                       | Description                                  |
+| ----------------- | -------------------------------------------------------------------------- | -------------------------------------------- |
+| **CLI**           | `coinjure/cli/cli.py`                                                      | `cli()` — registers the `monitor` subcommand |
+| **Backtesting**   | `examples/backtest_example.py`                                             | Run this script directly for backtesting     |
+| **Paper Trading** | `examples/live_paper_trading_example.py` or `coinjure/live/live_trader.py` | Run via `run_live_paper_trading()`           |
+| **Live Trading**  | `coinjure/live/live_trader.py`                                             | Run via `run_live_polymarket_trading()`      |
 
 ### 4.3 Execution Flow Overview
 
@@ -203,9 +203,9 @@ python examples/live_paper_trading_example.py
 python -c "
 import asyncio
 from decimal import Decimal
-from pm_cli.data.live.live_data_source import LiveRSSNewsDataSource
-from pm_cli.live.live_trader import run_live_paper_trading
-from pm_cli.strategy.test_strategy import TestStrategy
+from coinjure.data.live.live_data_source import LiveRSSNewsDataSource
+from coinjure.live.live_trader import run_live_paper_trading
+from coinjure.strategy.test_strategy import TestStrategy
 
 asyncio.run(run_live_paper_trading(
     data_source=LiveRSSNewsDataSource(polling_interval=60.0),

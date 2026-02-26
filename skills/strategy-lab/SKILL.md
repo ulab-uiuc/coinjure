@@ -11,7 +11,7 @@ You are a quantitative researcher with a fully-equipped prediction market tradin
 ## Your Workstation
 
 ```
-pm_cli/strategy/                  # Strategy code (reference implementations)
+coinjure/strategy/                  # Strategy code (reference implementations)
 │   ├── strategy.py               # Base class (inherit from this)
 │   ├── simple_strategy.py        # Reference: LLM-based strategy
 │   ├── test_strategy.py          # Reference: simple momentum strategy
@@ -29,10 +29,10 @@ strategies/                       # YOUR workspace for custom strategies
 ### Base Class
 
 ```python
-from pm_cli.strategy.strategy import Strategy
-from pm_cli.events.events import Event, NewsEvent, PriceChangeEvent, OrderBookEvent
-from pm_cli.trader.trader import Trader
-from pm_cli.trader.types import TradeSide
+from coinjure.strategy.strategy import Strategy
+from coinjure.events.events import Event, NewsEvent, PriceChangeEvent, OrderBookEvent
+from coinjure.trader.trader import Trader
+from coinjure.trader.types import TradeSide
 from decimal import Decimal
 
 class MyStrategy(Strategy):
@@ -146,6 +146,7 @@ pm-cli strategy create --output strategies/my_strategy.py --class-name MyStrateg
 ```
 
 Key rules:
+
 - Must inherit from `Strategy`
 - Must implement `async def process_event(self, event, trader)`
 - Use `Decimal` for all prices/quantities (never `float`)
@@ -190,39 +191,46 @@ for i, d in enumerate(markets):
 
 After backtest, look at the PERFORMANCE SUMMARY:
 
-| Metric | Good Sign | Bad Sign | Fix |
-|--------|-----------|----------|-----|
-| Win Rate | >55% | <45% | Adjust entry/exit thresholds |
-| Total Return | >0% | <0% | Signal logic may be wrong |
-| Sharpe | >0.5 | <0 | Too noisy; reduce trade frequency |
-| Max Drawdown | <10% | >20% | Add position limits / stop-losses |
-| Total Trades | >5 | 0-1 | Lower thresholds to trade more |
+| Metric       | Good Sign | Bad Sign | Fix                               |
+| ------------ | --------- | -------- | --------------------------------- |
+| Win Rate     | >55%      | <45%     | Adjust entry/exit thresholds      |
+| Total Return | >0%       | <0%      | Signal logic may be wrong         |
+| Sharpe       | >0.5      | <0       | Too noisy; reduce trade frequency |
+| Max Drawdown | <10%      | >20%     | Add position limits / stop-losses |
+| Total Trades | >5        | 0-1      | Lower thresholds to trade more    |
 
 Iterate: adjust parameters → re-backtest → compare results.
 
 ## Strategy Ideas
 
 ### 1. Mean Reversion
+
 Prediction markets overreact to news. Buy when price drops significantly below recent average, sell on recovery.
 
 ### 2. Momentum / Trend Following
+
 Some markets trend persistently. Buy into rising probabilities, sell into falling ones.
 
 ### 3. Volatility-Based Sizing
+
 Trade larger when volatility is low, smaller when high. Track rolling std dev of price changes.
 
 ### 4. Contrarian
+
 Buy when large drops happen (capitulation). Works well near extreme probabilities (< 0.1 or > 0.9).
 
 ### 5. Calendar Effect
+
 Markets behave differently near resolution. Probabilities compress toward 0 or 1. Trade the compression.
 
 ### 6. Statistical Arbitrage
+
 Compare price levels across related markets. If correlated markets diverge, trade the convergence.
 
 ## Reference: SimpleStrategy Patterns
 
-Read `pm_cli/strategy/simple_strategy.py` for production-grade patterns:
+Read `coinjure/strategy/simple_strategy.py` for production-grade patterns:
+
 - **Edge calculation**: `edge = abs(llm_prob - market_price)`, trade only if edge > 10%
 - **Position exits**: timeout (1hr), edge consumed (<3% remaining), edge reversed
 - **LLM re-evaluation**: check position thesis every 5 min

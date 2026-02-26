@@ -5,19 +5,19 @@ from decimal import Decimal
 
 import pytest
 
-from pm_cli.data.market_data_manager import MarketDataManager
-from pm_cli.events.events import OrderBookEvent
-from pm_cli.order.order_book import Level, OrderBook
-from pm_cli.position.position_manager import Position, PositionManager
-from pm_cli.risk.risk_manager import NoRiskManager
-from pm_cli.strategy.market_making_strategy import MarketMakingStrategy
-from pm_cli.strategy.orderbook_imbalance_strategy import (
+from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.events.events import OrderBookEvent
+from coinjure.order.order_book import Level, OrderBook
+from coinjure.position.position_manager import Position, PositionManager
+from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.strategy.market_making_strategy import MarketMakingStrategy
+from coinjure.strategy.orderbook_imbalance_strategy import (
     OrderBookImbalanceStrategy,
 )
-from pm_cli.strategy.simple_strategy import LLMDecision, SimpleStrategy
-from pm_cli.strategy.strategy import Strategy, StrategyDecision
-from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pm_cli.trader.paper_trader import PaperTrader
+from coinjure.strategy.simple_strategy import LLMDecision, SimpleStrategy
+from coinjure.strategy.strategy import Strategy, StrategyDecision
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.trader.paper_trader import PaperTrader
 
 
 class DummyStrategy(Strategy):

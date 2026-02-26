@@ -4,17 +4,17 @@ from decimal import Decimal
 
 import pytest
 
-from pm_cli.core.trading_engine import TradingEngine
-from pm_cli.data.data_source import DataSource
-from pm_cli.data.market_data_manager import MarketDataManager
-from pm_cli.events.events import Event, NewsEvent
-from pm_cli.order.order_book import Level, OrderBook
-from pm_cli.position.position_manager import Position, PositionManager
-from pm_cli.risk.risk_manager import NoRiskManager, StandardRiskManager
-from pm_cli.strategy.strategy import Strategy
-from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pm_cli.trader.paper_trader import PaperTrader
-from pm_cli.trader.trader import Trader
+from coinjure.core.trading_engine import TradingEngine
+from coinjure.data.data_source import DataSource
+from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.events.events import Event, NewsEvent
+from coinjure.order.order_book import Level, OrderBook
+from coinjure.position.position_manager import Position, PositionManager
+from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.strategy.strategy import Strategy
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.trader.paper_trader import PaperTrader
+from coinjure.trader.trader import Trader
 
 
 class MockDataSource(DataSource):
