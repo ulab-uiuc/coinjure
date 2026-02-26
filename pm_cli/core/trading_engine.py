@@ -98,7 +98,7 @@ class EngineSnapshot:
     orderbooks: list[OrderBookSnapshot]
     recent_trades: list[TradeSnapshot]
     active_orders: list[OrderSnapshot]
-    news_headlines: list[tuple[str, str]]  # [(time_str, headline), ...]
+    news_headlines: list[dict[str, str]]  # [{timestamp,title,source,url}, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ class TradingEngine:
         self._last_orders_idx: int = 0
         self._order_times: list[str] = []
         self._perf = PerformanceAnalyzer(initial_capital=initial_capital)
-        self._news: deque[tuple[str, str]] = deque(maxlen=300)
+        self._news: deque[dict[str, str]] = deque(maxlen=300)
         self._activity_log: deque[tuple[str, str]] = deque(maxlen=100)
         self._last_decisions_count: int = 0
 
@@ -278,8 +278,16 @@ class TradingEngine:
 
                 if isinstance(event, NewsEvent):
                     headline = event.title or event.news[:100]
-                    self._news.append((now_str, headline))
                     source = getattr(event, 'source', '') or ''
+                    url = getattr(event, 'url', '') or ''
+                    self._news.append(
+                        {
+                            'timestamp': now_str,
+                            'title': headline,
+                            'source': source,
+                            'url': url,
+                        }
+                    )
                     self._activity_log.append(
                         (now_str, f'News [{source[:15]}] "{headline[:55]}"')
                     )

@@ -17,6 +17,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -117,7 +118,7 @@ class PortfolioPanel(Static):
     """
 
     def on_mount(self) -> None:
-        self.border_title = '💼 Portfolio'
+        self.border_title = 'Portfolio'
 
     def refresh_from_state(self, state: dict) -> None:
         p = state.get('portfolio', {})
@@ -178,7 +179,7 @@ class StatsPanel(Static):
         self.start_time = start_time
 
     def on_mount(self) -> None:
-        self.border_title = '📊 Statistics'
+        self.border_title = 'Statistics'
 
     def refresh_from_state(self, state: dict) -> None:
         s = state.get('stats', {})
@@ -204,7 +205,10 @@ class StatsPanel(Static):
             decision_stats = strategy.get_decision_stats()
             event_count = getattr(engine, '_event_count', 0)
             ob_count = len(trader.market_data.order_books)
-            news_buf = getattr(strategy, 'news_buffer_count', 0)
+            news_buf = max(
+                int(getattr(strategy, 'news_buffer_count', 0) or 0),
+                len(list(getattr(engine, '_news', []))),
+            )
 
             lines = [
                 '[bold cyan]Statistics[/bold cyan]',
@@ -236,7 +240,7 @@ class DecisionsTable(DataTable):
     _last_len: int = 0
 
     def on_mount(self) -> None:
-        self.border_title = '🤖 Strategy Decisions'
+        self.border_title = 'Strategy Decisions'
         self.cursor_type = 'row'
         self._initialized = True
         self.zebra_stripes = True
@@ -351,59 +355,69 @@ class DecisionsTable(DataTable):
             pass
 
 
-class TradingPanel(Static):
-    """Positions and recent orders (scrollable Static)."""
+class PositionsPanel(DataTable):
+    """Current positions table (scrollable DataTable)."""
+
+    can_focus = True
 
     DEFAULT_CSS = """
-    TradingPanel {
+    PositionsPanel {
         border: solid yellow;
         border-title-color: yellow;
-        padding: 0 1;
         height: 1fr;
-        overflow-y: scroll;
+    }
+    PositionsPanel:focus {
+        border: tall $accent;
     }
     """
 
     def on_mount(self) -> None:
-        self.border_title = '📈 Positions & Orders'
+        self.border_title = 'Current Positions'
+        self.cursor_type = 'row'
+        self.zebra_stripes = True
+        self.add_columns('Market', 'Qty', 'Avg', 'Mark', 'uPnL')
+
+    @staticmethod
+    def _fmt_qty(value: object) -> str:
+        try:
+            q = Decimal(str(value))
+        except Exception:
+            return str(value)
+        s = f'{q:.2f}'.rstrip('0').rstrip('.')
+        if '.' not in s:
+            s += '.0'
+        return s
 
     def refresh_from_state(self, state: dict) -> None:
-        lines = [
-            '[bold yellow]Trading Activity[/bold yellow]',
-            '[dim]── Positions ──[/dim]',
-        ]
+        saved_row = self.cursor_row
+        self.clear()
         positions = state.get('positions', [])
         if positions:
             for p in positions:
-                pnl_val = float(p.get('pnl', '0').replace('+', ''))
+                pnl_raw = str(p.get('pnl', '0'))
+                try:
+                    pnl_val = float(pnl_raw.replace('+', ''))
+                except Exception:
+                    pnl_val = 0.0
                 style = 'green' if pnl_val >= 0 else 'red'
-                lines.append(
-                    f"  [{style}]{p['name']}[/{style}]"
-                    f" qty={p['qty']} cost=${p['avg_cost']}"
-                    f" pnl=[{style}]{p['pnl']}[/{style}]"
+                self.add_row(
+                    str(p.get('name', ''))[:30],
+                    self._fmt_qty(p.get('qty', '')),
+                    f"${str(p.get('avg_cost', '0'))[:7]}",
+                    f"${str(p.get('bid', '0'))[:7]}",
+                    Text(pnl_raw, style=style),
                 )
         else:
-            lines.append('  [dim]No positions yet[/dim]')
-        lines += ['', '[dim]── Recent Orders ──[/dim]']
-        orders = state.get('orders', [])
-        if orders:
-            for o in reversed(orders):
-                side_c = 'green' if o['side'] == 'buy' else 'red'
-                lines.append(
-                    f"  [{side_c}]{o['side'].upper()}[/{side_c}]"
-                    f" {o['name']} ${o['limit_price']}"
-                    f" [{o['status'].upper()}]"
-                )
-        else:
-            lines.append('  [dim]No orders yet[/dim]')
-        self.update('\n'.join(lines))
+            self.add_row(Text('No positions yet', style='dim'), '—', '—', '—', '—')
+        try:
+            self.move_cursor(row=min(saved_row, self.row_count - 1))
+        except Exception:
+            pass
 
     def refresh_data(self, trader, position_manager) -> None:
         try:
-            lines = [
-                '[bold yellow]Trading Activity[/bold yellow]',
-                '[dim]── Positions ──[/dim]',
-            ]
+            saved_row = self.cursor_row
+            self.clear()
             positions = [
                 p for p in position_manager.get_non_cash_positions() if p.quantity > 0
             ]
@@ -416,29 +430,99 @@ class TradingPanel(Static):
                         (cur - p.average_cost) * p.quantity if cur > 0 else Decimal('0')
                     )
                     style = 'green' if pnl >= 0 else 'red'
-                    name = (getattr(p.ticker, 'name', '') or p.ticker.symbol)[:28]
-                    lines.append(
-                        f'  [{style}]{name}[/{style}]'
-                        f' qty={p.quantity} cost=${p.average_cost:.4f}'
-                        f' pnl=[{style}]${pnl:+.2f}[/{style}]'
+                    name = (getattr(p.ticker, 'name', '') or p.ticker.symbol)[:30]
+                    self.add_row(
+                        name,
+                        self._fmt_qty(p.quantity),
+                        f'${p.average_cost:.4f}',
+                        f'${cur:.4f}' if cur > 0 else '—',
+                        Text(f'${pnl:+.2f}', style=style),
                     )
             else:
-                lines.append('  [dim]No positions yet[/dim]')
+                self.add_row(
+                    Text('No positions yet', style='dim'),
+                    '—',
+                    '—',
+                    '—',
+                    Text('—', style='dim'),
+                )
+            try:
+                self.move_cursor(row=min(saved_row, self.row_count - 1))
+            except Exception:
+                pass
+        except Exception:
+            pass
 
-            lines += ['', '[dim]── Recent Orders ──[/dim]']
-            orders = list(getattr(trader, 'orders', []))[-8:]
+
+class OrdersPanel(DataTable):
+    """Current / recent orders table (scrollable DataTable)."""
+
+    can_focus = True
+
+    DEFAULT_CSS = """
+    OrdersPanel {
+        border: solid yellow;
+        border-title-color: yellow;
+        height: 1fr;
+    }
+    OrdersPanel:focus {
+        border: tall $accent;
+    }
+    """
+
+    def on_mount(self) -> None:
+        self.border_title = 'Current Orders'
+        self.cursor_type = 'row'
+        self.zebra_stripes = True
+        self.add_columns('Side', 'Market', 'Px', 'Status')
+
+    def refresh_from_state(self, state: dict) -> None:
+        saved_row = self.cursor_row
+        self.clear()
+        orders = state.get('orders', [])
+        if orders:
+            for o in reversed(orders):
+                side = str(o.get('side', '')).lower()
+                side_c = 'green' if side == 'buy' else 'red'
+                self.add_row(
+                    Text(side.upper(), style=side_c),
+                    str(o.get('name', ''))[:30],
+                    f"${o.get('limit_price', '-')}",
+                    str(o.get('status', '')).upper(),
+                )
+        else:
+            self.add_row(
+                Text('—', style='dim'), Text('No orders yet', style='dim'), '—', '—'
+            )
+        try:
+            self.move_cursor(row=min(saved_row, self.row_count - 1))
+        except Exception:
+            pass
+
+    def refresh_data(self, trader) -> None:
+        try:
+            saved_row = self.cursor_row
+            self.clear()
+            orders = list(getattr(trader, 'orders', []))
             if orders:
                 for o in reversed(orders):
-                    side_c = 'green' if o.side.value == 'buy' else 'red'
-                    name = (getattr(o.ticker, 'name', '') or o.ticker.symbol)[:26]
-                    lines.append(
-                        f'  [{side_c}]{o.side.value.upper()}[/{side_c}]'
-                        f' {name} ${o.limit_price:.4f}'
-                        f' [{o.status.value.upper()}]'
+                    side = o.side.value.lower()
+                    side_c = 'green' if side == 'buy' else 'red'
+                    name = (getattr(o.ticker, 'name', '') or o.ticker.symbol)[:30]
+                    self.add_row(
+                        Text(side.upper(), style=side_c),
+                        name,
+                        f'${o.limit_price:.4f}',
+                        o.status.value.upper(),
                     )
             else:
-                lines.append('  [dim]No orders yet[/dim]')
-            self.update('\n'.join(lines))
+                self.add_row(
+                    Text('—', style='dim'), Text('No orders yet', style='dim'), '—', '—'
+                )
+            try:
+                self.move_cursor(row=min(saved_row, self.row_count - 1))
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -457,7 +541,7 @@ class ActivityLog(RichLog):
     _last_len: int = 0
 
     def on_mount(self) -> None:
-        self.border_title = '📋 Activity Log'
+        self.border_title = 'Activity Log'
 
     def refresh_from_state(self, log: list) -> None:
         new_entries = log[self._last_len :]
@@ -512,7 +596,7 @@ class OrderBooksTable(DataTable):
     """
 
     def on_mount(self) -> None:
-        self.border_title = '📖 Order Books  [sorted by distance from 50%]'
+        self.border_title = 'Order Books  [sorted by distance from 50%]'
         self.cursor_type = 'row'
         self._socket_mode = False  # set True by SocketTradingMonitorApp
         self.zebra_stripes = True
@@ -521,6 +605,9 @@ class OrderBooksTable(DataTable):
     def refresh_from_state(self, books: list) -> None:
         saved_row = self.cursor_row
         self.clear()
+        if not books:
+            self.add_row('(no order books yet)', '-', '-', '-', '-')
+            return
         for b in books:
             spread = float(b['spread'])
             sp_style = (
@@ -554,14 +641,15 @@ class OrderBooksTable(DataTable):
             if not (bid and ask and bid.price > 0):
                 continue
             mid = (bid.price + ask.price) / 2
-            if mid < Decimal('0.05') or mid > Decimal('0.95'):
-                continue
             active.append((ticker, bid, ask, ask.price - bid.price, mid))
 
         active.sort(key=lambda x: abs(x[4] - Decimal('0.5')))
 
         saved_row = self.cursor_row
         self.clear()
+        if not active:
+            self.add_row('(no order books yet)', '-', '-', '-', '-')
+            return
         for ticker, bid, ask, spread, mid in active[:40]:
             name = (getattr(ticker, 'name', '') or ticker.symbol)[:32]
             sp_style = (
@@ -596,20 +684,51 @@ class NewsLog(RichLog):
     """
 
     _last_len: int = 0
+    _excluded_sources: set[str] = {'polymarket', 'kalshi'}
 
     def on_mount(self) -> None:
-        self.border_title = '📰 News Headlines'
+        self.border_title = 'News Headlines'
+
+    @staticmethod
+    def _normalize_news_item(item: object) -> tuple[str, str, str, str]:
+        if isinstance(item, dict):
+            return (
+                str(item.get('timestamp', '')),
+                str(item.get('title', '')),
+                str(item.get('source', '')),
+                str(item.get('url', '')),
+            )
+        if isinstance(item, (tuple, list)) and len(item) >= 2:
+            return (str(item[0]), str(item[1]), '', '')
+        return ('', str(item), '', '')
+
+    def _render_news_item(self, item: object) -> None:
+        ts, title, source, url = self._normalize_news_item(item)
+        title_text = title or '(no title)'
+        meta = source if source else ''
+        if url:
+            meta = f'{meta} | {url}' if meta else url
+        line = f'[dim]{ts}[/dim] {title_text}'
+        if meta:
+            line += f'\n[dim]{meta}[/dim]'
+        self.write(Text.from_markup(line))
+
+    def _should_render_news_item(self, item: object) -> bool:
+        _, _, source, _ = self._normalize_news_item(item)
+        return source.strip().lower() not in self._excluded_sources
 
     def refresh_from_state(self, news: list) -> None:
-        for ts, headline in news[self._last_len :]:
-            self.write(Text.from_markup(f'[dim]{ts}[/dim] {headline}'))
+        for item in news[self._last_len :]:
+            if self._should_render_news_item(item):
+                self._render_news_item(item)
         self._last_len = len(news)
 
     def refresh_data(self, engine) -> None:
         try:
             news: list = list(getattr(engine, '_news', []))
-            for ts, headline in news[self._last_len :]:
-                self.write(Text.from_markup(f'[dim]{ts}[/dim] {headline}'))
+            for item in news[self._last_len :]:
+                if self._should_render_news_item(item):
+                    self._render_news_item(item)
             self._last_len = len(news)
         except Exception:
             pass
@@ -629,17 +748,17 @@ class TradingMonitorApp(App[None]):
     #top-row {
         height: 2fr;
     }
-    #mid-row, #bot-row {
+    #mid-row, #bot-row, #log-row {
         height: 1fr;
     }
-    #top-row, #mid-row, #bot-row {
+    #top-row, #mid-row, #bot-row, #log-row {
         layout: horizontal;
     }
     #left-col {
         width: 34;
         layout: vertical;
     }
-    DecisionsTable, ActivityLog, OrderBooksTable, NewsLog, TradingPanel {
+    DecisionsTable, ActivityLog, OrderBooksTable, NewsLog, PositionsPanel, OrdersPanel {
         width: 1fr;
     }
     """
@@ -675,11 +794,13 @@ class TradingMonitorApp(App[None]):
                 yield StatsPanel(self._monitor_start, id='stats')
             yield DecisionsTable(id='decisions')
         with Horizontal(id='mid-row'):
-            yield TradingPanel(id='trading')
-            yield ActivityLog(id='activity', highlight=True, markup=True)
+            yield PositionsPanel(id='positions')
+            yield OrdersPanel(id='orders')
         with Horizontal(id='bot-row'):
             yield OrderBooksTable(id='orderbooks')
             yield NewsLog(id='news', highlight=True, markup=True)
+        with Horizontal(id='log-row'):
+            yield ActivityLog(id='activity', highlight=True, markup=True)
         yield ControlBar(id='ctrl-bar')
         yield Footer()
 
@@ -772,7 +893,8 @@ class TradingMonitorApp(App[None]):
                 trader, pm, strategy, engine
             )
             self.query_one('#decisions', DecisionsTable).refresh_data(strategy)
-            self.query_one('#trading', TradingPanel).refresh_data(trader, pm)
+            self.query_one('#positions', PositionsPanel).refresh_data(trader, pm)
+            self.query_one('#orders', OrdersPanel).refresh_data(trader)
             self.query_one('#activity', ActivityLog).refresh_data(engine)
             self.query_one('#orderbooks', OrderBooksTable).refresh_data(trader)
             self.query_one('#news', NewsLog).refresh_data(engine)
@@ -852,11 +974,13 @@ class SocketTradingMonitorApp(App[None]):
                 yield StatsPanel(self._monitor_start, id='stats')
             yield DecisionsTable(id='decisions')
         with Horizontal(id='mid-row'):
-            yield TradingPanel(id='trading')
-            yield ActivityLog(id='activity', highlight=True, markup=True)
+            yield PositionsPanel(id='positions')
+            yield OrdersPanel(id='orders')
         with Horizontal(id='bot-row'):
             yield OrderBooksTable(id='orderbooks')
             yield NewsLog(id='news', highlight=True, markup=True)
+        with Horizontal(id='log-row'):
+            yield ActivityLog(id='activity', highlight=True, markup=True)
         yield ControlBar(id='ctrl-bar')
         yield Footer()
 
@@ -903,7 +1027,8 @@ class SocketTradingMonitorApp(App[None]):
             self.query_one('#decisions', DecisionsTable).refresh_from_state(
                 state.get('decisions', [])
             )
-            self.query_one('#trading', TradingPanel).refresh_from_state(state)
+            self.query_one('#positions', PositionsPanel).refresh_from_state(state)
+            self.query_one('#orders', OrdersPanel).refresh_from_state(state)
             self.query_one('#activity', ActivityLog).refresh_from_state(
                 state.get('activity_log', [])
             )

@@ -5,21 +5,19 @@ from decimal import Decimal
 
 import pytest
 
-from pred_market_cli.data.market_data_manager import MarketDataManager
-from pred_market_cli.events.events import OrderBookEvent, PriceChangeEvent
-from pred_market_cli.order.order_book import Level, OrderBook
-from pred_market_cli.position.position_manager import Position, PositionManager
-from pred_market_cli.risk.risk_manager import NoRiskManager
-from pred_market_cli.strategy.market_making_strategy import MarketMakingStrategy
-from pred_market_cli.strategy.mean_reversion_strategy import MeanReversionStrategy
-from pred_market_cli.strategy.momentum_strategy import MomentumStrategy
-from pred_market_cli.strategy.orderbook_imbalance_strategy import (
+from pm_cli.data.market_data_manager import MarketDataManager
+from pm_cli.events.events import OrderBookEvent
+from pm_cli.order.order_book import Level, OrderBook
+from pm_cli.position.position_manager import Position, PositionManager
+from pm_cli.risk.risk_manager import NoRiskManager
+from pm_cli.strategy.market_making_strategy import MarketMakingStrategy
+from pm_cli.strategy.orderbook_imbalance_strategy import (
     OrderBookImbalanceStrategy,
 )
-from pred_market_cli.strategy.simple_strategy import LLMDecision, SimpleStrategy
-from pred_market_cli.strategy.strategy import Strategy, StrategyDecision
-from pred_market_cli.ticker.ticker import CashTicker, PolyMarketTicker
-from pred_market_cli.trader.paper_trader import PaperTrader
+from pm_cli.strategy.simple_strategy import LLMDecision, SimpleStrategy
+from pm_cli.strategy.strategy import Strategy, StrategyDecision
+from pm_cli.ticker.ticker import CashTicker, PolyMarketTicker
+from pm_cli.trader.paper_trader import PaperTrader
 
 
 class DummyStrategy(Strategy):
@@ -266,84 +264,6 @@ async def test_obi_entry_exit_and_guards(
 
 
 @pytest.mark.asyncio
-async def test_momentum_entry_exit_and_timeout(
-    test_ticker: PolyMarketTicker, paper_trader: PaperTrader
-) -> None:
-    strategy = MomentumStrategy(
-        tickers=[test_ticker],
-        window=3,
-        entry_threshold=0.02,
-        exit_threshold=-0.01,
-        max_hold_seconds=1,
-    )
-    event = lambda p: PriceChangeEvent(test_ticker, Decimal(p))
-
-    await strategy.process_event(event('0.50'), paper_trader)
-    await strategy.process_event(event('0.51'), paper_trader)
-    assert strategy.get_decision_stats()['decisions'] == 0
-
-    await strategy.process_event(event('0.53'), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'BUY_YES'
-
-    await strategy.process_event(event('0.52'), paper_trader)
-    await strategy.process_event(event('0.50'), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'CLOSE_MOM'
-
-    _open_yes_position(paper_trader.position_manager, test_ticker, '5')
-    strategy._entries[test_ticker.symbol] = datetime.now() - timedelta(seconds=10)
-    await strategy.process_event(event('0.50'), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'CLOSE_TIMEOUT'
-
-
-@pytest.mark.asyncio
-async def test_mean_reversion_signals_and_guards(
-    test_ticker: PolyMarketTicker, paper_trader: PaperTrader
-) -> None:
-    strategy = MeanReversionStrategy(
-        tickers=[test_ticker],
-        window=4,
-        entry_z_score=1.0,
-        exit_z_score=0.3,
-        max_hold_seconds=1,
-    )
-    event = lambda p: PriceChangeEvent(test_ticker, Decimal(p))
-
-    await strategy.process_event(event('0.50'), paper_trader)
-    await strategy.process_event(event('0.50'), paper_trader)
-    await strategy.process_event(event('0.50'), paper_trader)
-    await strategy.process_event(event('0.50'), paper_trader)
-    assert strategy.get_decision_stats()['decisions'] == 0
-
-    for p in ['0.60', '0.60', '0.60', '0.40']:
-        await strategy.process_event(event(p), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'BUY_YES'
-
-    for p in ['0.40', '0.40', '0.40', '0.65']:
-        await strategy.process_event(event(p), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'SELL_YES'
-
-    _open_yes_position(paper_trader.position_manager, test_ticker, '5')
-    strategy._entries[test_ticker.symbol] = (datetime.now(), 'long')
-    for p in ['0.49', '0.50', '0.51', '0.50']:
-        await strategy.process_event(event(p), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'CLOSE_MR'
-
-    _open_yes_position(paper_trader.position_manager, test_ticker, '5')
-    strategy._entries[test_ticker.symbol] = (
-        datetime.now() - timedelta(seconds=10),
-        'long',
-    )
-    for p in ['0.49', '0.50', '0.51', '0.50']:
-        await strategy.process_event(event(p), paper_trader)
-    assert strategy.get_decisions()[-1].action == 'CLOSE_TIMEOUT'
-
-
-def test_mean_reversion_window_guard() -> None:
-    with pytest.raises(ValueError):
-        MeanReversionStrategy(tickers=[], window=1)
-
-
-@pytest.mark.asyncio
 async def test_market_making_entry_and_exits(
     test_ticker: PolyMarketTicker, paper_trader: PaperTrader
 ) -> None:
@@ -455,14 +375,6 @@ async def test_market_making_no_cross_spread_entry(
         (
             lambda t: OrderBookImbalanceStrategy(tickers=[t]),
             lambda t: OrderBookEvent(t, Decimal('0.50'), Decimal('100'), Decimal('0')),
-        ),
-        (
-            lambda t: MomentumStrategy(tickers=[t], window=2),
-            lambda t: PriceChangeEvent(t, Decimal('0.50')),
-        ),
-        (
-            lambda t: MeanReversionStrategy(tickers=[t], window=3),
-            lambda t: PriceChangeEvent(t, Decimal('0.50')),
         ),
         (
             lambda t: MarketMakingStrategy(tickers=[t]),
