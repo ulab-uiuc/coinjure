@@ -1,8 +1,8 @@
 ![Pred Market CLI](assets/pm-cli.png)
 
-<p align="center">
-  <img src="assets/readme_title.svg" alt="PM-CLI: Agent-First Trading System for Prediction Markets" width="980">
-</p>
+<h1 align="center">
+  Agent-First Trading System for Prediction Markets
+</h1>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
