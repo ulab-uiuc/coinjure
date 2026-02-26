@@ -7,7 +7,7 @@ from datetime import datetime
 
 # Adjust path to import your modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pred_market_cli.data.live.live_data_source import LiveNewsDataSource
+from pm_cli.data.live.live_data_source import LiveNewsDataSource
 
 
 async def test_news_source(args):  # noqa: C901

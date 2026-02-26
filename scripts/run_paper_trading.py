@@ -19,21 +19,21 @@ from decimal import Decimal
 import click
 from dotenv import load_dotenv
 
-from pred_market_cli.cli.utils import add_monitoring_to_engine
-from pred_market_cli.core.trading_engine import TradingEngine
-from pred_market_cli.data.composite_data_source import CompositeDataSource
-from pred_market_cli.data.live.google_news_data_source import GoogleNewsDataSource
-from pred_market_cli.data.live.kalshi_data_source import LiveKalshiDataSource
-from pred_market_cli.data.live.live_data_source import (
+from pm_cli.cli.utils import add_monitoring_to_engine
+from pm_cli.core.trading_engine import TradingEngine
+from pm_cli.data.composite_data_source import CompositeDataSource
+from pm_cli.data.live.google_news_data_source import GoogleNewsDataSource
+from pm_cli.data.live.kalshi_data_source import LiveKalshiDataSource
+from pm_cli.data.live.live_data_source import (
     LivePolyMarketDataSource,
     LiveRSSNewsDataSource,
 )
-from pred_market_cli.data.market_data_manager import MarketDataManager
-from pred_market_cli.position.position_manager import Position, PositionManager
-from pred_market_cli.risk.risk_manager import StandardRiskManager
-from pred_market_cli.strategy.simple_strategy import SimpleStrategy
-from pred_market_cli.ticker.ticker import CashTicker
-from pred_market_cli.trader.paper_trader import PaperTrader
+from pm_cli.data.market_data_manager import MarketDataManager
+from pm_cli.position.position_manager import Position, PositionManager
+from pm_cli.risk.risk_manager import StandardRiskManager
+from pm_cli.strategy.simple_strategy import SimpleStrategy
+from pm_cli.ticker.ticker import CashTicker
+from pm_cli.trader.paper_trader import PaperTrader
 
 load_dotenv()
 
