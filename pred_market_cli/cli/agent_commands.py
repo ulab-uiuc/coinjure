@@ -238,14 +238,102 @@ def paper() -> None:
     show_default=True,
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
+@click.option(
+    '--config',
+    'config_path',
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help='Config JSON file (overrides defaults for all settings)',
+)
+@click.option(
+    '--state-dir',
+    default=None,
+    type=click.Path(),
+    help='State persistence directory (default: ./trading_data)',
+)
+@click.option(
+    '--telegram-token',
+    default=None,
+    help='Telegram Bot Token (or TELEGRAM_BOT_TOKEN env var)',
+)
+@click.option(
+    '--chat-id',
+    default=None,
+    help='Telegram Chat ID (or TELEGRAM_CHAT_ID env var)',
+)
+@click.option(
+    '--max-drawdown',
+    default=None,
+    type=str,
+    help='Max drawdown as decimal, e.g. 0.20 for 20% (default: 0.20)',
+)
+@click.option(
+    '--drawdown-alert-pct',
+    default=None,
+    type=str,
+    help='Drawdown alert threshold as decimal, e.g. 0.10 for 10% (optional)',
+)
+@click.option(
+    '--log-level',
+    default=None,
+    type=click.Choice(
+        ['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False
+    ),
+    help='Logging level (default: INFO)',
+)
 def paper_run(
     exchange: str,
     duration: float | None,
     initial_capital: str,
     strategy_ref: str,
     as_json: bool,
+    config_path: str | None,
+    state_dir: str | None,
+    telegram_token: str | None,
+    chat_id: str | None,
+    max_drawdown: str | None,
+    drawdown_alert_pct: str | None,
+    log_level: str | None,
 ) -> None:
     """Run paper trading in simulation mode."""
+
+    # 1. Load config (file or defaults)
+    config = Config.from_file(config_path) if config_path else Config.defaults()
+
+    # 2. CLI flags override config values
+    resolved_state_dir = state_dir or config.storage.data_dir
+    resolved_drawdown_alert = Decimal(drawdown_alert_pct) if drawdown_alert_pct else (
+        Decimal(str(config.alerts.thresholds.drawdown_pct_alert))
+        if config.alerts.thresholds.drawdown_pct_alert is not None
+        else None
+    )
+    resolved_log_level = log_level or 'INFO'
+
+    # 3. Configure logging
+    logging.basicConfig(
+        level=getattr(logging, resolved_log_level.upper(), logging.INFO),
+        format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    )
+
+    # 4. Initialize StateStore
+    state_store = StateStore(resolved_state_dir)
+
+    # 5. Initialize Alerter
+    alerters = [LogAlerter(state_store.data_dir)]
+    tg_token = (
+        telegram_token
+        or os.environ.get('TELEGRAM_BOT_TOKEN')
+        or config.alerts.telegram.bot_token
+    )
+    tg_chat = (
+        chat_id
+        or os.environ.get('TELEGRAM_CHAT_ID')
+        or config.alerts.telegram.chat_id
+    )
+    if tg_token and tg_chat:
+        alerters.append(TelegramAlerter(tg_token, tg_chat))
+    alerter = CompositeAlerter(alerters)
+
     strategy_obj = _load_strategy(strategy_ref)
     capital = Decimal(initial_capital)
     _emit(
@@ -271,7 +359,10 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                state_store=state_store,
+                alerter=alerter,
                 continuous=True,
+                drawdown_alert_pct=resolved_drawdown_alert,
             )
         )
     elif exchange == 'kalshi':
@@ -286,7 +377,10 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                state_store=state_store,
+                alerter=alerter,
                 continuous=True,
+                drawdown_alert_pct=resolved_drawdown_alert,
             )
         )
     else:
@@ -300,7 +394,10 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                state_store=state_store,
+                alerter=alerter,
                 continuous=True,
+                drawdown_alert_pct=resolved_drawdown_alert,
             )
         )
 
