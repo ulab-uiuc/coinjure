@@ -57,11 +57,8 @@ class KalshiTrader(Trader):
                 'or pass api_key_id and private_key_path.'
             )
 
-        with open(pk_path) as f:
-            config.private_key_pem = f.read()
-        config.api_key_id = key_id
-
         self._api_client = ApiClient(configuration=config)
+        self._api_client.set_kalshi_auth(key_id, pk_path)
         self._portfolio_api = PortfolioApi(self._api_client)
         self.orders: list[Order] = []
 

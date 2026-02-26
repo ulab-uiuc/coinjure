@@ -66,17 +66,15 @@ class LiveKalshiDataSource(DataSource):
         key_id = api_key_id or os.environ.get('KALSHI_API_KEY_ID')
         pk_path = private_key_path or os.environ.get('KALSHI_PRIVATE_KEY_PATH')
 
+        self._api_client = ApiClient(configuration=config)
         if key_id and pk_path:
-            with open(pk_path) as f:
-                config.private_key_pem = f.read()
-            config.api_key_id = key_id
+            self._api_client.set_kalshi_auth(key_id, pk_path)
         else:
             logger.warning(
                 'Kalshi API credentials not provided. '
                 'Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH env vars.'
             )
 
-        self._api_client = ApiClient(configuration=config)
         self._markets_api = MarketsApi(self._api_client)
 
         # Load cache
