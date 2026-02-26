@@ -162,6 +162,7 @@ cython_debug/
 .DS_Store
 
 **/*.jsonl
+!data/backtest_sample.jsonl
 
 # MkDocs
 site/

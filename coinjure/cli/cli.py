@@ -15,7 +15,7 @@ from coinjure.cli.trade_commands import trade
 @click.group()
 @click.version_option(version='0.0.1')
 def cli() -> None:
-    """Coinjure - Polymarket trading agent CLI."""
+    """Coinjure - trading agent CLI."""
     pass
 
 
