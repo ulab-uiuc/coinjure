@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -39,6 +40,20 @@ def _load_jsonl(path: Path) -> list[dict]:
                 continue
             rows.append(json.loads(line))
     return rows
+
+
+def _write_history_iso(path: Path) -> None:
+    base = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    points = []
+    for i in range(16):
+        points.append(
+            {
+                't': (base + timedelta(hours=i)).isoformat(),
+                'p': round(0.40 + (i % 5) * 0.01, 4),
+            }
+        )
+    rows = [{'event_id': 'E1', 'market_id': 'M1', 'time_series': {'Yes': points}}]
+    path.write_text('\n'.join(json.dumps(row) for row in rows) + '\n', encoding='utf-8')
 
 
 def test_research_group_help_lists_tools() -> None:
@@ -314,3 +329,78 @@ def test_research_compare_runs_and_memory(tmp_path: Path) -> None:
     assert list_res.exit_code == 0
     payload = json.loads(list_res.output)
     assert payload['count'] == 1
+
+
+def test_research_walk_forward_supports_iso_timestamps(tmp_path: Path) -> None:
+    history = tmp_path / 'history_iso.jsonl'
+    _write_history_iso(history)
+    output = tmp_path / 'wf.jsonl'
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'walk-forward',
+            '--history-file',
+            str(history),
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--strategy-ref',
+            'coinjure.strategy.test_strategy:TestStrategy',
+            '--train-size',
+            '8',
+            '--test-size',
+            '4',
+            '--step-size',
+            '2',
+            '--output',
+            str(output),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    rows = _load_jsonl(output)
+    assert len(rows) == 3
+    assert all(row['ok'] for row in rows)
+
+
+def test_research_slice_supports_json_array_history(tmp_path: Path) -> None:
+    history = tmp_path / 'history.json'
+    rows = [
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {'Yes': [{'t': 1, 'p': 0.40}, {'t': 2, 'p': 0.45}]},
+        },
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {'Yes': [{'t': 3, 'p': 0.50}, {'t': 4, 'p': 0.55}]},
+        },
+    ]
+    history.write_text(json.dumps(rows), encoding='utf-8')
+    sliced = tmp_path / 'slice.jsonl'
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'slice',
+            '--history-file',
+            str(history),
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--output',
+            str(sliced),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    out_rows = _load_jsonl(sliced)
+    assert len(out_rows) == 4
