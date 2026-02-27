@@ -12,6 +12,7 @@ from typing import Any
 import click
 
 from coinjure.backtest.backtester import run_backtest
+from coinjure.cli.utils import _emit
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.composite_data_source import CompositeDataSource
 from coinjure.data.live.google_news_data_source import GoogleNewsDataSource
@@ -27,7 +28,6 @@ from coinjure.live.live_trader import (
     run_live_paper_trading,
     run_live_polymarket_trading,
 )
-from coinjure.cli.utils import _emit
 from coinjure.strategy.loader import load_strategy_class as _shared_load_strategy_class
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import PolyMarketTicker
@@ -350,7 +350,9 @@ def strategy_validate(
                     for d in decisions[-5:]
                 ],
                 'error': error_message or None,
-                'message': 'Dry-run completed' if error_message == '' else 'Dry-run failed',
+                'message': 'Dry-run completed'
+                if error_message == ''
+                else 'Dry-run failed',
             }
         )
         _emit(payload, as_json=as_json)
@@ -643,6 +645,7 @@ def paper_run(
                 continuous=False,
                 monitor=monitor,
                 exchange_name='Historical Replay',
+                emit_text=not as_json,
             )
         )
     elif exchange == 'polymarket':
