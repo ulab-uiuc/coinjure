@@ -138,10 +138,9 @@ class SimpleStrategy(Strategy):
                         f'Already holding position in {ticker.name[:30]}, skip'
                     )
                     return
-                # Also check NO ticker
-                if isinstance(ticker, PolyMarketTicker) and ticker.no_token_id:
-                    no_ticker = ticker.get_no_ticker()
-                    if no_ticker:
+                # Also check NO ticker (any ticker type with get_no_ticker)
+                no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
+                if no_ticker:
                         no_pos = trader.position_manager.get_position(no_ticker)
                         if no_pos and no_pos.quantity > 0:
                             self.logger.debug(
@@ -328,9 +327,8 @@ class SimpleStrategy(Strategy):
 
         # If this is a YES ticker, also check the paired NO position.
         # This matters when the NO token has no real orderbook of its own.
-        if isinstance(ticker, PolyMarketTicker) and ticker.no_token_id:
-            no_ticker = ticker.get_no_ticker()
-            if no_ticker and no_ticker.symbol in self._position_meta:
+        no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
+        if no_ticker and no_ticker.symbol in self._position_meta:
                 yes_bid = trader.market_data.get_best_bid(ticker)
                 if yes_bid is not None:
                     no_price_derived = float(Decimal('1') - yes_bid.price)
