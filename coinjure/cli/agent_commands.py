@@ -27,6 +27,7 @@ from coinjure.live.live_trader import (
     run_live_paper_trading,
     run_live_polymarket_trading,
 )
+from coinjure.cli.utils import _emit
 from coinjure.strategy.loader import load_strategy_class as _shared_load_strategy_class
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import PolyMarketTicker
@@ -38,13 +39,6 @@ class _IdleStrategy(Strategy):
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         return
-
-
-def _emit(payload: dict, *, as_json: bool) -> None:
-    if as_json:
-        click.echo(json.dumps(payload, default=str))
-    else:
-        click.echo(payload.get('message', str(payload)))
 
 
 def _parse_strategy_kwargs_json(strategy_kwargs_json: str | None) -> dict[str, Any]:
@@ -473,6 +467,7 @@ def backtest_run(
             'Custom fill/fee/risk options currently require --json mode.'
         )
 
+    spread_val = Decimal(spread)
     strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
     no_symbol = f'{symbol}_NO'
     ticker = PolyMarketTicker(

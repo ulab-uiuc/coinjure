@@ -15,6 +15,7 @@ from typing import Any
 
 import click
 
+from coinjure.cli.utils import _emit
 from coinjure.core.trading_engine import TradingEngine
 from coinjure.data.backtest.history_reader import iter_history_rows
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
@@ -25,15 +26,6 @@ from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
 
-
-def _emit(payload: object, *, as_json: bool) -> None:
-    if as_json:
-        click.echo(json.dumps(payload, default=str))
-        return
-    if isinstance(payload, dict):
-        click.echo(payload.get('message', str(payload)))
-        return
-    click.echo(str(payload))
 
 
 def _parse_json_object(raw: str, *, option_name: str) -> dict[str, Any]:
@@ -53,7 +45,8 @@ def _to_decimal(value: object) -> Decimal | None:
         return None
 
 
-def _to_timestamp_int(value: object) -> int | None:
+
+def _to_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -61,50 +54,10 @@ def _to_timestamp_int(value: object) -> int | None:
     if isinstance(value, float):
         return int(value)
     if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
         try:
-            return int(raw)
-        except ValueError:
-            pass
-        try:
-            # Support both "...Z" and explicit offsets.
-            iso = raw.replace('Z', '+00:00')
-            parsed = datetime.fromisoformat(iso)
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return int(parsed.timestamp())
+            return int(value.strip())
         except ValueError:
             return None
-    return None
-
-
-def _to_timestamp(value: object) -> int | None:
-    """Convert a timestamp value into epoch seconds.
-
-    Supports:
-    - integer / numeric epoch timestamps
-    - ISO-8601 strings like ``2025-12-06T06:00:14+00:00`` or ``...Z``
-    """
-    as_int = _to_int(value)
-    if as_int is not None:
-        return as_int
-
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            if raw.endswith('Z'):
-                raw = f'{raw[:-1]}+00:00'
-            dt = datetime.fromisoformat(raw)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return int(dt.timestamp())
-        except Exception:  # noqa: BLE001
-            return None
-
     return None
 
 

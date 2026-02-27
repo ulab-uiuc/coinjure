@@ -1,6 +1,6 @@
 ---
 name: pm-paper-run-ops
-description: Use this skill when the user asks to launch, monitor, and safely operate paper trading runs with coinjure.
+description: Use this skill when asked to launch, monitor, and safely operate paper-trading sessions after backtest gating.
 ---
 
 # PM Paper Run Ops
@@ -18,28 +18,27 @@ Use this skill for paper-trading execution loops.
 
 1. Preflight:
 
-- `coinjure strategy validate --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --json`
-- `coinjure strategy dry-run --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --events 10 --json`
+- `coinjure strategy validate --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --dry-run --events 10 --json`
 
 2. Launch paper run:
 
-- `coinjure paper run --exchange <exchange> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --monitor`
+- `coinjure paper run --exchange <exchange> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --duration <seconds> --json`
+- optional monitor mode: add `--monitor`
 
-3. Operational control (separate terminal):
+3. Runtime control (separate terminal):
 
 - `coinjure trade status --json`
+- `coinjure trade state --json`
 - `coinjure trade pause`
 - `coinjure trade resume`
 - `coinjure trade stop`
 
-4. Optional token-level checks:
+4. Post-run artifact capture:
 
-- `coinjure token orderbook <token_id>`
-- `coinjure token positions`
-- `coinjure token place --token <token_id> --side buy --price <p> --size <q> --json`
+- save status/state snapshots and decisions in `data/research/<run_id>/paper/`.
 
 ## Hard Rules
 
-- If behavior is abnormal, `trade pause` first, then inspect.
+- If behavior is abnormal, run `trade pause` first.
 - Use `trade stop` for clean shutdown.
-- Do not use removed commands (`trade estop`, `token cancel`).
+- Do not run live commands from this skill.

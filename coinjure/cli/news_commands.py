@@ -10,6 +10,8 @@ import click
 import feedparser
 import httpx
 
+from coinjure.cli.utils import _emit
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -24,16 +26,6 @@ WSJ_RSS_FEEDS = {
     'https://feeds.content.dowjones.io/public/rss/RSSUSnews': ['us'],
     'https://feeds.content.dowjones.io/public/rss/socialpoliticsfeed': ['politics'],
 }
-
-
-def _emit(payload: object, *, as_json: bool) -> None:
-    if as_json:
-        click.echo(json.dumps(payload))
-    else:
-        if isinstance(payload, dict):
-            click.echo(payload.get('message', str(payload)))
-        else:
-            click.echo(str(payload))
 
 
 def _format_article(article: dict) -> str:
