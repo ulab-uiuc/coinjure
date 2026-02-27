@@ -419,6 +419,12 @@ def backtest() -> None:
 @click.option('--event-id', required=True)
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
+    '--spread',
+    default='0.01',
+    show_default=True,
+    help='Synthetic bid-ask spread for simulated order book.',
+)
+@click.option(
     '--strategy-ref',
     default='coinjure.strategy.test_strategy:TestStrategy',
     show_default=True,
@@ -436,6 +442,7 @@ def backtest_run(
     market_id: str,
     event_id: str,
     initial_capital: str,
+    spread: str,
     strategy_ref: str,
     strategy_kwargs_json: str | None,
     as_json: bool,
@@ -453,6 +460,7 @@ def backtest_run(
         no_token_id=no_symbol,
     )
     capital = Decimal(initial_capital)
+    spread_val = Decimal(spread)
     _emit(
         {
             'mode': 'backtest',
@@ -469,6 +477,7 @@ def backtest_run(
             ticker_symbol=ticker,
             initial_capital=capital,
             strategy=strategy_obj,
+            spread=spread_val,
         )
     )
     _emit({'mode': 'backtest', 'message': 'Backtest completed'}, as_json=as_json)
