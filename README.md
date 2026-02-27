@@ -1,7 +1,7 @@
 ![Coinjure](assets/coinjure.png)
 
 <h1 align="center">
-  Agent-First Trading System for Prediction Markets
+  Agent-Native Trading System for Prediction Markets
 </h1>
 
 <p align="center">
@@ -10,7 +10,7 @@
   <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
 </p>
 
-Coinjure is an agent-first trading stack for prediction markets.
+Coinjure is an agent-native trading stack for prediction markets.
 
 The goal is simple: give an autonomous agent everything it needs to design, test, and run strategies end-to-end, while the human operator only does two things:
 
