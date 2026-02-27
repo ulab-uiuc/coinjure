@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
-import importlib.util
 import json
 import os
-import uuid
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -29,6 +26,7 @@ from coinjure.live.live_trader import (
     run_live_paper_trading,
     run_live_polymarket_trading,
 )
+from coinjure.strategy.loader import load_strategy_class as _shared_load_strategy_class
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import PolyMarketTicker
 from coinjure.trader.trader import Trader
@@ -129,36 +127,10 @@ def _build_news_augmented_source(exchange: str):
 
 
 def _load_strategy_class(strategy_ref: str) -> type[Strategy]:
-    if ':' not in strategy_ref:
-        raise click.ClickException(
-            "Invalid strategy reference. Use 'module.path:ClassName' or '/path/to/file.py:ClassName'."
-        )
-
-    module_or_file, class_name = strategy_ref.split(':', 1)
-
-    if module_or_file.endswith('.py') or os.path.sep in module_or_file:
-        file_path = Path(module_or_file).expanduser().resolve()
-        if not file_path.exists():
-            raise click.ClickException(f'Strategy file not found: {file_path}')
-        module_name = f'_swm_user_strategy_{uuid.uuid4().hex}'
-        spec = importlib.util.spec_from_file_location(module_name, file_path)
-        if spec is None or spec.loader is None:
-            raise click.ClickException(f'Could not load strategy file: {file_path}')
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    else:
-        module = importlib.import_module(module_or_file)
-
-    strategy_cls = getattr(module, class_name, None)
-    if strategy_cls is None:
-        raise click.ClickException(
-            f'Class {class_name!r} not found in {module_or_file!r}'
-        )
-    if not isinstance(strategy_cls, type) or not issubclass(strategy_cls, Strategy):
-        raise click.ClickException(
-            f'Class {class_name!r} must inherit from coinjure.strategy.strategy.Strategy'
-        )
-    return strategy_cls
+    try:
+        return _shared_load_strategy_class(strategy_ref)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _load_strategy(
@@ -274,14 +246,33 @@ class {class_name}(Strategy):
     default=None,
     help='JSON object for strategy constructor kwargs.',
 )
+@click.option(
+    '--dry-run',
+    'do_dry_run',
+    is_flag=True,
+    default=False,
+    help='Also feed mock events to confirm runtime behaviour.',
+)
+@click.option(
+    '--events',
+    default=8,
+    show_default=True,
+    type=click.IntRange(1, 50),
+    help='Mock events to feed when --dry-run is set.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON result')
 def strategy_validate(
-    strategy_ref: str, strategy_kwargs_json: str | None, as_json: bool
+    strategy_ref: str,
+    strategy_kwargs_json: str | None,
+    do_dry_run: bool,
+    events: int,
+    as_json: bool,
 ) -> None:
-    """Validate that a strategy is importable and constructible."""
+    """Validate that a strategy is importable, constructible, and (optionally) runtime-safe."""
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
-    payload = {
+
+    payload: dict[str, Any] = {
         'ok': True,
         'strategy_ref': strategy_ref,
         'strategy_kwargs': strategy_kwargs,
@@ -289,119 +280,90 @@ def strategy_validate(
         'module': strategy_obj.__class__.__module__,
         'message': f'Valid strategy: {strategy_ref}',
     }
-    _emit(payload, as_json=as_json)
 
+    if do_dry_run:
+        from coinjure.data.market_data_manager import MarketDataManager
+        from coinjure.position.position_manager import Position, PositionManager
+        from coinjure.risk.risk_manager import NoRiskManager
+        from coinjure.ticker.ticker import CashTicker
+        from coinjure.trader.paper_trader import PaperTrader
 
-@strategy.command('dry-run')
-@click.option(
-    '--strategy-ref',
-    required=True,
-    help='Strategy ref: module:Class or /path/file.py:Class',
-)
-@click.option(
-    '--strategy-kwargs-json',
-    default=None,
-    help='JSON object for strategy constructor kwargs.',
-)
-@click.option(
-    '--events',
-    default=8,
-    show_default=True,
-    type=click.IntRange(1, 50),
-    help='Number of mock events to feed.',
-)
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON result')
-def strategy_dry_run(
-    strategy_ref: str,
-    strategy_kwargs_json: str | None,
-    events: int,
-    as_json: bool,
-) -> None:
-    """Quickly validate strategy runtime behavior on mock events."""
-    from coinjure.data.market_data_manager import MarketDataManager
-    from coinjure.position.position_manager import Position, PositionManager
-    from coinjure.risk.risk_manager import NoRiskManager
-    from coinjure.ticker.ticker import CashTicker
-    from coinjure.trader.paper_trader import PaperTrader
-
-    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
-    strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
-    ticker = PolyMarketTicker(
-        symbol='DRYRUN_YES',
-        name='Dry Run Market',
-        token_id='DRYRUN_YES',
-        market_id='DRYRUN_MKT',
-        event_id='DRYRUN_EVT',
-        no_token_id='DRYRUN_NO',
-    )
-
-    market_data = MarketDataManager()
-    position_manager = PositionManager()
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.POLYMARKET_USDC,
-            quantity=Decimal('10000'),
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
+        ticker = PolyMarketTicker(
+            symbol='DRYRUN_YES',
+            name='Dry Run Market',
+            token_id='DRYRUN_YES',
+            market_id='DRYRUN_MKT',
+            event_id='DRYRUN_EVT',
+            no_token_id='DRYRUN_NO',
         )
-    )
-    trader = PaperTrader(
-        market_data=market_data,
-        risk_manager=NoRiskManager(),
-        position_manager=position_manager,
-        min_fill_rate=Decimal('1.0'),
-        max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
-    )
+        market_data = MarketDataManager()
+        position_manager = PositionManager()
+        position_manager.update_position(
+            Position(
+                ticker=CashTicker.POLYMARKET_USDC,
+                quantity=Decimal('10000'),
+                average_cost=Decimal('0'),
+                realized_pnl=Decimal('0'),
+            )
+        )
+        trader = PaperTrader(
+            market_data=market_data,
+            risk_manager=NoRiskManager(),
+            position_manager=position_manager,
+            min_fill_rate=Decimal('1.0'),
+            max_fill_rate=Decimal('1.0'),
+            commission_rate=Decimal('0.0'),
+        )
+        event_stream = _build_mock_events(ticker, events)
 
-    event_stream = _build_mock_events(ticker, events)
+        async def _run_stream() -> tuple[int, str]:
+            processed = 0
+            error_message = ''
+            for event in event_stream:
+                if isinstance(event, OrderBookEvent):
+                    market_data.process_orderbook_event(event)
+                elif isinstance(event, PriceChangeEvent):
+                    market_data.process_price_change_event(event)
+                try:
+                    await strategy_obj.process_event(event, trader)
+                    processed += 1
+                except Exception as exc:  # noqa: BLE001
+                    error_message = str(exc)
+                    break
+            return processed, error_message
 
-    async def _run_stream() -> tuple[int, str]:
-        processed = 0
-        error_message = ''
-        for event in event_stream:
-            if isinstance(event, OrderBookEvent):
-                market_data.process_orderbook_event(event)
-            elif isinstance(event, PriceChangeEvent):
-                market_data.process_price_change_event(event)
-            try:
-                await strategy_obj.process_event(event, trader)
-                processed += 1
-            except Exception as exc:  # noqa: BLE001
-                error_message = str(exc)
-                break
-        return processed, error_message
-
-    processed, error_message = asyncio.run(_run_stream())
-
-    decision_stats = strategy_obj.get_decision_stats()
-    decisions = strategy_obj.get_decisions()
-    payload = {
-        'ok': error_message == '',
-        'strategy_ref': strategy_ref,
-        'strategy_kwargs': strategy_kwargs,
-        'events_requested': events,
-        'events_processed': processed,
-        'orders_created': len(trader.orders),
-        'decision_stats': decision_stats,
-        'decisions_sample': [
+        processed, error_message = asyncio.run(_run_stream())
+        decision_stats = strategy_obj.get_decision_stats()
+        decisions = strategy_obj.get_decisions()
+        payload.update(
             {
-                'timestamp': d.timestamp,
-                'ticker_name': d.ticker_name,
-                'action': d.action,
-                'executed': d.executed,
-                'confidence': d.confidence,
-                'reasoning': d.reasoning,
-                'signal_values': d.signal_values,
+                'ok': error_message == '',
+                'events_requested': events,
+                'events_processed': processed,
+                'orders_created': len(trader.orders),
+                'decision_stats': decision_stats,
+                'decisions_sample': [
+                    {
+                        'timestamp': d.timestamp,
+                        'ticker_name': d.ticker_name,
+                        'action': d.action,
+                        'executed': d.executed,
+                        'confidence': d.confidence,
+                        'reasoning': d.reasoning,
+                        'signal_values': d.signal_values,
+                    }
+                    for d in decisions[-5:]
+                ],
+                'error': error_message or None,
+                'message': 'Dry-run completed' if error_message == '' else 'Dry-run failed',
             }
-            for d in decisions[-5:]
-        ],
-        'error': error_message or None,
-        'message': 'Dry-run completed' if error_message == '' else 'Dry-run failed',
-    }
+        )
+        _emit(payload, as_json=as_json)
+        if error_message:
+            raise click.ClickException(f'Dry-run failed: {error_message}')
+        return
+
     _emit(payload, as_json=as_json)
-    if error_message:
-        raise click.ClickException(f'Dry-run failed: {error_message}')
 
 
 @click.group()
@@ -428,6 +390,15 @@ def backtest() -> None:
     default=None,
     help='JSON object for strategy constructor kwargs.',
 )
+@click.option('--min-fill-rate', default='0.5', show_default=True)
+@click.option('--max-fill-rate', default='1.0', show_default=True)
+@click.option('--commission-rate', default='0.0', show_default=True)
+@click.option(
+    '--risk-profile',
+    default='none',
+    show_default=True,
+    type=click.Choice(['none', 'standard']),
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 def backtest_run(
     history_file: str,
@@ -438,10 +409,62 @@ def backtest_run(
     initial_capital: str,
     strategy_ref: str,
     strategy_kwargs_json: str | None,
+    min_fill_rate: str,
+    max_fill_rate: str,
+    commission_rate: str,
+    risk_profile: str,
     as_json: bool,
 ) -> None:
     """Run backtest mode with historical data + paper execution."""
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    capital = Decimal(initial_capital)
+    try:
+        fill_min = Decimal(min_fill_rate)
+        fill_max = Decimal(max_fill_rate)
+        fee = Decimal(commission_rate)
+    except Exception as exc:  # noqa: BLE001
+        raise click.ClickException(
+            'Invalid fill/commission value. Use numeric decimals.'
+        ) from exc
+    if fill_min <= 0 or fill_max <= 0:
+        raise click.ClickException('--min-fill-rate and --max-fill-rate must be > 0.')
+    if fill_min > fill_max:
+        raise click.ClickException('--min-fill-rate cannot exceed --max-fill-rate.')
+    if fee < 0:
+        raise click.ClickException('--commission-rate must be >= 0.')
+
+    if as_json:
+        from coinjure.cli.research_commands import _run_backtest_once
+
+        try:
+            metrics = _run_backtest_once(
+                history_file=history_file,
+                strategy_ref=strategy_ref,
+                strategy_kwargs=strategy_kwargs,
+                market_id=market_id,
+                event_id=event_id,
+                initial_capital=capital,
+                min_fill_rate=fill_min,
+                max_fill_rate=fill_max,
+                commission_rate=fee,
+                risk_profile=risk_profile,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _emit({'ok': False, 'error': str(exc)}, as_json=True)
+            raise click.ClickException(str(exc)) from exc
+        _emit({'ok': True, **metrics}, as_json=True)
+        return
+
+    if (
+        fill_min != Decimal('0.5')
+        or fill_max != Decimal('1.0')
+        or fee != Decimal('0.0')
+        or risk_profile != 'none'
+    ):
+        raise click.ClickException(
+            'Custom fill/fee/risk options currently require --json mode.'
+        )
+
     strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
     no_symbol = f'{symbol}_NO'
     ticker = PolyMarketTicker(
@@ -452,7 +475,6 @@ def backtest_run(
         token_id=symbol,
         no_token_id=no_symbol,
     )
-    capital = Decimal(initial_capital)
     _emit(
         {
             'mode': 'backtest',
@@ -552,6 +574,7 @@ def paper_run(
                 continuous=True,
                 monitor=monitor,
                 exchange_name='Polymarket',
+                emit_text=not as_json,
             )
         )
     elif exchange == 'kalshi':
@@ -565,6 +588,7 @@ def paper_run(
                 continuous=True,
                 monitor=monitor,
                 exchange_name='Kalshi',
+                emit_text=not as_json,
             )
         )
     else:
@@ -581,6 +605,7 @@ def paper_run(
                 continuous=True,
                 monitor=monitor,
                 exchange_name='RSS',
+                emit_text=not as_json,
             )
         )
 
