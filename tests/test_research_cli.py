@@ -155,6 +155,52 @@ def test_research_slice_features_labels(tmp_path: Path) -> None:
     assert 'label_up' in label_rows[0]
 
 
+def test_research_slice_supports_iso_timestamps(tmp_path: Path) -> None:
+    history = tmp_path / 'history_iso.jsonl'
+    rows = [
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {
+                'Yes': [
+                    {'t': '1970-01-01T00:00:01+00:00', 'p': 0.40},
+                    {'t': '1970-01-01T00:00:02Z', 'p': 0.45},
+                    {'t': '1970-01-01T00:00:03+00:00', 'p': 0.55},
+                ]
+            },
+        }
+    ]
+    history.write_text(
+        '\n'.join(json.dumps(row) for row in rows) + '\n',
+        encoding='utf-8',
+    )
+    sliced = tmp_path / 'slice_iso.jsonl'
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'slice',
+            '--history-file',
+            str(history),
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--start-ts',
+            '2',
+            '--end-ts',
+            '3',
+            '--output',
+            str(sliced),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    assert '"points": 2' in result.output
+
+
 def test_research_backtest_batch_writes_output(monkeypatch, tmp_path: Path) -> None:
     history = tmp_path / 'history.jsonl'
     _write_history(history)

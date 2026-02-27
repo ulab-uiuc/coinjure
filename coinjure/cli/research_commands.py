@@ -79,6 +79,34 @@ def _to_timestamp_int(value: object) -> int | None:
     return None
 
 
+def _to_timestamp(value: object) -> int | None:
+    """Convert a timestamp value into epoch seconds.
+
+    Supports:
+    - integer / numeric epoch timestamps
+    - ISO-8601 strings like ``2025-12-06T06:00:14+00:00`` or ``...Z``
+    """
+    as_int = _to_int(value)
+    if as_int is not None:
+        return as_int
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            if raw.endswith('Z'):
+                raw = f'{raw[:-1]}+00:00'
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
+        except Exception:  # noqa: BLE001
+            return None
+
+    return None
+
+
 def _series_to_rows(series: list[tuple[int, Decimal]]) -> list[dict[str, object]]:
     return [{'t': ts, 'p': str(price)} for ts, price in series]
 

@@ -31,6 +31,24 @@ class TestMarketDataManager:
         """Test empty market data manager."""
         assert market_data.order_books == {}
 
+    def test_custom_spread(self, test_ticker: PolyMarketTicker):
+        """Test that custom spread is applied to synthetic order book."""
+        mdm = MarketDataManager(spread=Decimal('0.02'))
+        event = PriceChangeEvent(ticker=test_ticker, price=Decimal('0.50'))
+        mdm.process_price_change_event(event)
+        ob = mdm.order_books[test_ticker]
+        assert ob.best_bid.price == Decimal('0.49')   # 0.50 - 0.01
+        assert ob.best_ask.price == Decimal('0.51')   # 0.50 + 0.01
+
+    def test_custom_synthetic_size(self, test_ticker: PolyMarketTicker):
+        """Test that custom synthetic size is applied."""
+        mdm = MarketDataManager(synthetic_size=Decimal('500'))
+        event = PriceChangeEvent(ticker=test_ticker, price=Decimal('0.50'))
+        mdm.process_price_change_event(event)
+        ob = mdm.order_books[test_ticker]
+        assert ob.best_bid.size == Decimal('500')
+        assert ob.best_ask.size == Decimal('500')
+
     def test_update_order_book(
         self, market_data: MarketDataManager, test_ticker: PolyMarketTicker
     ):
