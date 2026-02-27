@@ -58,6 +58,98 @@ def _to_int(value: object) -> int | None:
         return None
 
 
+def _to_unix_ts(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        as_int = _to_int(raw)
+        if as_int is not None:
+            return as_int
+        try:
+            as_float = float(raw)
+            return int(as_float)
+        except ValueError:
+            pass
+        normalized = raw.replace('Z', '+00:00')
+        try:
+            dt = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    return None
+
+
+def _load_history_rows(path: Path) -> list[dict[str, Any]]:
+    with path.open(encoding='utf-8') as f:
+        content = f.read()
+
+    if not content.strip():
+        return []
+
+    lead = content.lstrip()[:1]
+    if lead in {'[', '{'}:
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            parsed = None
+        if parsed is not None:
+            if isinstance(parsed, list):
+                return [row for row in parsed if isinstance(row, dict)]
+            if isinstance(parsed, dict):
+                rows = parsed.get('data')
+                if isinstance(rows, list):
+                    return [row for row in rows if isinstance(row, dict)]
+                return [parsed]
+
+    rows: list[dict[str, Any]] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _extract_yes_points(
+    row: dict[str, Any],
+    *,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> list[tuple[int, Decimal]]:
+    yes_series = (row.get('time_series') or {}).get('Yes')
+    if not isinstance(yes_series, list):
+        return []
+
+    points: list[tuple[int, Decimal]] = []
+    for point in yes_series:
+        if not isinstance(point, dict):
+            continue
+        ts = _to_unix_ts(point.get('t'))
+        price = _to_decimal(point.get('p'))
+        if ts is None or price is None:
+            continue
+        if start_ts is not None and ts < start_ts:
+            continue
+        if end_ts is not None and ts > end_ts:
+            continue
+        points.append((ts, price))
+    return points
+
+
 def _series_to_rows(series: list[tuple[int, Decimal]]) -> list[dict[str, object]]:
     return [{'t': ts, 'p': str(price)} for ts, price in series]
 
@@ -76,32 +168,12 @@ def _load_yes_series(  # noqa: C901
         raise click.ClickException(f'History file not found: {path}')
 
     raw_points: list[tuple[int, Decimal]] = []
-    with path.open(encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if row.get('event_id') != event_id or row.get('market_id') != market_id:
-                continue
-            yes_series = (row.get('time_series') or {}).get('Yes')
-            if not isinstance(yes_series, list):
-                continue
-            for point in yes_series:
-                if not isinstance(point, dict):
-                    continue
-                ts = _to_int(point.get('t'))
-                price = _to_decimal(point.get('p'))
-                if ts is None or price is None:
-                    continue
-                if start_ts is not None and ts < start_ts:
-                    continue
-                if end_ts is not None and ts > end_ts:
-                    continue
-                raw_points.append((ts, price))
+    for row in _load_history_rows(path):
+        if row.get('event_id') != event_id or row.get('market_id') != market_id:
+            continue
+        raw_points.extend(
+            _extract_yes_points(row, start_ts=start_ts, end_ts=end_ts)
+        )
 
     if not raw_points:
         return []
@@ -345,6 +417,47 @@ def _load_jsonl_rows(jsonl_file: str) -> list[dict[str, Any]]:
             if isinstance(row, dict):
                 rows.append(row)
     return rows
+
+
+def _build_market_summaries(
+    history_file: str, *, min_points: int
+) -> list[dict[str, object]]:
+    path = Path(history_file).expanduser().resolve()
+    grouped: dict[tuple[str, str], dict[int, Decimal]] = {}
+    for row in _load_history_rows(path):
+        market_id = str(row.get('market_id', '')).strip()
+        event_id = str(row.get('event_id', '')).strip()
+        if not market_id or not event_id:
+            continue
+        key = (market_id, event_id)
+        bucket = grouped.setdefault(key, {})
+        for ts, price in _extract_yes_points(row):
+            bucket[ts] = price
+
+    summaries: list[dict[str, object]] = []
+    for (market_id, event_id), points in grouped.items():
+        if len(points) < min_points:
+            continue
+        series = sorted(points.items(), key=lambda x: x[0])
+        prices = [p for _, p in series]
+        start_price = prices[0]
+        end_price = prices[-1]
+        high = max(prices)
+        low = min(prices)
+        summaries.append(
+            {
+                'market_id': market_id,
+                'event_id': event_id,
+                'points': len(series),
+                'first_ts': series[0][0],
+                'last_ts': series[-1][0],
+                'start_price': str(start_price),
+                'end_price': str(end_price),
+                'abs_move': str(abs(end_price - start_price)),
+                'price_range': str(high - low),
+            }
+        )
+    return summaries
 
 
 def _to_float_metric(value: object) -> float | None:
@@ -660,6 +773,149 @@ def research_backtest_batch(
         'output': str(Path(output).resolve()),
         'runs': len(results),
         'ok_runs': sum(1 for r in results if r.get('ok')),
+    }
+    _emit(payload, as_json=as_json)
+
+
+@research.command('scan-markets')
+@click.option(
+    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
+)
+@click.option('--strategy-ref', required=True)
+@click.option('--strategy-kwargs-json', default='{}', show_default=True)
+@click.option(
+    '--params-jsonl', default=None, type=click.Path(exists=True, dir_okay=False)
+)
+@click.option('--initial-capital', default='10000', show_default=True)
+@click.option('--max-markets', default=20, show_default=True, type=int)
+@click.option('--min-points', default=20, show_default=True, type=int)
+@click.option(
+    '--sort-key',
+    default='price_range',
+    show_default=True,
+    type=click.Choice(['price_range', 'abs_move', 'points']),
+)
+@click.option('--output', required=True, type=click.Path(dir_okay=False))
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def research_scan_markets(
+    history_file: str,
+    strategy_ref: str,
+    strategy_kwargs_json: str,
+    params_jsonl: str | None,
+    initial_capital: str,
+    max_markets: int,
+    min_points: int,
+    sort_key: str,
+    output: str,
+    as_json: bool,
+) -> None:
+    """Scan many market/event pairs and keep the best run per market."""
+    if max_markets <= 0:
+        raise click.ClickException('--max-markets must be > 0')
+    if min_points <= 1:
+        raise click.ClickException('--min-points must be > 1')
+
+    capital = _to_decimal(initial_capital)
+    if capital is None:
+        raise click.ClickException(f'Invalid --initial-capital: {initial_capital}')
+    base_kwargs = _parse_json_object(
+        strategy_kwargs_json, option_name='--strategy-kwargs-json'
+    )
+
+    if params_jsonl:
+        param_rows = _load_jsonl_rows(params_jsonl)
+        if not param_rows:
+            raise click.ClickException('No valid rows found in --params-jsonl')
+    else:
+        param_rows = [{'id': 'default', 'strategy_kwargs': base_kwargs}]
+
+    summaries = _build_market_summaries(history_file, min_points=min_points)
+    if not summaries:
+        raise click.ClickException('No markets matched --min-points constraint.')
+
+    reverse = True
+    if sort_key == 'points':
+        summaries.sort(key=lambda x: int(x['points']), reverse=reverse)
+    else:
+        summaries.sort(
+            key=lambda x: float(x[sort_key]),  # type: ignore[arg-type]
+            reverse=reverse,
+        )
+    selected = summaries[:max_markets]
+
+    rows: list[dict[str, object]] = []
+    for market in selected:
+        market_id = str(market['market_id'])
+        event_id = str(market['event_id'])
+        best_result: dict[str, object] | None = None
+        best_key: tuple[float, float] | None = None
+
+        for idx, row in enumerate(param_rows, start=1):
+            strategy_kwargs = row.get('strategy_kwargs')
+            if not isinstance(strategy_kwargs, dict):
+                strategy_kwargs = {
+                    k: v for k, v in row.items() if k not in {'id', 'name', 'run_id'}
+                }
+            merged_kwargs = {**base_kwargs, **strategy_kwargs}
+            run_id = str(row.get('id') or row.get('run_id') or f'run-{idx}')
+            run_name = str(row.get('name') or run_id)
+            try:
+                metrics = _run_backtest_once(
+                    history_file=history_file,
+                    strategy_ref=strategy_ref,
+                    strategy_kwargs=merged_kwargs,
+                    market_id=market_id,
+                    event_id=event_id,
+                    initial_capital=capital,
+                )
+            except Exception as exc:  # noqa: BLE001
+                metrics = None
+                candidate_result = {
+                    'run_id': run_id,
+                    'name': run_name,
+                    'strategy_kwargs': merged_kwargs,
+                    'ok': False,
+                    'error': str(exc),
+                }
+                if best_result is None:
+                    best_result = candidate_result
+                continue
+
+            pnl = _to_float_metric(metrics.get('total_pnl')) or float('-inf')
+            sharpe = _to_float_metric(metrics.get('sharpe_ratio')) or float('-inf')
+            rank_key = (pnl, sharpe)
+            candidate_result = {
+                'run_id': run_id,
+                'name': run_name,
+                'strategy_kwargs': merged_kwargs,
+                'ok': True,
+                'metrics': metrics,
+            }
+            if best_key is None or rank_key > best_key:
+                best_key = rank_key
+                best_result = candidate_result
+
+        rows.append(
+            {
+                'market_id': market_id,
+                'event_id': event_id,
+                'points': market['points'],
+                'first_ts': market['first_ts'],
+                'last_ts': market['last_ts'],
+                'abs_move': market['abs_move'],
+                'price_range': market['price_range'],
+                'best_run': best_result,
+            }
+        )
+
+    _write_jsonl(output, rows)
+    payload = {
+        'message': 'Market scan complete',
+        'output': str(Path(output).resolve()),
+        'markets_scanned': len(rows),
+        'markets_with_successful_run': sum(
+            1 for row in rows if bool((row.get('best_run') or {}).get('ok'))
+        ),
     }
     _emit(payload, as_json=as_json)
 

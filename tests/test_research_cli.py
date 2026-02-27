@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -55,6 +56,7 @@ def test_research_group_help_lists_tools() -> None:
     assert 'compare-runs' in result.output
     assert 'strategy-gate' in result.output
     assert 'memory' in result.output
+    assert 'scan-markets' in result.output
 
 
 def test_research_slice_features_labels(tmp_path: Path) -> None:
@@ -194,6 +196,143 @@ def test_research_backtest_batch_writes_output(monkeypatch, tmp_path: Path) -> N
     assert len(out_rows) == 2
     assert out_rows[0]['ok'] is True
     assert out_rows[1]['metrics']['received_kwargs'] == {'entry_z': 1.2}
+
+
+def test_research_slice_supports_iso_timestamps_in_json_array(tmp_path: Path) -> None:
+    history = tmp_path / 'history.json'
+    rows = [
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {
+                'Yes': [
+                    {'t': '2025-01-01T00:00:00+00:00', 'p': 0.40},
+                    {'t': '2025-01-01T00:05:00+00:00', 'p': 0.45},
+                    {'t': '2025-01-01T00:10:00+00:00', 'p': 0.50},
+                ]
+            },
+        }
+    ]
+    history.write_text(json.dumps(rows), encoding='utf-8')
+    out_file = tmp_path / 'slice_out.jsonl'
+    start_ts = int(datetime(2025, 1, 1, 0, 5, tzinfo=timezone.utc).timestamp())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'slice',
+            '--history-file',
+            str(history),
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--start-ts',
+            str(start_ts),
+            '--output',
+            str(out_file),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    rows_out = _load_jsonl(out_file)
+    assert len(rows_out) == 2
+    assert rows_out[0]['time_series']['Yes'][0]['t'] == start_ts
+
+
+def test_research_scan_markets_selects_best_run(monkeypatch, tmp_path: Path) -> None:
+    history = tmp_path / 'history.jsonl'
+    rows = [
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {'Yes': [{'t': 1, 'p': 0.40}, {'t': 2, 'p': 0.45}]},
+        },
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {'Yes': [{'t': 3, 'p': 0.55}, {'t': 4, 'p': 0.50}]},
+        },
+        {
+            'event_id': 'E2',
+            'market_id': 'M2',
+            'time_series': {'Yes': [{'t': 1, 'p': 0.10}, {'t': 2, 'p': 0.20}]},
+        },
+        {
+            'event_id': 'E2',
+            'market_id': 'M2',
+            'time_series': {'Yes': [{'t': 3, 'p': 0.15}, {'t': 4, 'p': 0.30}]},
+        },
+    ]
+    history.write_text(
+        '\n'.join(json.dumps(row) for row in rows) + '\n', encoding='utf-8'
+    )
+    params = tmp_path / 'params.jsonl'
+    params.write_text(
+        '\n'.join(
+            [
+                json.dumps({'id': 'slow', 'strategy_kwargs': {'mode': 'slow'}}),
+                json.dumps({'id': 'fast', 'strategy_kwargs': {'mode': 'fast'}}),
+            ]
+        )
+        + '\n',
+        encoding='utf-8',
+    )
+    output = tmp_path / 'scan_out.jsonl'
+
+    def fake_run_backtest_once(**kwargs):
+        market_id = kwargs['market_id']
+        mode = kwargs['strategy_kwargs'].get('mode')
+        if market_id == 'M1' and mode == 'fast':
+            pnl = Decimal('5')
+        elif market_id == 'M2' and mode == 'slow':
+            pnl = Decimal('2')
+        else:
+            pnl = Decimal('-1')
+        return {
+            'total_trades': 2,
+            'total_pnl': str(pnl),
+            'sharpe_ratio': '1.0' if pnl > 0 else '-1.0',
+            'win_rate': '0.5',
+            'max_drawdown': '0.1',
+        }
+
+    monkeypatch.setattr(
+        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'scan-markets',
+            '--history-file',
+            str(history),
+            '--strategy-ref',
+            'coinjure.strategy.test_strategy:TestStrategy',
+            '--params-jsonl',
+            str(params),
+            '--max-markets',
+            '2',
+            '--min-points',
+            '3',
+            '--output',
+            str(output),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload['markets_scanned'] == 2
+
+    out_rows = _load_jsonl(output)
+    assert len(out_rows) == 2
+    best_by_market = {row['market_id']: row['best_run']['run_id'] for row in out_rows}
+    assert best_by_market['M1'] == 'fast'
+    assert best_by_market['M2'] == 'slow'
 
 
 def test_research_compare_runs_and_memory(tmp_path: Path) -> None:

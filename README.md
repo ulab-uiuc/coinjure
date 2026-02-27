@@ -177,6 +177,7 @@ Use these composable tools when an agent needs to discover strategies on yes/no 
 
 ```bash
 # 1) build a clean per-market slice
+# supports UNIX or ISO-8601 timestamps in historical files
 coinjure research slice \
   --history-file ./data/events.jsonl \
   --market-id M1 --event-id E1 \
@@ -212,6 +213,15 @@ coinjure research compare-runs \
 coinjure research memory add \
   --input-file ./data/top_runs.jsonl \
   --tag m1_e1
+
+# 4) scan many market/event pairs quickly and keep the best run per market
+coinjure research scan-markets \
+  --history-file ./data/events.jsonl \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --params-jsonl ./data/params.jsonl \
+  --max-markets 25 \
+  --min-points 30 \
+  --output ./data/market_scan.jsonl
 ```
 
 Also available: `research universe`, `research walk-forward`, `research stress-test`, `research strategy-gate`, and `research memory list`.
@@ -237,7 +247,7 @@ Primary command groups:
 - `coinjure market`: market discovery and metadata.
 - `coinjure news`: standalone news fetching.
 - `coinjure data`: live event recording.
-- `coinjure research`: strategy-discovery tools (slice/features/labels/batch/walk-forward/stress/gate/memory).
+- `coinjure research`: strategy-discovery tools (slice/features/labels/batch/scan-markets/walk-forward/stress/gate/memory).
 
 ## Environment Variables
 
