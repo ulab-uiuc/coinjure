@@ -17,15 +17,14 @@ import click
 
 from coinjure.cli.utils import _emit
 from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.backtest.history_reader import iter_history_rows
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
+from coinjure.data.backtest.history_reader import iter_history_rows
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
-
 
 
 def _parse_json_object(raw: str, *, option_name: str) -> dict[str, Any]:
@@ -43,7 +42,6 @@ def _to_decimal(value: object) -> Decimal | None:
         return Decimal(str(value))
     except Exception:  # noqa: BLE001
         return None
-
 
 
 def _to_int(value: object) -> int | None:
@@ -203,9 +201,7 @@ def _load_yes_series(  # noqa: C901
     for row in _load_history_rows(path):
         if row.get('event_id') != event_id or row.get('market_id') != market_id:
             continue
-        raw_points.extend(
-            _extract_yes_points(row, start_ts=start_ts, end_ts=end_ts)
-        )
+        raw_points.extend(_extract_yes_points(row, start_ts=start_ts, end_ts=end_ts))
 
     if not raw_points:
         return []
@@ -380,13 +376,17 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:
             if not isinstance(ts_points, list):
                 ts_points = []
 
-            parsed_ts = []
+            parsed_ts: list[int] = []
+            parsed_prices: list[float] = []
             for point in ts_points:
                 if not isinstance(point, dict):
                     continue
                 ts = _to_timestamp(point.get('t'))
+                price = _to_decimal(point.get('p'))
                 if ts is not None:
                     parsed_ts.append(ts)
+                if price is not None:
+                    parsed_prices.append(float(price))
 
             cur = seen.setdefault(
                 key,
@@ -399,6 +399,7 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:
                     'points': 0,
                     'first_ts': None,
                     'last_ts': None,
+                    '_prices': [],
                 },
             )
             cur['rows'] = int(cur['rows']) + 1
@@ -418,11 +419,27 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:
                 cur['first_ts'] = lo if first_ts is None else min(int(first_ts), lo)
                 cur['last_ts'] = hi if last_ts is None else max(int(last_ts), hi)
 
+            if parsed_prices:
+                cur['_prices'] = list(cur['_prices']) + parsed_prices  # type: ignore[operator]
+
     rows: list[dict[str, object]] = []
     for rec in seen.values():
         first_ts = rec.get('first_ts')
         last_ts = rec.get('last_ts')
-        span = (int(last_ts) - int(first_ts)) if first_ts is not None and last_ts is not None else None
+        span = (
+            (int(last_ts) - int(first_ts))
+            if first_ts is not None and last_ts is not None
+            else None
+        )
+        prices: list[float] = list(rec.get('_prices') or [])  # type: ignore[arg-type]
+        price_std = pstdev(prices) if len(prices) >= 2 else 0.0
+        price_start = prices[0] if prices else None
+        price_end = prices[-1] if prices else None
+        abs_trend = (
+            abs(price_end - price_start)
+            if price_start is not None and price_end is not None
+            else 0.0
+        )
         rows.append(
             {
                 'market_id': rec['market_id'],
@@ -434,6 +451,10 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:
                 'first_ts': first_ts,
                 'last_ts': last_ts,
                 'span_seconds': span,
+                'price_std': price_std,
+                'price_start': price_start,
+                'price_end': price_end,
+                'abs_trend': abs_trend,
             }
         )
     return rows
@@ -454,6 +475,18 @@ def _sort_market_summaries(
         return sorted(
             rows,
             key=lambda r: float(_to_decimal(r.get('volume')) or Decimal('0')),
+            reverse=True,
+        )
+    if sort_by == 'volatility':
+        return sorted(
+            rows,
+            key=lambda r: float(r.get('price_std') or 0.0),
+            reverse=True,
+        )
+    if sort_by == 'trend':
+        return sorted(
+            rows,
+            key=lambda r: float(r.get('abs_trend') or 0.0),
             reverse=True,
         )
     raise click.ClickException(f'Unsupported sort key: {sort_by}')
@@ -541,6 +574,7 @@ def _run_backtest_once(
     min_fill_rate: Decimal = Decimal('0.5'),
     max_fill_rate: Decimal = Decimal('1.0'),
     commission_rate: Decimal = Decimal('0.0'),
+    spread: Decimal = Decimal('0.01'),
     risk_profile: str = 'none',
 ) -> dict[str, object]:
     strategy = _strategy_from_ref(strategy_ref, strategy_kwargs)
@@ -554,7 +588,7 @@ def _run_backtest_once(
 
     async def _run() -> dict[str, object]:
         data_source = HistoricalDataSource(history_file, ticker)
-        market_data = MarketDataManager()
+        market_data = MarketDataManager(spread=spread)
         position_manager = PositionManager()
         position_manager.update_position(
             Position(
@@ -699,7 +733,11 @@ def _fit_train_test_windows(
         resized_test = max(1, n_points - resized_train)
     if resized_train + resized_test > n_points:
         resized_train = max(1, n_points - resized_test)
-    if resized_train + resized_test > n_points or resized_train <= 0 or resized_test <= 0:
+    if (
+        resized_train + resized_test > n_points
+        or resized_train <= 0
+        or resized_test <= 0
+    ):
         raise click.ClickException('Not enough points for auto-sized walk-forward.')
     return resized_train, resized_test, True
 
@@ -730,7 +768,7 @@ def research() -> None:
     '--sort-by',
     default='points',
     show_default=True,
-    type=click.Choice(['file', 'points', 'volume', 'span']),
+    type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
 )
 @click.option('--limit', default=20, show_default=True, type=int)
 @click.option(
@@ -753,6 +791,22 @@ def research() -> None:
     type=int,
     help='Only keep markets with span_seconds >= this threshold.',
 )
+@click.option(
+    '--min-std',
+    default='0',
+    show_default=True,
+    help='Only keep markets whose price std dev >= this threshold (0 = no filter).',
+)
+@click.option(
+    '--trend-direction',
+    default='any',
+    show_default=True,
+    type=click.Choice(['up', 'down', 'neutral', 'any']),
+    help=(
+        'Filter by trend direction: up = price_end > price_start + 0.01, '
+        'down = price_end < price_start - 0.01, neutral = within ±0.01, any = no filter.'
+    ),
+)
 @click.option('--output', default=None, type=click.Path(dir_okay=False))
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def research_markets(
@@ -762,6 +816,8 @@ def research_markets(
     min_points: int,
     min_volume: str,
     min_span_seconds: int,
+    min_std: str,
+    trend_direction: str,
     output: str | None,
     as_json: bool,
 ) -> None:
@@ -771,6 +827,9 @@ def research_markets(
     min_vol = _to_decimal(min_volume)
     if min_vol is None:
         raise click.ClickException(f'Invalid --min-volume: {min_volume}')
+    min_std_val = _to_decimal(min_std)
+    if min_std_val is None:
+        raise click.ClickException(f'Invalid --min-std: {min_std}')
 
     rows = _collect_market_summaries(history_file)
     rows = [
@@ -780,6 +839,32 @@ def research_markets(
         and int(row.get('span_seconds') or 0) >= min_span_seconds
         and (_to_decimal(row.get('volume')) or Decimal('0')) >= min_vol
     ]
+
+    # Apply --min-std filter
+    if min_std_val > Decimal('0'):
+        rows = [
+            row
+            for row in rows
+            if float(row.get('price_std') or 0.0) >= float(min_std_val)
+        ]
+
+    # Apply --trend-direction filter
+    if trend_direction != 'any':
+        filtered: list[dict[str, object]] = []
+        for row in rows:
+            start = row.get('price_start')
+            end = row.get('price_end')
+            if start is None or end is None:
+                continue
+            delta = float(end) - float(start)
+            if trend_direction == 'up' and delta > 0.01:
+                filtered.append(row)
+            elif trend_direction == 'down' and delta < -0.01:
+                filtered.append(row)
+            elif trend_direction == 'neutral' and abs(delta) <= 0.01:
+                filtered.append(row)
+        rows = filtered
+
     ranked = _sort_market_summaries(rows, sort_by=sort_by)[: max(1, limit)]
     if output:
         _write_jsonl(output, ranked)
@@ -791,6 +876,8 @@ def research_markets(
             'min_points': min_points,
             'min_volume': str(min_vol),
             'min_span_seconds': min_span_seconds,
+            'min_std': str(min_std_val),
+            'trend_direction': trend_direction,
         },
         'count': len(ranked),
         'markets': ranked,
@@ -1312,7 +1399,9 @@ def research_walk_forward_auto(
 ) -> None:
     """Run walk-forward with automatically sized windows for the available history."""
     if min(min_train_size, min_test_size, target_runs) <= 0:
-        raise click.ClickException('min-train-size/min-test-size/target-runs must all be > 0')
+        raise click.ClickException(
+            'min-train-size/min-test-size/target-runs must all be > 0'
+        )
     capital = _to_decimal(initial_capital)
     if capital is None:
         raise click.ClickException(f'Invalid --initial-capital: {initial_capital}')
@@ -1699,7 +1788,7 @@ def research_strategy_gate(
     '--market-sort-by',
     default='points',
     show_default=True,
-    type=click.Choice(['file', 'points', 'volume', 'span']),
+    type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
 )
 @click.option(
     '--market-rank',
@@ -1710,6 +1799,12 @@ def research_strategy_gate(
 )
 @click.option('--dry-run-events', default=10, show_default=True, type=int)
 @click.option('--initial-capital', default='10000', show_default=True)
+@click.option(
+    '--spread',
+    default='0.01',
+    show_default=True,
+    help='Synthetic bid/ask half-spread for the backtest MarketDataManager (e.g. 0.003).',
+)
 @click.option('--min-trades', default=1, show_default=True, type=int)
 @click.option('--min-total-pnl', default='0', show_default=True)
 @click.option('--max-drawdown-pct', default='0.30', show_default=True)
@@ -1732,6 +1827,7 @@ def research_alpha_pipeline(
     market_rank: int,
     dry_run_events: int,
     initial_capital: str,
+    spread: str,
     min_trades: int,
     min_total_pnl: str,
     max_drawdown_pct: str,
@@ -1751,8 +1847,11 @@ def research_alpha_pipeline(
     capital = _to_decimal(initial_capital)
     min_pnl = _to_decimal(min_total_pnl)
     max_dd = _to_decimal(max_drawdown_pct)
+    spread_decimal = _to_decimal(spread)
     if capital is None or min_pnl is None or max_dd is None:
         raise click.ClickException('Invalid capital or gate threshold value.')
+    if spread_decimal is None or spread_decimal < Decimal('0'):
+        raise click.ClickException(f'Invalid --spread: {spread}')
     strategy_kwargs = _parse_json_object(
         strategy_kwargs_json, option_name='--strategy-kwargs-json'
     )
@@ -1821,6 +1920,7 @@ def research_alpha_pipeline(
         market_id=market_id,
         event_id=event_id,
         initial_capital=capital,
+        spread=spread_decimal,
     )
     single_path = out_dir / 'backtest_single.json'
     _write_json(str(single_path), metrics)
@@ -1864,6 +1964,7 @@ def research_alpha_pipeline(
                 min_fill_rate=scenario['min_fill_rate'],
                 max_fill_rate=scenario['max_fill_rate'],
                 commission_rate=scenario['commission_rate'],
+                spread=spread_decimal,
             )
             stress_rows.append(
                 {
@@ -1873,7 +1974,9 @@ def research_alpha_pipeline(
                 }
             )
         except Exception as exc:  # noqa: BLE001
-            stress_rows.append({'scenario': scenario['name'], 'ok': False, 'error': str(exc)})
+            stress_rows.append(
+                {'scenario': scenario['name'], 'ok': False, 'error': str(exc)}
+            )
     stress_path = out_dir / 'stress.jsonl'
     _write_jsonl(str(stress_path), stress_rows)
 
@@ -1915,6 +2018,7 @@ def research_alpha_pipeline(
                     market_id=candidate_market_id,
                     event_id=candidate_event_id,
                     initial_capital=capital,
+                    spread=spread_decimal,
                 )
                 batch_rows.append(
                     {
@@ -1944,7 +2048,9 @@ def research_alpha_pipeline(
 
     payload = {
         'passed': gate_passed,
-        'message': 'Alpha pipeline complete' if gate_passed else 'Alpha pipeline gate failed',
+        'message': 'Alpha pipeline complete'
+        if gate_passed
+        else 'Alpha pipeline gate failed',
         'selected_market': selected_market,
         'artifacts_dir': str(out_dir),
         'files': {
@@ -2048,7 +2154,9 @@ def research_memory_list(
     help='JSON object for strategy constructor kwargs.',
 )
 @click.option('--initial-capital', default='10000', show_default=True)
-@click.option('--limit', default=50, show_default=True, type=int, help='Max markets to test.')
+@click.option(
+    '--limit', default=50, show_default=True, type=int, help='Max markets to test.'
+)
 @click.option('--output', required=True, type=click.Path(dir_okay=False))
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def research_batch_markets(
@@ -2089,7 +2197,9 @@ def research_batch_markets(
     pairs = list(seen.keys())[:limit]
 
     if not pairs:
-        raise click.ClickException('No valid (market_id, event_id) pairs found in history file.')
+        raise click.ClickException(
+            'No valid (market_id, event_id) pairs found in history file.'
+        )
 
     results: list[dict[str, object]] = []
     for market_id, event_id in pairs:
@@ -2123,18 +2233,34 @@ def research_batch_markets(
     _write_jsonl(output, results)
 
     ok_results = [r for r in results if r.get('ok')]
-    win_rates = [_to_float_metric((r['metrics'] or {}).get('win_rate')) for r in ok_results if isinstance(r.get('metrics'), dict)]  # type: ignore[index]
-    sharpes = [_to_float_metric((r['metrics'] or {}).get('sharpe_ratio')) for r in ok_results if isinstance(r.get('metrics'), dict)]  # type: ignore[index]
-    pnls = [_to_float_metric((r['metrics'] or {}).get('total_pnl')) for r in ok_results if isinstance(r.get('metrics'), dict)]  # type: ignore[index]
+    win_rates = [
+        _to_float_metric((r['metrics'] or {}).get('win_rate'))
+        for r in ok_results
+        if isinstance(r.get('metrics'), dict)
+    ]  # type: ignore[index]
+    sharpes = [
+        _to_float_metric((r['metrics'] or {}).get('sharpe_ratio'))
+        for r in ok_results
+        if isinstance(r.get('metrics'), dict)
+    ]  # type: ignore[index]
+    pnls = [
+        _to_float_metric((r['metrics'] or {}).get('total_pnl'))
+        for r in ok_results
+        if isinstance(r.get('metrics'), dict)
+    ]  # type: ignore[index]
     win_rates_f = [v for v in win_rates if v is not None]
     sharpes_f = [v for v in sharpes if v is not None]
     pnls_f = [v for v in pnls if v is not None]
-    pct_profitable = (sum(1 for v in pnls_f if v > 0) / len(pnls_f) * 100) if pnls_f else 0.0
+    pct_profitable = (
+        (sum(1 for v in pnls_f if v > 0) / len(pnls_f) * 100) if pnls_f else 0.0
+    )
 
     aggregate: dict[str, object] = {
         'mean_win_rate': str(round(mean(win_rates_f), 4)) if win_rates_f else None,
         'mean_sharpe': str(round(mean(sharpes_f), 4)) if sharpes_f else None,
-        'stddev_sharpe': str(round(pstdev(sharpes_f), 4)) if len(sharpes_f) > 1 else None,
+        'stddev_sharpe': str(round(pstdev(sharpes_f), 4))
+        if len(sharpes_f) > 1
+        else None,
         'pct_profitable': str(round(pct_profitable, 1)),
         'mean_pnl': str(round(mean(pnls_f), 4)) if pnls_f else None,
     }
@@ -2239,10 +2365,14 @@ def research_grid(
     best: dict[str, object] | None = None
     if ok_results:
         reverse = sort_key != 'max_drawdown'
+
         def _score(r: dict[str, object]) -> float:
             v = _to_float_metric((r.get('metrics') or {}).get(sort_key))  # type: ignore[arg-type]
             return v if v is not None else (float('-inf') if reverse else float('inf'))
-        best_run = max(ok_results, key=_score) if reverse else min(ok_results, key=_score)
+
+        best_run = (
+            max(ok_results, key=_score) if reverse else min(ok_results, key=_score)
+        )
         best = {**best_run.get('strategy_kwargs', {}), **best_run.get('metrics', {})}  # type: ignore[arg-type]
 
     payload = {
