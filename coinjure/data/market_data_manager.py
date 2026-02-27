@@ -61,6 +61,23 @@ class MarketDataManager:
         order_book = self.order_books[event.ticker]
         order_book.update(asks=asks, bids=bids)
 
+        # Bootstrap No-side order book on first encounter so PaperTrader
+        # can fill No orders before the first No PriceChangeEvent arrives.
+        # Subsequent updates come from the No events emitted by the data source.
+        no_ticker = getattr(event.ticker, 'get_no_ticker', lambda: None)()
+        if no_ticker is not None and no_ticker not in self.order_books:
+            self.order_books[no_ticker] = OrderBook()
+
+            no_price = Decimal('1') - event.price
+            no_bid = max(Decimal('0'), no_price - half_spread)
+            no_ask = min(Decimal('1'), no_price + half_spread)
+
+            no_bids = [Level(price=no_bid, size=size)] if no_bid > Decimal('0') else []
+            no_asks = [Level(price=no_ask, size=size)] if no_ask < Decimal('1') else []
+
+            no_ob = self.order_books[no_ticker]
+            no_ob.update(asks=no_asks, bids=no_bids)
+
     def remove_ticker(self, ticker: Ticker) -> None:
         """Remove all order book data for a ticker."""
         self.order_books.pop(ticker, None)

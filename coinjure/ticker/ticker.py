@@ -83,10 +83,24 @@ class KalshiTicker(Ticker):
     market_ticker: str = ''
     event_ticker: str = ''
     series_ticker: str = ''
+    is_no_side: bool = False
 
     @property
     def collateral(self) -> Ticker:
         return CashTicker.KALSHI_USD
+
+    def get_no_ticker(self) -> KalshiTicker | None:
+        """Return a ticker for the NO side of this market."""
+        if self.is_no_side:
+            return None
+        return KalshiTicker(
+            symbol=f'{self.symbol}_NO',
+            name=self.name,
+            market_ticker=self.market_ticker,
+            event_ticker=self.event_ticker,
+            series_ticker=self.series_ticker,
+            is_no_side=True,
+        )
 
 
 CashTicker.KALSHI_USD = CashTicker(symbol='Kalshi_USD', name='Kalshi USD')

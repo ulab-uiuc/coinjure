@@ -73,15 +73,20 @@ class KalshiTrader(Trader):
         """Submit an order to Kalshi API."""
         from kalshi_python import CreateOrderRequest
 
-        request = CreateOrderRequest(
-            ticker=ticker.market_ticker,
-            action=action,
-            side=side,
-            type='limit',
-            yes_price=price_cents,
-            count=count,
-            client_order_id=str(uuid.uuid4()),
-        )
+        kwargs: dict[str, Any] = {
+            'ticker': ticker.market_ticker,
+            'action': action,
+            'side': side,
+            'type': 'limit',
+            'count': count,
+            'client_order_id': str(uuid.uuid4()),
+        }
+        if side == 'no':
+            kwargs['no_price'] = price_cents
+        else:
+            kwargs['yes_price'] = price_cents
+
+        request = CreateOrderRequest(**kwargs)
 
         response = await asyncio.to_thread(
             lambda: self._portfolio_api.create_order(create_order_request=request)
@@ -255,12 +260,14 @@ class KalshiTrader(Trader):
             price_cents = int(limit_price * 100)
             count = int(quantity)
 
-            # BUY = buy YES contracts, SELL = sell YES contracts
             action = 'buy' if side == TradeSide.BUY else 'sell'
+
+            # Determine Kalshi API side based on ticker
+            kalshi_side = 'no' if isinstance(ticker, KalshiTicker) and ticker.is_no_side else 'yes'
 
             response = await self._submit_order(
                 action=action,
-                side='yes',
+                side=kalshi_side,
                 ticker=ticker,
                 price_cents=price_cents,
                 count=count,
