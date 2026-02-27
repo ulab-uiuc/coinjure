@@ -88,7 +88,7 @@ def test_research_group_help_lists_tools() -> None:
     assert 'markets' in result.output
     assert 'walk-forward-auto' in result.output
     assert 'alpha-pipeline' in result.output
-    assert 'discover-alpha' in result.output
+    assert 'auto-tune' in result.output
     assert 'memory' in result.output
 
 
@@ -343,10 +343,10 @@ def test_research_scan_markets_removed(tmp_path: Path) -> None:
     assert 'was removed as redundant' in result.output
 
 
-def test_research_discover_alpha_runs_end_to_end(monkeypatch, tmp_path: Path) -> None:
+def test_research_auto_tune_runs_end_to_end(monkeypatch, tmp_path: Path) -> None:
     history = tmp_path / 'history_iso.jsonl'
     _write_iso_history(history)
-    artifacts = tmp_path / 'discover_alpha'
+    artifacts = tmp_path / 'auto_tune_run'
     strategy_file = tmp_path / 'discover_strategy.py'
     strategy_file.write_text(
         '\n'.join(
@@ -398,15 +398,15 @@ def test_research_discover_alpha_runs_end_to_end(monkeypatch, tmp_path: Path) ->
         cli,
         [
             'research',
-            'discover-alpha',
+            'auto-tune',
             '--history-file',
             str(history),
             '--strategy-ref',
             f'{strategy_file}:DiscoverStrategy',
-            '--market-rank',
-            '1',
             '--param-grid-json',
             '{"momentum_entry":[0.01,0.02]}',
+            '--market-rank',
+            '1',
             '--run-paper',
             '--paper-duration',
             '1',
@@ -424,6 +424,87 @@ def test_research_discover_alpha_runs_end_to_end(monkeypatch, tmp_path: Path) ->
     assert (artifacts / 'best_run.json').exists()
     assert (artifacts / 'gate.json').exists()
     assert (artifacts / 'paper.json').exists()
+
+
+def test_research_auto_tune_supports_single_strategy_gate(
+    monkeypatch, tmp_path: Path
+) -> None:
+    history = tmp_path / 'history_iso.jsonl'
+    _write_iso_history(history)
+    artifacts = tmp_path / 'auto_tune_single'
+
+    def fake_run_backtest_once(**kwargs):
+        strategy_kwargs = kwargs['strategy_kwargs']
+        entry = strategy_kwargs.get('entry', 0)
+        pnl = Decimal('1.0') if entry == 2 else Decimal('-0.5')
+        return {
+            'total_trades': 3,
+            'total_pnl': str(pnl),
+            'sharpe_ratio': '0.6',
+            'win_rate': '0.5',
+            'max_drawdown': '0.05',
+        }
+
+    monkeypatch.setattr(
+        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'auto-tune',
+            '--history-file',
+            str(history),
+            '--strategy-ref',
+            'pkg.alpha:StrategyA',
+            '--param-grid-json',
+            '{"entry":[1,2]}',
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--selection-key',
+            'total_pnl',
+            '--enforce-gate',
+            '--min-trades',
+            '1',
+            '--min-total-pnl',
+            '0',
+            '--max-drawdown-pct',
+            '0.30',
+            '--artifacts-dir',
+            str(artifacts),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload['passed'] is True
+    assert payload['ok_runs'] == 2
+    assert payload['best_run']['strategy_ref'] == 'pkg.alpha:StrategyA'
+    assert payload['best_run']['strategy_kwargs']['entry'] == 2
+    assert (artifacts / 'discover_runs.jsonl').exists()
+    assert (artifacts / 'best_run.json').exists()
+    assert (artifacts / 'gate.json').exists()
+
+
+def test_research_auto_tune_requires_strategy_ref(tmp_path: Path) -> None:
+    history = tmp_path / 'history_iso.jsonl'
+    _write_iso_history(history)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'auto-tune',
+            '--history-file',
+            str(history),
+        ],
+    )
+    assert result.exit_code != 0
+    assert '--strategy-ref' in result.output
 
 
 def test_research_compare_runs_and_memory(tmp_path: Path) -> None:
