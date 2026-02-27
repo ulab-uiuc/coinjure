@@ -124,10 +124,10 @@ coinjure strategy validate \
 Quick runtime smoke check before backtest/paper run:
 
 ```bash
-coinjure strategy dry-run \
+coinjure strategy validate \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --strategy-kwargs-json '{"trade_size": "25"}' \
-  --events 10 --json
+  --dry-run --events 10 --json
 ```
 
 Built-in example strategy files (good templates for agents):
@@ -246,17 +246,90 @@ The operator should not need to manually place/cancel orders in normal operation
 
 ## CLI Reference
 
-Primary command groups:
+### `coinjure strategy` — Strategy management
 
-- `coinjure strategy`: create and validate strategies.
-- `coinjure paper`: paper trading with live feeds.
-- `coinjure backtest`: historical replay.
-- `coinjure monitor`: attach monitor UI to running engine.
-- `coinjure trade`: runtime control (`status`, `pause`, `resume`, `stop`, `killswitch`).
-- `coinjure market`: market discovery and metadata.
-- `coinjure news`: standalone news fetching.
-- `coinjure data`: live event recording.
-- `coinjure research`: strategy-discovery tools (slice/features/labels/batch/scan-markets/walk-forward/stress/gate/memory).
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `strategy create` | `--output` (req), `--class-name`, `--force` | Scaffold a new strategy file |
+| `strategy validate` | `--strategy-ref` (req), `--strategy-kwargs-json`, `--dry-run`, `--events`, `--json` | Import-check and optionally feed mock events |
+
+### `coinjure backtest` — Historical replay
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `backtest run` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref`, `--strategy-kwargs-json`, `--initial-capital`, `--spread`, `--min-fill-rate`, `--max-fill-rate`, `--commission-rate`, `--risk-profile`, `--json` | Run a backtest against a local history file |
+
+### `coinjure paper` — Paper trading
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `paper run` | `--exchange` (`polymarket`/`kalshi`/`rss`), `--strategy-ref`, `--strategy-kwargs-json`, `--duration`, `--initial-capital`, `--history-file`, `--market-id`, `--event-id`, `--monitor`/`-m`, `--json` | Live-data paper trading with simulated execution |
+
+### `coinjure live` — Live trading
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `live run` | `--exchange` (req: `polymarket`/`kalshi`), `--strategy-ref`, `--strategy-kwargs-json`, `--duration`, `--wallet-private-key`, `--signature-type`, `--funder`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--monitor`/`-m`, `--json` | Real-money live trading |
+
+### `coinjure monitor` — Live UI
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `monitor` | `--socket`/`-s` | Attach Textual TUI to a running engine |
+
+### `coinjure trade` — Runtime control
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `trade pause` | `--socket`/`-s`, `--json` | Pause event ingestion and strategy decisions |
+| `trade resume` | `--socket`/`-s`, `--json` | Resume after pause |
+| `trade status` | `--socket`/`-s`, `--json` | Show engine status (uptime, events, decisions, orders) |
+| `trade stop` | `--socket`/`-s`, `--json` | Graceful shutdown |
+| `trade swap` | `--strategy-ref` (req), `--strategy-kwargs-json`, `--socket`/`-s`, `--json` | Hot-swap strategy without restarting |
+| `trade state` | `--socket`/`-s`, `--json` | Full snapshot (positions, PnL, decisions, order books) |
+| `trade killswitch` | `--on`, `--off`, `--path`, `--json` | Toggle/query the global kill-switch file |
+
+### `coinjure market` — Market discovery
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `market list` | `--exchange`, `--limit`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--json` | List open markets |
+| `market search` | `--query` (req), `--exchange`, `--limit`, `--json` | Search markets by keyword |
+| `market info` | `--market-id` (req), `--exchange`, `--json` | Detailed market metadata |
+| `market history` | `--market-id` (req), `--interval` (`1d`/`6h`/`1h`), `--limit`, `--json` | Polymarket price history |
+
+### `coinjure news` — News fetching
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `news fetch` | `--source` (`google`/`rss`/`thenewsapi`), `--query`, `--limit`, `--api-token`, `--json` | Fetch news articles |
+
+### `coinjure data` — Data recording
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `data record` | `--exchange`, `--output`, `--duration`, `--polling-interval`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--verbose`/`-v`, `--json` | Record live events to a JSONL file |
+
+### `coinjure research` — Strategy discovery toolkit
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `research markets` | `--history-file` (req), `--sort-by`, `--limit`, `--min-points`, `--min-volume`, `--min-span-seconds`, `--output`, `--json` | Rank markets in a history file |
+| `research slice` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--start-ts`, `--end-ts`, `--max-points`, `--output` (req), `--json` | Extract a per-market time slice |
+| `research features` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--windows`, `--z-window`, `--output` (req), `--json` | Generate feature matrix |
+| `research labels` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--horizon-steps`, `--threshold`, `--output` (req), `--json` | Generate forward-return labels |
+| `research backtest-batch` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--params-jsonl`, `--initial-capital`, `--max-runs`, `--output` (req), `--json` | Run strategy over a param list |
+| `research grid` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--param-grid-json` (req), `--initial-capital`, `--max-runs`, `--sort-key`, `--output` (req), `--json` | Grid search over hyperparameters |
+| `research compare-runs` | `--input-file` (req), `--sort-key`, `--top`, `--output`, `--json` | Rank and filter a set of run results |
+| `research scan-markets` | `--history-file` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--params-jsonl`, `--initial-capital`, `--max-markets`, `--min-points`, `--sort-key`, `--output` (req), `--json` | Scan strategy across many markets |
+| `research walk-forward` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--train-size`, `--test-size`, `--step-size`, `--initial-capital`, `--output` (req), `--json` | Manual walk-forward validation |
+| `research walk-forward-auto` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--min-train-size`, `--min-test-size`, `--target-runs`, `--initial-capital`, `--output` (req), `--json` | Auto-sized walk-forward |
+| `research stress-test` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--initial-capital`, `--output` (req), `--json` | Stress scenarios (spread shocks, fill-rate reduction) |
+| `research strategy-gate` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--min-trades`, `--min-total-pnl`, `--max-drawdown-pct`, `--json` | Promotion gate (pass/fail with thresholds) |
+| `research alpha-pipeline` | `--history-file` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--market-id`, `--event-id`, `--market-sort-by`, `--market-rank`, `--dry-run-events`, `--initial-capital`, `--min-trades`, `--min-total-pnl`, `--max-drawdown-pct`, `--batch-limit`, `--run-batch-markets`/`--no-run-batch-markets`, `--artifacts-dir`, `--json` | Full pipeline: validate + backtest + stress + gate (+ optional batch) in one shot |
+| `research batch-markets` | `--history-file` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--initial-capital`, `--limit`, `--output` (req), `--json` | Run one strategy across N markets |
+| `research memory add` | `--input-file` (req), `--memory-file`, `--tag`, `--json` | Persist run results to experiment memory |
+| `research memory list` | `--memory-file`, `--tag`, `--json` | Query experiment memory |
 
 ## Environment Variables
 

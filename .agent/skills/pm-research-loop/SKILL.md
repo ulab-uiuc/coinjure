@@ -1,57 +1,46 @@
 ---
 name: pm-research-loop
-description: Use this skill when the user asks to evaluate prediction-market hypotheses on yes/no time-series data using repeatable research and backtest loops.
+description: Use this skill when asked to run the full prediction-market research loop from market selection to gated promotion artifacts.
 ---
 
 # PM Research Loop
 
-Use this skill to turn hypotheses into ranked parameterized evidence.
+Use this skill to execute the full process: discovery -> validation -> backtest -> robustness -> gate -> paper-ready package.
 
 ## Inputs
 
 - `history_file`
-- `market_id`
-- `event_id`
 - `strategy_ref`
-- optional params grid JSONL
+- optional `strategy_kwargs_json`
+- optional `market_id` and `event_id`
+- optional gate thresholds
 
-## Workflow
+## Preferred Workflow
 
-1. Slice target series:
+1. Discover candidate markets:
 
-- `coinjure research slice --history-file <history.jsonl> --market-id <M> --event-id <E> --output <slice.jsonl> --json`
+- `coinjure research markets --history-file <history.jsonl> --sort-by points --limit 20 --output <markets.jsonl> --json`
 
-2. Build features/labels:
+2. Run one-shot pipeline:
 
-- `coinjure research features --history-file <history.jsonl> --market-id <M> --event-id <E> --output <features.jsonl> --json`
-- `coinjure research labels --history-file <history.jsonl> --market-id <M> --event-id <E> --output <labels.jsonl> --json`
+- `coinjure research alpha-pipeline --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --market-id <M> --event-id <E> --artifacts-dir <dir> --json`
+- if market IDs are unknown, omit them and use `--market-rank <n>` with `--market-sort-by <key>`.
 
-3. Batch backtest params:
+3. Expand to cross-market validation:
 
-- `coinjure research backtest-batch --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --params-jsonl <params.jsonl> --output <runs.jsonl> --json`
+- `coinjure research batch-markets --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --limit 20 --output <batch.jsonl> --json`
 
-4. Rank and keep top runs:
+4. Persist experiment memory:
 
-- `coinjure research compare-runs --input-file <runs.jsonl> --sort-key sharpe_ratio --top 20 --output <top_runs.jsonl> --json`
-
-5. Persist experiment memory:
-
-- `coinjure research memory add --input-file <top_runs.jsonl> --tag <tag> --json`
+- `coinjure research memory add --input-file <batch_or_top_runs.jsonl> --tag <tag> --json`
 - `coinjure research memory list --tag <tag> --json`
 
-## Params JSONL Row Format
+5. Handoff to paper run:
 
-Use one JSON object per line:
-
-```json
-{
-  "id": "run-1",
-  "strategy_kwargs": { "entry_z": 1.2, "exit_z": 0.3, "trade_size": "25" }
-}
-```
+- if gate checks pass, proceed to `pm-paper-run-ops`.
 
 ## Hard Rules
 
-- Always run JSON mode where supported.
-- Never promote from a single run; require ranked comparison output.
-- Store results with tags so future loops can avoid rediscovering failed regions.
+- Produce reproducible artifacts under `data/research/<run_id>/`.
+- Treat failed gate checks as a loop-back signal, not a promotion signal.
+- Keep all commands in JSON mode where available.

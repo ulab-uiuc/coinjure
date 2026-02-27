@@ -1,13 +1,28 @@
 """Utility functions for CLI integration with trading engine."""
 
+from __future__ import annotations
+
 import asyncio
+import json
 import logging
+
+import click
 
 from coinjure.cli.control import ControlServer
 from coinjure.cli.monitor import TradingMonitor
 from coinjure.core.trading_engine import TradingEngine
 
 logger = logging.getLogger(__name__)
+
+
+def _emit(payload: object, *, as_json: bool) -> None:
+    if as_json:
+        click.echo(json.dumps(payload, default=str))
+        return
+    if isinstance(payload, dict):
+        click.echo(payload.get('message', str(payload)))
+        return
+    click.echo(str(payload))
 
 
 class MonitoredTradingEngine:
