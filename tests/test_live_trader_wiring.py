@@ -54,6 +54,9 @@ async def test_run_live_polymarket_trading_restores_missing_cash(monkeypatch):
         def get_balance_allowance(self, params):
             return {'balance': '2500000'}  # 2.5 USDC (6 decimals)
 
+        def get_address(self):
+            return '0x0000000000000000000000000000000000000000'
+
     async def fake_run_live_trading(*args, **kwargs):
         captured['run_called'] = True
 
@@ -75,6 +78,7 @@ async def test_run_live_polymarket_trading_restores_missing_cash(monkeypatch):
 
     monkeypatch.setattr(live_trader, 'PolymarketTrader', FakePolymarketTrader)
     monkeypatch.setattr(live_trader, 'run_live_trading', fake_run_live_trading)
+    monkeypatch.setattr(live_trader, 'fetch_polymarket_positions', lambda addr: [])
 
     class FakeStore:
         def load_positions(self):

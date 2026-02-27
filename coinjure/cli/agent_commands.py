@@ -559,6 +559,11 @@ def paper() -> None:
 @click.option(
     '--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard'
 )
+@click.option(
+    '--state-dir',
+    default=None,
+    help='Directory for persisting positions, trades, and equity curve across restarts.',
+)
 def paper_run(
     exchange: str,
     duration: float | None,
@@ -572,8 +577,15 @@ def paper_run(
     strategy_kwargs_json: str | None,
     as_json: bool,
     monitor: bool,
+    state_dir: str | None,
 ) -> None:
     """Run paper trading in simulation mode."""
+    state_store = None
+    if state_dir:
+        from coinjure.storage.state_store import StateStore
+
+        state_store = StateStore(data_dir=state_dir)
+
     if history_file and (not market_id or not event_id):
         raise click.ClickException(
             '--history-file requires both --market-id and --event-id.'
@@ -642,6 +654,7 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                state_store=state_store,
                 continuous=False,
                 monitor=monitor,
                 exchange_name='Historical Replay',
@@ -656,6 +669,7 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                state_store=state_store,
                 continuous=True,
                 monitor=monitor,
                 exchange_name='Polymarket',
@@ -687,6 +701,7 @@ def paper_run(
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=duration,
+                state_store=state_store,
                 continuous=True,
                 monitor=monitor,
                 exchange_name='RSS',
@@ -736,6 +751,11 @@ def live() -> None:
 @click.option(
     '--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard'
 )
+@click.option(
+    '--state-dir',
+    default=None,
+    help='Directory for persisting positions, trades, and equity curve across restarts.',
+)
 def live_run(
     exchange: str,
     duration: float | None,
@@ -748,9 +768,16 @@ def live_run(
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
     monitor: bool,
+    state_dir: str | None,
 ) -> None:
     """Run live mode with real order placement."""
     _confirm_live_trading(as_json=as_json)
+
+    state_store = None
+    if state_dir:
+        from coinjure.storage.state_store import StateStore
+
+        state_store = StateStore(data_dir=state_dir)
 
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     if strategy_kwargs and not strategy_ref:
@@ -799,6 +826,7 @@ def live_run(
                 signature_type=signature_type,
                 funder=funder,
                 duration=duration,
+                state_store=state_store,
                 continuous=True,
                 monitor=monitor,
                 exchange_name='Polymarket',

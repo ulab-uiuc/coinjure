@@ -20,7 +20,7 @@ from coinjure.risk.risk_manager import (
     StandardRiskManager,
 )
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import CashTicker
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.kalshi_trader import KalshiTrader
 from coinjure.trader.paper_trader import PaperTrader
 from coinjure.trader.polymarket_trader import PolymarketTrader
@@ -31,6 +31,75 @@ if TYPE_CHECKING:
     from coinjure.storage.state_store import StateStore
 
 logger = logging.getLogger(__name__)
+
+DATA_API_BASE = 'https://data-api.polymarket.com'
+
+
+def fetch_polymarket_positions(wallet_address: str) -> list[Position]:
+    """Fetch current token positions from Polymarket Data API.
+
+    Calls ``GET /positions?user={address}`` and converts each entry into
+    a :class:`Position` that the :class:`PositionManager` understands.
+
+    Returns an empty list on any network/parsing error (non-fatal).
+    """
+    import httpx
+
+    positions: list[Position] = []
+    try:
+        url = f'{DATA_API_BASE}/positions'
+        offset = 0
+        limit = 500
+        while True:
+            resp = httpx.get(
+                url,
+                params={
+                    'user': wallet_address,
+                    'sizeThreshold': 0,
+                    'limit': limit,
+                    'offset': offset,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if not data:
+                break
+            for entry in data:
+                size = Decimal(str(entry.get('size', 0)))
+                if size <= 0:
+                    continue
+                asset_id = entry.get('asset', '')
+                condition_id = entry.get('conditionId', '')
+                title = entry.get('title', '')
+                avg_price = Decimal(str(entry.get('avgPrice', 0)))
+                realized_pnl = Decimal(str(entry.get('realizedPnl', 0)))
+
+                ticker = PolyMarketTicker(
+                    symbol=asset_id,
+                    name=title,
+                    token_id=asset_id,
+                    market_id=condition_id,
+                )
+                positions.append(
+                    Position(
+                        ticker=ticker,
+                        quantity=size,
+                        average_cost=avg_price,
+                        realized_pnl=realized_pnl,
+                    )
+                )
+            if len(data) < limit:
+                break
+            offset += limit
+        logger.info(
+            'Fetched %d token position(s) from Polymarket Data API', len(positions)
+        )
+    except Exception:
+        logger.warning(
+            'Failed to fetch positions from Polymarket Data API', exc_info=True
+        )
+    return positions
 
 
 def _emit_stdout(message: str, *, emit_text: bool) -> None:
@@ -283,51 +352,41 @@ async def run_live_polymarket_trading(
     )
     live_balance = Decimal(balance_info['balance']) / Decimal('1000000')
 
-    # State recovery: load saved positions if available, then reconcile cash.
+    # Set cash position from exchange.
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.POLYMARKET_USDC,
+            quantity=live_balance,
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+
+    # Fetch existing token positions from Polymarket Data API.
+    wallet_address = trader.clob_client.get_address()
+    if wallet_address:
+        api_positions = fetch_polymarket_positions(wallet_address)
+        for pos in api_positions:
+            position_manager.update_position(pos)
+        if api_positions:
+            print(f'Loaded {len(api_positions)} existing position(s) from Polymarket')
+    else:
+        logger.warning('Could not determine wallet address — skipping position fetch')
+
+    # If a state store has saved realized PnL data, merge it in.
     saved_positions = state_store.load_positions() if state_store else []
     if saved_positions:
-        logger.info('Restoring %d positions from state store', len(saved_positions))
         for pos in saved_positions:
-            position_manager.update_position(pos)
-        # Reconcile cash position against live exchange balance.
-        saved_cash = position_manager.get_position(CashTicker.POLYMARKET_USDC)
-        if saved_cash is not None:
-            diff_pct = abs(live_balance - saved_cash.quantity) / max(
-                live_balance, Decimal('1')
-            )
-            if diff_pct > Decimal('0.01'):
-                logger.warning(
-                    'Saved cash %.4f differs from live balance %.4f by %.1f%% — using live value',
-                    saved_cash.quantity,
-                    live_balance,
-                    float(diff_pct) * 100,
-                )
+            existing = position_manager.get_position(pos.ticker)
+            if existing is not None and pos.realized_pnl != Decimal('0'):
                 position_manager.update_position(
                     Position(
-                        ticker=CashTicker.POLYMARKET_USDC,
-                        quantity=live_balance,
-                        average_cost=Decimal('0'),
-                        realized_pnl=saved_cash.realized_pnl,
+                        ticker=existing.ticker,
+                        quantity=existing.quantity,
+                        average_cost=existing.average_cost,
+                        realized_pnl=pos.realized_pnl,
                     )
                 )
-        else:
-            position_manager.update_position(
-                Position(
-                    ticker=CashTicker.POLYMARKET_USDC,
-                    quantity=live_balance,
-                    average_cost=Decimal('0'),
-                    realized_pnl=Decimal('0'),
-                )
-            )
-    else:
-        position_manager.update_position(
-            Position(
-                ticker=CashTicker.POLYMARKET_USDC,
-                quantity=live_balance,
-                average_cost=Decimal('0'),
-                realized_pnl=Decimal('0'),
-            )
-        )
 
     print(f'Starting live Polymarket trading with balance: {live_balance} USDC')
 
