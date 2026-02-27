@@ -1811,7 +1811,7 @@ def research_strategy_gate(
 @click.option('--event-id', default=None)
 @click.option(
     '--market-sort-by',
-    default='points',
+    default='volatility',
     show_default=True,
     type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
 )
@@ -1836,6 +1836,12 @@ def research_strategy_gate(
 @click.option('--batch-limit', default=20, show_default=True, type=int)
 @click.option('--run-batch-markets/--no-run-batch-markets', default=True)
 @click.option(
+    '--skip-batch-if-gate-fails/--no-skip-batch-if-gate-fails',
+    default=True,
+    show_default=True,
+    help='Skip batch-markets and stress tests when the primary backtest has 0 trades or gate fails.',
+)
+@click.option(
     '--artifacts-dir',
     default='data/research/alpha_pipeline',
     show_default=True,
@@ -1858,6 +1864,7 @@ def research_alpha_pipeline(
     max_drawdown_pct: str,
     batch_limit: int,
     run_batch_markets: bool,
+    skip_batch_if_gate_fails: bool,
     artifacts_dir: str,
     as_json: bool,
 ) -> None:
@@ -1950,6 +1957,9 @@ def research_alpha_pipeline(
     single_path = out_dir / 'backtest_single.json'
     _write_json(str(single_path), metrics)
 
+    primary_trades = int(metrics.get('total_trades', 0))
+    skip_heavy = skip_batch_if_gate_fails and primary_trades == 0
+
     stress_rows: list[dict[str, object]] = []
     stress_scenarios = [
         {
@@ -1977,7 +1987,7 @@ def research_alpha_pipeline(
             'commission_rate': Decimal('0.02'),
         },
     ]
-    for scenario in stress_scenarios:
+    for scenario in [] if skip_heavy else stress_scenarios:
         try:
             scenario_metrics = _run_backtest_once(
                 history_file=history_file,
@@ -2029,7 +2039,7 @@ def research_alpha_pipeline(
     _write_json(str(gate_path), gate_payload)
 
     batch_summary: dict[str, object] | None = None
-    if run_batch_markets:
+    if run_batch_markets and not skip_heavy:
         ranked_batch = ranked[:batch_limit]
         batch_rows: list[dict[str, object]] = []
         for candidate in ranked_batch:
