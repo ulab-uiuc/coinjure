@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _emit_stdout(message: str, *, emit_text: bool) -> None:
+    if emit_text:
+        print(message)
+
+
 async def run_live_trading(
     data_source: LivePolyMarketDataSource
     | LiveNewsDataSource
@@ -47,6 +52,7 @@ async def run_live_trading(
     drawdown_alert_pct: Decimal | None = None,
     monitor: bool = False,
     exchange_name: str = '',
+    emit_text: bool = True,
 ) -> None:
     """
     Run live trading with the given data source, strategy, and trader.
@@ -89,7 +95,10 @@ async def run_live_trading(
                 await asyncio.wait_for(monitored.start(), timeout=duration)
             except asyncio.TimeoutError:
                 await monitored.stop()
-                print(f'Live trading stopped after {duration} seconds.')
+                _emit_stdout(
+                    f'Live trading stopped after {duration} seconds.',
+                    emit_text=emit_text,
+                )
         else:
             await monitored.start()
     else:
@@ -107,11 +116,14 @@ async def run_live_trading(
                 await asyncio.wait_for(monitored.start(), timeout=duration)
             except asyncio.TimeoutError:
                 await monitored.stop()
-                print(f'Live trading stopped after {duration} seconds.')
+                _emit_stdout(
+                    f'Live trading stopped after {duration} seconds.',
+                    emit_text=emit_text,
+                )
         else:
             await monitored.start()
 
-    print('Live trading session ended.')
+    _emit_stdout('Live trading session ended.', emit_text=emit_text)
 
 
 async def run_live_paper_trading(
@@ -126,6 +138,7 @@ async def run_live_paper_trading(
     drawdown_alert_pct: Decimal | None = None,
     monitor: bool = False,
     exchange_name: str = '',
+    emit_text: bool = True,
 ) -> None:
     """
     Run live paper trading (simulated) with the given configuration.
@@ -184,13 +197,23 @@ async def run_live_paper_trading(
         drawdown_alert_pct,
         monitor=monitor,
         exchange_name=exchange_name,
+        emit_text=emit_text,
     )
 
     # Print final portfolio status
-    print('\n--- Final Portfolio Status ---')
-    print(f'Cash positions: {position_manager.get_cash_positions()}')
-    print(f'Non-cash positions: {position_manager.get_non_cash_positions()}')
-    print(f'Total realized PnL: {position_manager.get_total_realized_pnl()}')
+    _emit_stdout('\n--- Final Portfolio Status ---', emit_text=emit_text)
+    _emit_stdout(
+        f'Cash positions: {position_manager.get_cash_positions()}',
+        emit_text=emit_text,
+    )
+    _emit_stdout(
+        f'Non-cash positions: {position_manager.get_non_cash_positions()}',
+        emit_text=emit_text,
+    )
+    _emit_stdout(
+        f'Total realized PnL: {position_manager.get_total_realized_pnl()}',
+        emit_text=emit_text,
+    )
 
 
 async def run_live_polymarket_trading(
@@ -209,6 +232,7 @@ async def run_live_polymarket_trading(
     drawdown_alert_pct: Decimal | None = None,
     monitor: bool = False,
     exchange_name: str = '',
+    emit_text: bool = True,
 ) -> None:
     """
     Run live trading on Polymarket with real orders.
@@ -396,12 +420,22 @@ async def run_live_kalshi_paper_trading(
         drawdown_alert_pct,
         monitor=monitor,
         exchange_name=exchange_name,
+        emit_text=emit_text,
     )
 
-    print('\n--- Final Portfolio Status ---')
-    print(f'Cash positions: {position_manager.get_cash_positions()}')
-    print(f'Non-cash positions: {position_manager.get_non_cash_positions()}')
-    print(f'Total realized PnL: {position_manager.get_total_realized_pnl()}')
+    _emit_stdout('\n--- Final Portfolio Status ---', emit_text=emit_text)
+    _emit_stdout(
+        f'Cash positions: {position_manager.get_cash_positions()}',
+        emit_text=emit_text,
+    )
+    _emit_stdout(
+        f'Non-cash positions: {position_manager.get_non_cash_positions()}',
+        emit_text=emit_text,
+    )
+    _emit_stdout(
+        f'Total realized PnL: {position_manager.get_total_realized_pnl()}',
+        emit_text=emit_text,
+    )
 
 
 async def run_live_kalshi_trading(

@@ -48,7 +48,7 @@ def trade() -> None:
     '--json', 'as_json', is_flag=True, default=False, help='Emit JSON response'
 )
 def pause_cmd(socket: str | None, as_json: bool) -> None:
-    """Pause decision-making (data ingestion continues)."""
+    """Pause the engine: stop data ingestion and strategy decisions."""
     sock = _resolve_socket(socket)
     resp = run_command('pause', socket_path=sock)
     _print_response(resp, as_json)
@@ -114,6 +114,64 @@ def stop_cmd(socket: str | None, as_json: bool) -> None:
     """Gracefully stop the engine."""
     sock = _resolve_socket(socket)
     resp = run_command('stop', socket_path=sock)
+    _print_response(resp, as_json)
+    if not resp.get('ok'):
+        raise SystemExit(1)
+
+
+@trade.command('swap')
+@click.option(
+    '--strategy-ref',
+    required=True,
+    help='Strategy ref: module:Class or /path/file.py:Class',
+)
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
+@click.option(
+    '--socket', '-s', default=None, type=click.Path(), help='Control socket path'
+)
+@click.option(
+    '--json', 'as_json', is_flag=True, default=False, help='Emit JSON response'
+)
+def swap_strategy_cmd(
+    strategy_ref: str,
+    strategy_kwargs_json: str | None,
+    socket: str | None,
+    as_json: bool,
+) -> None:
+    """Hot-swap the running engine's strategy without restarting."""
+    import json as _json
+
+    kwargs: dict = {}
+    if strategy_kwargs_json:
+        try:
+            kwargs = _json.loads(strategy_kwargs_json)
+        except _json.JSONDecodeError as exc:
+            raise click.ClickException(f'Invalid --strategy-kwargs-json: {exc.msg}') from exc
+        if not isinstance(kwargs, dict):
+            raise click.ClickException('--strategy-kwargs-json must be a JSON object.')
+
+    sock = _resolve_socket(socket)
+    resp = run_command('swap_strategy', socket_path=sock, strategy_ref=strategy_ref, kwargs=kwargs)
+    _print_response(resp, as_json)
+    if not resp.get('ok'):
+        raise SystemExit(1)
+
+
+@trade.command('state')
+@click.option(
+    '--socket', '-s', default=None, type=click.Path(), help='Control socket path'
+)
+@click.option(
+    '--json', 'as_json', is_flag=True, default=False, help='Emit JSON response'
+)
+def get_state_cmd(socket: str | None, as_json: bool) -> None:
+    """Get full engine snapshot: positions, PnL, decisions, order books."""
+    sock = _resolve_socket(socket)
+    resp = run_command('get_state', socket_path=sock)
     _print_response(resp, as_json)
     if not resp.get('ok'):
         raise SystemExit(1)

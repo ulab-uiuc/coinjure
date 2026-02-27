@@ -723,24 +723,11 @@ def monitor(socket: str | None) -> None:
 
     sock = Path(socket) if socket else SOCKET_PATH
 
-    if not sock.exists():
-        click.echo(
-            click.style('✗ ', fg='red')
-            + f'No engine running — socket not found: {sock}\n\n'
-            'Start an engine first:\n'
-            '  coinjure paper run --exchange <polymarket|kalshi|rss>\n'
-            '\n'
-            'Examples:\n'
-            '  coinjure paper run --exchange polymarket\n'
-            '  coinjure paper run --exchange kalshi\n'
-            '\n'
-            'Or (dev script):\n'
-            '  python scripts/run_paper_trading.py -e polymarket\n'
-        )
-        raise SystemExit(1)
-
     try:
         app = SocketTradingMonitorApp(socket_path=sock)
         app.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         pass
+    except Exception as exc:
+        # Textual crash or unsupported terminal — exit cleanly
+        click.echo(f'Monitor closed: {exc}', err=True)

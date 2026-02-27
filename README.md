@@ -164,11 +164,20 @@ coinjure trade stop
 ```bash
 coinjure data record --exchange polymarket --output ./data/events.jsonl --duration 300
 
+# Standard backtest (interactive output)
 coinjure backtest run \
   --history-file ./data/events.jsonl \
   --market-id M1 \
   --event-id E1 \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy
+
+# Machine-readable JSON output (agent-friendly)
+coinjure backtest run \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --json
+# → {"ok": true, "total_trades": 12, "win_rate": "0.583", "sharpe_ratio": "1.24", ...}
 ```
 
 ### 6) Agent strategy-discovery toolkit (`research`)
@@ -212,9 +221,42 @@ coinjure research compare-runs \
 coinjure research memory add \
   --input-file ./data/top_runs.jsonl \
   --tag m1_e1
+
+# 4) multi-market sweep — test one strategy across N markets at once
+coinjure research batch-markets \
+  --history-file ./data/events.jsonl \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --limit 50 \
+  --output ./data/batch_markets.jsonl \
+  --json
+# → {"ok_markets": 42, "total_markets": 50,
+#    "aggregate": {"mean_sharpe": "0.82", "pct_profitable": "68.0", ...}}
+
+# 5) hyperparameter grid search on one market
+coinjure research grid \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --param-grid-json '{"threshold": [0.01, 0.02, 0.05], "trade_size": [25, 50, 100]}' \
+  --output ./data/grid_results.jsonl \
+  --json
+# → {"runs": 9, "ok_runs": 9, "best": {"threshold": 0.02, "trade_size": 50, "sharpe_ratio": "1.31", ...}}
 ```
 
-Also available: `research universe`, `research walk-forward`, `research stress-test`, `research strategy-gate`, and `research memory list`.
+Also available: `research walk-forward`, `research stress-test`, `research strategy-gate`, and `research memory list`.
+
+### 7) Live price history (`market history`)
+
+Fetch a market's recent price history from the Polymarket CLOB API — no local data file needed:
+
+```bash
+coinjure market history --market-id 516926 --interval 1d --limit 30 --json
+# → {"market_id": "516926", "points": 30,
+#    "series": [{"t": 1772096447, "p": 0.42}, ...],
+#    "first_price": 0.42, "last_price": 0.71, "total_move": 0.29}
+```
+
+Supported intervals: `1d` (default), `6h`, `1h`.
 
 ## Human-in-the-Loop Model
 
@@ -237,7 +279,8 @@ Primary command groups:
 - `coinjure market`: market discovery and metadata.
 - `coinjure news`: standalone news fetching.
 - `coinjure data`: live event recording.
-- `coinjure research`: strategy-discovery tools (slice/features/labels/batch/walk-forward/stress/gate/memory).
+- `coinjure research`: strategy-discovery tools (slice/features/labels/backtest-batch/batch-markets/grid/walk-forward/stress-test/strategy-gate/memory).
+- `coinjure market history`: live price history from Polymarket CLOB API.
 
 ## Environment Variables
 

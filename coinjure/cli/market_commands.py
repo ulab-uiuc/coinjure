@@ -16,6 +16,18 @@ import httpx
 
 GAMMA_EVENTS_URL = 'https://gamma-api.polymarket.com/events'
 GAMMA_MARKETS_URL = 'https://gamma-api.polymarket.com/markets'
+CLOB_PRICES_HISTORY_URL = 'https://clob.polymarket.com/prices-history'
+
+
+def _parse_clob_ids(mkt: dict) -> list[str]:
+    """Return the parsed list of CLOB token IDs from a market dict (handles JSON-string encoding)."""
+    raw = mkt.get('clobTokenIds') or mkt.get('clob_token_ids') or []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            raw = []
+    return list(raw)
 
 
 async def _polymarket_list_markets(limit: int) -> list[dict]:
@@ -40,9 +52,7 @@ async def _polymarket_list_markets(limit: int) -> list[dict]:
                     'question': mkt.get('question', ''),
                     'event_id': str(event.get('id', '')),
                     'event_title': event.get('title', ''),
-                    'token_id': mkt.get('clob_token_ids', [''])[0]
-                    if mkt.get('clob_token_ids')
-                    else '',
+                    'token_id': _parse_clob_ids(mkt)[0] if _parse_clob_ids(mkt) else '',
                     'best_bid': mkt.get('bestBid', ''),
                     'best_ask': mkt.get('bestAsk', ''),
                     'volume': mkt.get('volume', ''),
@@ -78,16 +88,13 @@ async def _polymarket_market_info(market_id: str) -> dict | None:
     else:
         return None
 
+    clob_ids = _parse_clob_ids(mkt)
     return {
         'id': mkt.get('id', ''),
         'question': mkt.get('question', ''),
         'event_id': str(mkt.get('eventId', '')),
-        'token_id': mkt.get('clob_token_ids', [''])[0]
-        if mkt.get('clob_token_ids')
-        else '',
-        'no_token_id': mkt.get('clob_token_ids', ['', ''])[1]
-        if len(mkt.get('clob_token_ids', [])) > 1
-        else '',
+        'token_id': clob_ids[0] if clob_ids else '',
+        'no_token_id': clob_ids[1] if len(clob_ids) > 1 else '',
         'best_bid': mkt.get('bestBid', ''),
         'best_ask': mkt.get('bestAsk', ''),
         'volume': mkt.get('volume', ''),
@@ -435,4 +442,118 @@ def market_info(
         rules = info.get('rules_primary', '')
         if rules:
             click.echo(f'Rules:      {rules[:300]}{"…" if len(rules) > 300 else ""}')
+    click.echo()
+
+
+# ---------------------------------------------------------------------------
+# Polymarket price history
+# ---------------------------------------------------------------------------
+
+_INTERVAL_FIDELITY: dict[str, int] = {
+    '1d': 1440,
+    '6h': 360,
+    '1h': 60,
+}
+
+
+async def _polymarket_price_history(
+    market_id: str, interval: str, limit: int | None
+) -> dict:
+    fidelity = _INTERVAL_FIDELITY.get(interval, 1440)
+
+    # Resolve the CLOB token ID from the numeric market ID.
+    info = await _polymarket_market_info(market_id)
+    if info is None:
+        raise click.ClickException(f'Market not found: {market_id}')
+    token_id = info.get('token_id', '')
+    if not token_id:
+        raise click.ClickException(f'No CLOB token ID for market: {market_id}')
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            CLOB_PRICES_HISTORY_URL,
+            params={'market': token_id, 'interval': interval, 'fidelity': fidelity},
+        )
+    if resp.status_code != 200:
+        raise click.ClickException(
+            f'Polymarket CLOB API returned HTTP {resp.status_code}: {resp.text[:200]}'
+        )
+    data = resp.json()
+
+    # Response is {"history": [{"t": ..., "p": ...}, ...]}
+    raw_history = data.get('history') if isinstance(data, dict) else data
+    points: list[dict[str, Any]] = []
+    if isinstance(raw_history, list):
+        for item in raw_history:
+            if isinstance(item, dict) and 't' in item and 'p' in item:
+                points.append({'t': item['t'], 'p': item['p']})
+
+    if limit and limit > 0:
+        points = points[-limit:]
+
+    first_price = points[0]['p'] if points else None
+    last_price = points[-1]['p'] if points else None
+    total_move: Any = None
+    if first_price is not None and last_price is not None:
+        try:
+            total_move = round(float(last_price) - float(first_price), 6)
+        except (TypeError, ValueError):
+            total_move = None
+
+    return {
+        'market_id': market_id,
+        'token_id': token_id,
+        'interval': interval,
+        'points': len(points),
+        'series': points,
+        'first_price': first_price,
+        'last_price': last_price,
+        'total_move': total_move,
+    }
+
+
+@market.command('history')
+@click.option('--market-id', required=True, help='Polymarket market ID.')
+@click.option(
+    '--interval',
+    type=click.Choice(['1d', '6h', '1h']),
+    default='1d',
+    show_default=True,
+    help='Candle interval.',
+)
+@click.option(
+    '--limit',
+    default=None,
+    type=int,
+    help='Take only the last N price points.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def market_history(
+    market_id: str,
+    interval: str,
+    limit: int | None,
+    as_json: bool,
+) -> None:
+    """Fetch a market's price history from the Polymarket Gamma API (Polymarket only)."""
+    try:
+        result = asyncio.run(_polymarket_price_history(market_id, interval, limit))
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Failed to fetch price history: {exc}') from exc
+
+    if as_json:
+        click.echo(json.dumps(result))
+        return
+
+    click.echo(f'\nPrice History — market {market_id} ({interval})')
+    click.echo('=' * 60)
+    click.echo(f'Points:      {result["points"]}')
+    click.echo(f'First price: {result["first_price"]}')
+    click.echo(f'Last price:  {result["last_price"]}')
+    click.echo(f'Total move:  {result["total_move"]}')
+    if result['series']:
+        click.echo('\nLast 5 points:')
+        for pt in result['series'][-5:]:
+            click.echo(f'  t={pt["t"]}  p={pt["p"]}')
     click.echo()
