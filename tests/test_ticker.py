@@ -1,6 +1,6 @@
 import pytest
 
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
+from coinjure.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker, Ticker
 
 
 class TestPolyMarketTicker:
@@ -128,6 +128,53 @@ class TestCashTicker:
 
         d = {ticker: 'value'}
         assert d[ticker] == 'value'
+
+
+class TestKalshiTicker:
+    def test_creation_defaults(self):
+        ticker = KalshiTicker(symbol='MKT')
+        assert ticker.symbol == 'MKT'
+        assert ticker.is_no_side is False
+
+    def test_collateral(self):
+        ticker = KalshiTicker(symbol='MKT')
+        assert ticker.collateral == CashTicker.KALSHI_USD
+
+    def test_get_no_ticker(self):
+        yes = KalshiTicker(symbol='MKT', name='Market', market_ticker='MKT-T1')
+        no = yes.get_no_ticker()
+        assert no is not None
+        assert no.symbol == 'MKT_NO'
+        assert no.is_no_side is True
+        assert no.market_ticker == 'MKT-T1'
+        assert no.name == 'Market'
+
+    def test_get_no_ticker_returns_none_for_no_side(self):
+        no = KalshiTicker(symbol='MKT_NO', is_no_side=True)
+        assert no.get_no_ticker() is None
+
+    def test_yes_no_not_equal(self):
+        yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
+        no = yes.get_no_ticker()
+        assert yes != no
+
+    def test_yes_no_different_hash(self):
+        yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
+        no = yes.get_no_ticker()
+        assert hash(yes) != hash(no)
+        # Both usable as dict keys simultaneously
+        d = {yes: 'yes_val', no: 'no_val'}
+        assert d[yes] == 'yes_val'
+        assert d[no] == 'no_val'
+
+    def test_is_ticker(self):
+        ticker = KalshiTicker(symbol='MKT')
+        assert isinstance(ticker, Ticker)
+
+    def test_frozen(self):
+        ticker = KalshiTicker(symbol='MKT')
+        with pytest.raises(AttributeError):
+            ticker.symbol = 'CHANGED'
 
 
 class TestTickerInheritance:

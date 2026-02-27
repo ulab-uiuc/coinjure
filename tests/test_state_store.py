@@ -96,6 +96,18 @@ def test_roundtrip_kalshi_ticker(kalshi_ticker):
     assert result == kalshi_ticker
 
 
+def test_roundtrip_kalshi_ticker_no_side():
+    no_ticker = KalshiTicker(
+        symbol='MKT_NO', name='Market', market_ticker='MKT-T1',
+        event_ticker='EVT-T1', series_ticker='SER-T1', is_no_side=True,
+    )
+    d = serialize_ticker(no_ticker)
+    assert d['is_no_side'] is True
+    result = deserialize_ticker(d)
+    assert result == no_ticker
+    assert result.is_no_side is True
+
+
 def test_roundtrip_cashticker_polymarket_usdc():
     d = serialize_ticker(CashTicker.POLYMARKET_USDC)
     assert d['ticker_type'] == 'CashTicker'

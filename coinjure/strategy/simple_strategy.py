@@ -11,7 +11,7 @@ from typing import Literal, TypedDict
 import httpx
 
 from coinjure.events.events import Event, NewsEvent, OrderBookEvent
-from coinjure.ticker.ticker import PolyMarketTicker, Ticker
+from coinjure.ticker.ticker import KalshiTicker, PolyMarketTicker, Ticker
 from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
@@ -138,10 +138,9 @@ class SimpleStrategy(Strategy):
                         f'Already holding position in {ticker.name[:30]}, skip'
                     )
                     return
-                # Also check NO ticker
-                if isinstance(ticker, PolyMarketTicker) and ticker.no_token_id:
-                    no_ticker = ticker.get_no_ticker()
-                    if no_ticker:
+                # Also check NO ticker (any ticker type with get_no_ticker)
+                no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
+                if no_ticker:
                         no_pos = trader.position_manager.get_position(no_ticker)
                         if no_pos and no_pos.quantity > 0:
                             self.logger.debug(
@@ -200,8 +199,8 @@ class SimpleStrategy(Strategy):
                 if executed:
                     side = 'yes' if analysis['action'] == 'buy_yes' else 'no'
                     sym = ticker.symbol
-                    if side == 'no' and isinstance(ticker, PolyMarketTicker):
-                        no_ticker = ticker.get_no_ticker()
+                    if side == 'no':
+                        no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
                         if no_ticker:
                             sym = no_ticker.symbol
                     # Use actual fill price for entry_price (critical for P&L tracking)
@@ -328,9 +327,8 @@ class SimpleStrategy(Strategy):
 
         # If this is a YES ticker, also check the paired NO position.
         # This matters when the NO token has no real orderbook of its own.
-        if isinstance(ticker, PolyMarketTicker) and ticker.no_token_id:
-            no_ticker = ticker.get_no_ticker()
-            if no_ticker and no_ticker.symbol in self._position_meta:
+        no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
+        if no_ticker and no_ticker.symbol in self._position_meta:
                 yes_bid = trader.market_data.get_best_bid(ticker)
                 if yes_bid is not None:
                     no_price_derived = float(Decimal('1') - yes_bid.price)
@@ -951,7 +949,56 @@ Respond in JSON only:
                 return True, fill
             return False, 0.0
 
-        # Kalshi or no NO token: sell YES position if we have one
+        # Kalshi: buy No side directly via get_no_ticker()
+        if isinstance(ticker, KalshiTicker):
+            no_ticker = ticker.get_no_ticker()
+            if no_ticker is None:
+                self.logger.info('No NO ticker available for Kalshi, skip')
+                return False, 0.0
+
+            level = trader.market_data.get_best_ask(no_ticker)
+            if level is None:
+                # Estimate No price from Yes bid
+                yes_bid = trader.market_data.get_best_bid(ticker)
+                if yes_bid is not None:
+                    no_price = Decimal('1') - yes_bid.price
+                    self.logger.info(
+                        f'BUY NO {ticker.name[:30]} @ ${no_price} (Kalshi, estimated)'
+                    )
+                    result = await trader.place_order(
+                        side=TradeSide.BUY,
+                        ticker=no_ticker,
+                        limit_price=no_price,
+                        quantity=self.trade_size,
+                    )
+                    if result.order is not None:
+                        fill = (
+                            float(result.order.average_price)
+                            if result.order.average_price > 0
+                            else float(no_price)
+                        )
+                        return True, fill
+                    return False, 0.0
+                self.logger.info('No price for Kalshi NO token, skip')
+                return False, 0.0
+
+            self.logger.info(f'BUY NO {ticker.name[:30]} @ ${level.price} (Kalshi)')
+            result = await trader.place_order(
+                side=TradeSide.BUY,
+                ticker=no_ticker,
+                limit_price=level.price,
+                quantity=self.trade_size,
+            )
+            if result.order is not None:
+                fill = (
+                    float(result.order.average_price)
+                    if result.order.average_price > 0
+                    else float(level.price)
+                )
+                return True, fill
+            return False, 0.0
+
+        # Fallback: no NO token available — sell YES position if we have one
         position = trader.position_manager.get_position(ticker)
         if position is not None and position.quantity >= self.trade_size:
             level = trader.market_data.get_best_bid(ticker)

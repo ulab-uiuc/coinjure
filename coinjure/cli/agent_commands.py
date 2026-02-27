@@ -443,12 +443,14 @@ def backtest_run(
     """Run backtest mode with historical data + paper execution."""
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
+    no_symbol = f'{symbol}_NO'
     ticker = PolyMarketTicker(
         symbol=symbol,
         name=name,
         market_id=market_id,
         event_id=event_id,
         token_id=symbol,
+        no_token_id=no_symbol,
     )
     capital = Decimal(initial_capital)
     _emit(
