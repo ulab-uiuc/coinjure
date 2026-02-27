@@ -23,11 +23,12 @@ DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions'
 OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
 
 # --- Opening trade thresholds ---
-DEFAULT_EDGE_THRESHOLD = Decimal('0.10')  # 10% edge to open
+DEFAULT_EDGE_THRESHOLD = Decimal('0.00')  # Neutral default: no fixed edge prior
+DEFAULT_ESTIMATED_SPREAD = Decimal('0.00')  # Neutral default: no fixed spread prior
 
 # --- Position management thresholds ---
 # Edge consumed: market moved toward our estimate, take the win
-EDGE_CONSUMED_THRESHOLD = 0.03  # Close if remaining edge < 3%
+EDGE_CONSUMED_THRESHOLD = Decimal('0.00')  # Neutral default: no fixed close prior
 # Edge reversed: market moved past our LLM estimate, we're wrong
 EDGE_REVERSED = True  # Close immediately if edge reverses
 # LLM re-evaluation cooldown
@@ -74,11 +75,15 @@ class SimpleStrategy(Strategy):
         self,
         trade_size: Decimal = Decimal('1.0'),
         edge_threshold: Decimal = DEFAULT_EDGE_THRESHOLD,
+        estimated_spread: Decimal = DEFAULT_ESTIMATED_SPREAD,
+        edge_consumed_threshold: Decimal = EDGE_CONSUMED_THRESHOLD,
         reeval_cooldown: int = REEVAL_COOLDOWN_SECONDS,
         max_holding: int = MAX_HOLDING_SECONDS,
     ):
         self.trade_size = trade_size
-        self.edge_threshold = edge_threshold
+        self.edge_threshold = Decimal(str(edge_threshold))
+        self.estimated_spread = Decimal(str(estimated_spread))
+        self.edge_consumed_threshold = Decimal(str(edge_consumed_threshold))
         self.reeval_cooldown = timedelta(seconds=reeval_cooldown)
         self.max_holding = timedelta(seconds=max_holding)
         self.logger = logging.getLogger(__name__)
@@ -141,12 +146,12 @@ class SimpleStrategy(Strategy):
                 # Also check NO ticker (any ticker type with get_no_ticker)
                 no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
                 if no_ticker:
-                        no_pos = trader.position_manager.get_position(no_ticker)
-                        if no_pos and no_pos.quantity > 0:
-                            self.logger.debug(
-                                f'Already holding NO position in {ticker.name[:30]}, skip'
-                            )
-                            return
+                    no_pos = trader.position_manager.get_position(no_ticker)
+                    if no_pos and no_pos.quantity > 0:
+                        self.logger.debug(
+                            f'Already holding NO position in {ticker.name[:30]}, skip'
+                        )
+                        return
 
                 # Skip if another coroutine is already opening a position for this market
                 market_key = getattr(ticker, 'market_id', '') or ticker.symbol
@@ -329,14 +334,14 @@ class SimpleStrategy(Strategy):
         # This matters when the NO token has no real orderbook of its own.
         no_ticker = getattr(ticker, 'get_no_ticker', lambda: None)()
         if no_ticker and no_ticker.symbol in self._position_meta:
-                yes_bid = trader.market_data.get_best_bid(ticker)
-                if yes_bid is not None:
-                    no_price_derived = float(Decimal('1') - yes_bid.price)
-                    await self._check_one_position(
-                        no_ticker,
-                        trader,
-                        price_override=no_price_derived,
-                    )
+            yes_bid = trader.market_data.get_best_bid(ticker)
+            if yes_bid is not None:
+                no_price_derived = float(Decimal('1') - yes_bid.price)
+                await self._check_one_position(
+                    no_ticker,
+                    trader,
+                    price_override=no_price_derived,
+                )
 
     async def _check_one_position(
         self,
@@ -432,7 +437,7 @@ class SimpleStrategy(Strategy):
             remaining_edge = llm_prob - current_price
             if remaining_edge < 0:
                 return 'CLOSE_EDGE_REV'  # Market went past our estimate
-            if remaining_edge < EDGE_CONSUMED_THRESHOLD:
+            if remaining_edge < float(self.edge_consumed_threshold):
                 return 'CLOSE_EDGE_TP'  # Edge consumed, take profit
         else:
             # We're long NO: we profit when NO price goes UP (YES price goes DOWN)
@@ -441,7 +446,7 @@ class SimpleStrategy(Strategy):
             remaining_edge = no_fair_value - current_price
             if remaining_edge < 0:
                 return 'CLOSE_EDGE_REV'  # Market went past our estimate
-            if remaining_edge < EDGE_CONSUMED_THRESHOLD:
+            if remaining_edge < float(self.edge_consumed_threshold):
                 return 'CLOSE_EDGE_TP'  # Edge consumed, take profit
 
         return None
@@ -566,7 +571,7 @@ Respond in JSON only:
             if meta.side == 'yes':
                 # We hold YES. If LLM now thinks prob < market → edge gone
                 new_edge = new_prob - current_price
-                if new_edge < EDGE_CONSUMED_THRESHOLD:
+                if new_edge < float(self.edge_consumed_threshold):
                     position = trader.position_manager.get_position(ticker)
                     if position and position.quantity > 0:
                         await self._close_position(
@@ -586,7 +591,7 @@ Respond in JSON only:
                 # Edge = NO_fair - NO_price (same logic as _check_edge)
                 no_fair_value = 1.0 - new_prob
                 new_edge = no_fair_value - current_price
-                if new_edge < EDGE_CONSUMED_THRESHOLD:
+                if new_edge < float(self.edge_consumed_threshold):
                     position = trader.position_manager.get_position(ticker)
                     if position and position.quantity > 0:
                         await self._close_position(
@@ -721,7 +726,6 @@ Details: {details_text}{news_section}
 
 Your job: estimate the real probability (0.0 to 1.0) based on ALL available information.
 If you have relevant news, use it to inform your estimate — the market may not have priced in recent developments.
-If you have no relevant news, be humble and stay close to the market price (markets are usually efficient).
 
 Respond in JSON only:
 {{
@@ -804,8 +808,7 @@ Respond in JSON only:
                 'market_price': market_price,
             }
 
-        # Estimate spread cost (~2-4% on prediction markets)
-        estimated_spread = 0.03  # 3% spread assumption
+        estimated_spread = float(self.estimated_spread)
         effective_edge = abs(diff) - estimated_spread
 
         if effective_edge <= 0:

@@ -6,6 +6,7 @@ import asyncio
 import itertools
 import json
 import os
+import random
 import tempfile
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -774,6 +775,22 @@ def _build_gate_checks(
     return all(checks.values()), checks
 
 
+def _build_param_combos(param_grid_json: str | None) -> list[dict[str, Any]]:
+    if not param_grid_json:
+        return [{}]
+    param_grid = _parse_json_object(param_grid_json, option_name='--param-grid-json')
+    for key, vals in param_grid.items():
+        if not isinstance(vals, list):
+            raise click.ClickException(
+                f'--param-grid-json: value for "{key}" must be a list.'
+            )
+    if not param_grid:
+        return [{}]
+    keys = list(param_grid.keys())
+    value_lists = [param_grid[k] for k in keys]
+    return [dict(zip(keys, combo)) for combo in itertools.product(*value_lists)]
+
+
 @click.group()
 def research() -> None:
     """Research and strategy-discovery tooling."""
@@ -785,7 +802,7 @@ def research() -> None:
 )
 @click.option(
     '--sort-by',
-    default='points',
+    default='file',
     show_default=True,
     type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
 )
@@ -1168,7 +1185,7 @@ def research_scan_markets(
     """Scan many market/event pairs and keep the best run per market."""
     raise click.ClickException(
         '`research scan-markets` was removed as redundant. '
-        'Use `research discover-alpha` for end-to-end discovery, or '
+        'Use `research auto-tune` for end-to-end discovery, or '
         '`research markets` + `research grid` + `research batch-markets`.'
     )
 
@@ -2102,7 +2119,6 @@ def research_alpha_pipeline(
         raise click.ClickException('Alpha pipeline gate failed.')
 
 
-@research.command('discover-alpha')
 @click.option(
     '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
 )
@@ -2112,7 +2128,7 @@ def research_alpha_pipeline(
 @click.option('--event-id', default=None)
 @click.option(
     '--market-sort-by',
-    default='points',
+    default='file',
     show_default=True,
     type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
 )
@@ -2130,11 +2146,36 @@ def research_alpha_pipeline(
     help='Optional JSON object mapping param names to lists.',
 )
 @click.option('--max-runs', default=60, show_default=True, type=int)
-@click.option('--min-trades', default=1, show_default=True, type=int)
-@click.option('--min-total-pnl', default='0', show_default=True)
-@click.option('--max-drawdown-pct', default='0.30', show_default=True)
+@click.option('--min-trades', default=0, show_default=True, type=int)
+@click.option('--min-total-pnl', default='-1000000000', show_default=True)
+@click.option('--max-drawdown-pct', default='1.0', show_default=True)
+@click.option(
+    '--selection-key',
+    default='none',
+    show_default=True,
+    type=click.Choice(
+        ['none', 'alpha_score', 'total_pnl', 'sharpe_ratio', 'win_rate', 'max_drawdown']
+    ),
+    help='How to choose best run from successful candidates; none = keep candidate order.',
+)
+@click.option(
+    '--enforce-gate/--no-enforce-gate',
+    default=False,
+    help='When enabled, fail command if selected run does not pass gate checks.',
+)
 @click.option('--run-paper/--no-run-paper', default=False)
 @click.option('--paper-duration', default=30.0, show_default=True, type=float)
+@click.option(
+    '--shuffle-candidates/--no-shuffle-candidates',
+    default=False,
+    help='Shuffle strategy/parameter candidates before applying --max-runs.',
+)
+@click.option(
+    '--seed',
+    default=None,
+    type=int,
+    help='Optional random seed used when --shuffle-candidates is enabled.',
+)
 @click.option(
     '--artifacts-dir',
     default='data/research/discover_alpha',
@@ -2157,12 +2198,16 @@ def research_discover_alpha(
     min_trades: int,
     min_total_pnl: str,
     max_drawdown_pct: str,
+    selection_key: str,
+    enforce_gate: bool,
     run_paper: bool,
     paper_duration: float,
+    shuffle_candidates: bool,
+    seed: int | None,
     artifacts_dir: str,
     as_json: bool,
 ) -> None:
-    """Fast end-to-end alpha discovery with optional paper replay."""
+    """Internal single-strategy discovery runner used by auto-tune."""
     if market_rank <= 0:
         raise click.ClickException('--market-rank must be > 0')
     if max_runs <= 0:
@@ -2182,6 +2227,8 @@ def research_discover_alpha(
     base_kwargs = _parse_json_object(
         strategy_kwargs_json, option_name='--strategy-kwargs-json'
     )
+    combos = _build_param_combos(param_grid_json)
+    candidates = [{**base_kwargs, **combo_kwargs} for combo_kwargs in combos]
 
     summaries = _collect_market_summaries(history_file)
     ranked = _sort_market_summaries(summaries, sort_by=market_sort_by)
@@ -2214,28 +2261,13 @@ def research_discover_alpha(
             'Pass both --market-id and --event-id, or omit both for auto selection.'
         )
 
-    if param_grid_json:
-        param_grid = _parse_json_object(
-            param_grid_json, option_name='--param-grid-json'
-        )
-        for key, vals in param_grid.items():
-            if not isinstance(vals, list):
-                raise click.ClickException(
-                    f'--param-grid-json: value for "{key}" must be a list.'
-                )
-        if not param_grid:
-            combos: list[dict[str, Any]] = [{}]
-        else:
-            keys = list(param_grid.keys())
-            value_lists = [param_grid[k] for k in keys]
-            combos = [
-                dict(zip(keys, combo)) for combo in itertools.product(*value_lists)
-            ]
-    else:
-        combos = [{}]
-    combos = combos[:max_runs]
-    if not combos:
-        raise click.ClickException('No parameter combinations produced for discovery.')
+    if shuffle_candidates:
+        rng = random.Random(seed)
+        rng.shuffle(candidates)
+
+    candidates = candidates[:max_runs]
+    if not candidates:
+        raise click.ClickException('No parameter candidates produced for discovery.')
 
     market_id = str(selected_market['market_id'])
     event_id = str(selected_market['event_id'])
@@ -2244,8 +2276,7 @@ def research_discover_alpha(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     discovery_rows: list[dict[str, object]] = []
-    for idx, combo_kwargs in enumerate(combos, start=1):
-        merged_kwargs = {**base_kwargs, **combo_kwargs}
+    for idx, merged_kwargs in enumerate(candidates, start=1):
         try:
             metrics = _run_backtest_once(
                 history_file=history_file,
@@ -2266,6 +2297,7 @@ def research_discover_alpha(
                 {
                     'run': idx,
                     'ok': True,
+                    'strategy_ref': strategy_ref,
                     'strategy_kwargs': merged_kwargs,
                     'metrics': metrics,
                     'alpha_score': _alpha_score_from_metrics(metrics),
@@ -2278,6 +2310,7 @@ def research_discover_alpha(
                 {
                     'run': idx,
                     'ok': False,
+                    'strategy_ref': strategy_ref,
                     'strategy_kwargs': merged_kwargs,
                     'error': str(exc),
                 }
@@ -2289,25 +2322,30 @@ def research_discover_alpha(
     if not ok_rows:
         payload = {
             'passed': False,
-            'message': 'No successful backtest runs in discover-alpha.',
+            'message': 'No successful backtest runs in auto-tune.',
             'selected_market': selected_market,
             'artifacts_dir': str(out_dir),
             'files': {'runs': str(runs_path)},
         }
         _emit(payload, as_json=as_json)
-        raise click.ClickException('discover-alpha produced no successful runs.')
+        raise click.ClickException('auto-tune produced no successful runs.')
 
-    def _rank_key(row: dict[str, object]) -> tuple[float, float, float]:
-        metrics = row.get('metrics')
-        if not isinstance(metrics, dict):
-            return (0.0, float('-inf'), float('-inf'))
-        gate_rank = 1.0 if row.get('gate_passed') else 0.0
-        alpha = row.get('alpha_score')
-        alpha_score = float(alpha) if alpha is not None else float('-inf')
-        pnl = _to_float_metric(metrics.get('total_pnl')) or float('-inf')
-        return (gate_rank, alpha_score, pnl)
+    if selection_key == 'none':
+        best_row = ok_rows[0]
+    else:
+        reverse = selection_key != 'max_drawdown'
 
-    best_row = max(ok_rows, key=_rank_key)
+        def _score(row: dict[str, object]) -> float:
+            metrics = row.get('metrics')
+            if not isinstance(metrics, dict):
+                return float('-inf') if reverse else float('inf')
+            if selection_key == 'alpha_score':
+                v = _alpha_score_from_metrics(metrics)
+            else:
+                v = _to_float_metric(metrics.get(selection_key))
+            return v if v is not None else (float('-inf') if reverse else float('inf'))
+
+        best_row = max(ok_rows, key=_score) if reverse else min(ok_rows, key=_score)
     best_path = out_dir / 'best_run.json'
     _write_json(str(best_path), best_row)
 
@@ -2333,10 +2371,13 @@ def research_discover_alpha(
 
     paper_payload: dict[str, object] | None = None
     if run_paper:
+        best_strategy_ref_raw = best_row.get('strategy_ref', strategy_ref)
+        if not isinstance(best_strategy_ref_raw, str):
+            raise click.ClickException('Best run has invalid strategy ref.')
         strategy_kwargs = best_row.get('strategy_kwargs')
         if not isinstance(strategy_kwargs, dict):
             raise click.ClickException('Best run has invalid strategy kwargs.')
-        strategy_obj = _strategy_from_ref(strategy_ref, strategy_kwargs)
+        strategy_obj = _strategy_from_ref(best_strategy_ref_raw, strategy_kwargs)
         ticker = PolyMarketTicker(
             symbol='BACKTEST_TOKEN',
             name='Backtest Market',
@@ -2360,6 +2401,7 @@ def research_discover_alpha(
         paper_payload = {
             'ok': True,
             'duration': paper_duration,
+            'strategy_ref': best_strategy_ref_raw,
             'history_file': str(Path(history_file).resolve()),
             'market_id': market_id,
             'event_id': event_id,
@@ -2367,13 +2409,18 @@ def research_discover_alpha(
         _write_json(str(out_dir / 'paper.json'), paper_payload)
 
     payload = {
-        'passed': bool(gate_payload['passed']),
-        'message': 'discover-alpha complete'
-        if gate_payload['passed']
-        else 'discover-alpha gate failed',
+        'passed': bool(gate_payload['passed']) if enforce_gate else True,
+        'message': (
+            'auto-tune complete'
+            if (not enforce_gate or gate_payload['passed'])
+            else 'auto-tune gate failed'
+        ),
         'selected_market': selected_market,
         'runs': len(discovery_rows),
         'ok_runs': len(ok_rows),
+        'selection_key': selection_key,
+        'gate_enforced': enforce_gate,
+        'strategy_ref': strategy_ref,
         'best_run': best_row,
         'paper': paper_payload,
         'artifacts_dir': str(out_dir),
@@ -2385,8 +2432,127 @@ def research_discover_alpha(
         },
     }
     _emit(payload, as_json=as_json)
-    if not gate_payload['passed']:
-        raise click.ClickException('discover-alpha gate failed')
+    if enforce_gate and not gate_payload['passed']:
+        raise click.ClickException('auto-tune gate failed')
+
+
+@research.command('auto-tune')
+@click.option(
+    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
+)
+@click.option(
+    '--strategy-ref',
+    required=True,
+    help='Strategy ref (module:Class or /path.py:Class) authored by the agent.',
+)
+@click.option('--strategy-kwargs-json', default='{}', show_default=True)
+@click.option(
+    '--param-grid-json',
+    default=None,
+    help='Optional JSON object mapping param names to candidate value lists.',
+)
+@click.option('--market-id', default=None)
+@click.option('--event-id', default=None)
+@click.option(
+    '--market-sort-by',
+    default='file',
+    show_default=True,
+    type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
+)
+@click.option('--market-rank', default=1, show_default=True, type=int)
+@click.option('--initial-capital', default='10000', show_default=True)
+@click.option(
+    '--spread',
+    default='0.01',
+    show_default=True,
+    help='Synthetic bid/ask half-spread for simulated backtests.',
+)
+@click.option('--max-runs', default=60, show_default=True, type=int)
+@click.option(
+    '--selection-key',
+    default='total_pnl',
+    show_default=True,
+    type=click.Choice(
+        ['none', 'alpha_score', 'total_pnl', 'sharpe_ratio', 'win_rate', 'max_drawdown']
+    ),
+)
+@click.option('--min-trades', default=0, show_default=True, type=int)
+@click.option('--min-total-pnl', default='-1000000000', show_default=True)
+@click.option('--max-drawdown-pct', default='1.0', show_default=True)
+@click.option(
+    '--enforce-gate/--no-enforce-gate',
+    default=False,
+    help='When enabled, fail command if selected run does not pass gate checks.',
+)
+@click.option('--run-paper/--no-run-paper', default=False)
+@click.option('--paper-duration', default=30.0, show_default=True, type=float)
+@click.option(
+    '--shuffle-candidates/--no-shuffle-candidates',
+    default=False,
+    help='Shuffle strategy/parameter candidates before applying --max-runs.',
+)
+@click.option(
+    '--seed',
+    default=None,
+    type=int,
+    help='Optional random seed used when --shuffle-candidates is enabled.',
+)
+@click.option(
+    '--artifacts-dir',
+    default='data/research/auto_tune',
+    show_default=True,
+    type=click.Path(file_okay=False),
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def research_auto_tune(
+    history_file: str,
+    strategy_ref: str,
+    strategy_kwargs_json: str,
+    param_grid_json: str | None,
+    market_id: str | None,
+    event_id: str | None,
+    market_sort_by: str,
+    market_rank: int,
+    initial_capital: str,
+    spread: str,
+    max_runs: int,
+    selection_key: str,
+    min_trades: int,
+    min_total_pnl: str,
+    max_drawdown_pct: str,
+    enforce_gate: bool,
+    run_paper: bool,
+    paper_duration: float,
+    shuffle_candidates: bool,
+    seed: int | None,
+    artifacts_dir: str,
+    as_json: bool,
+) -> None:
+    """Auto-tune one agent-authored strategy over a parameter grid."""
+    research_discover_alpha(
+        history_file=history_file,
+        strategy_ref=strategy_ref,
+        strategy_kwargs_json=strategy_kwargs_json,
+        market_id=market_id,
+        event_id=event_id,
+        market_sort_by=market_sort_by,
+        market_rank=market_rank,
+        initial_capital=initial_capital,
+        spread=spread,
+        param_grid_json=param_grid_json,
+        max_runs=max_runs,
+        min_trades=min_trades,
+        min_total_pnl=min_total_pnl,
+        max_drawdown_pct=max_drawdown_pct,
+        selection_key=selection_key,
+        enforce_gate=enforce_gate,
+        run_paper=run_paper,
+        paper_duration=paper_duration,
+        shuffle_candidates=shuffle_candidates,
+        seed=seed,
+        artifacts_dir=artifacts_dir,
+        as_json=as_json,
+    )
 
 
 @research.group('memory')
