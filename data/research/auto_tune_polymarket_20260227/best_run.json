@@ -1,0 +1,46 @@
+{
+  "run": 4,
+  "ok": true,
+  "strategy_ref": "/Users/yuhaofei/Downloads/prediction-market-cli/polymarket_paper_strategy.py:PolymarketPaperStrategy",
+  "strategy_kwargs": {
+    "allowed_tickers": "824952,16167",
+    "buy_limit_cap": "0.99",
+    "sell_limit_floor": "0.01",
+    "max_spread": "0.99",
+    "trade_size": "2",
+    "buy_below": "0.20",
+    "sell_above": "0.75",
+    "cross_amount": "0.20",
+    "cooldown_seconds": 15,
+    "max_position_per_ticker": "10"
+  },
+  "metrics": {
+    "total_trades": 1,
+    "winning_trades": 0,
+    "losing_trades": 1,
+    "win_rate": "0",
+    "total_pnl": "-0.420",
+    "average_profit": "0",
+    "average_loss": "-0.420",
+    "profit_factor": "0E+3",
+    "max_drawdown": "0.000042",
+    "sharpe_ratio": "0",
+    "decision_stats": {
+      "decisions": 0,
+      "executed": 0,
+      "buy_yes": 0,
+      "buy_no": 0,
+      "sells": 0,
+      "closes": 0,
+      "holds": 0
+    },
+    "orders": 1
+  },
+  "alpha_score": -0.4505,
+  "gate_passed": true,
+  "gate_checks": {
+    "min_trades_ok": true,
+    "min_pnl_ok": true,
+    "max_drawdown_ok": true
+  }
+}

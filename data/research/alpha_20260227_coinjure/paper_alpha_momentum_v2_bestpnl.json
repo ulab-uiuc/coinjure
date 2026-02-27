@@ -1,0 +1,9 @@
+{"mode": "paper", "exchange": "rss", "strategy_ref": "strategies/alpha_momentum_v2.py:AlphaMomentumV2", "strategy_kwargs": {"min_move": 0.003, "trade_size": 10, "max_hold": 12, "cooldown": 0}, "strategy_mode": "active", "message": "Starting paper mode (rss)"}
+Live trading stopped after 20.0 seconds.
+Live trading session ended.
+
+--- Final Portfolio Status ---
+Cash positions: [Position(ticker=CashTicker(symbol='PolyMarket_USDC', name='PolyMarket USDC'), quantity=Decimal('10000'), average_cost=Decimal('0'), realized_pnl=Decimal('0'))]
+Non-cash positions: []
+Total realized PnL: 0.0
+{"mode": "paper", "message": "Paper session ended"}

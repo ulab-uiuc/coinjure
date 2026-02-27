@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "runs": 48,
+  "ok_runs": 48,
+  "best": {
+    "up_move_pct": 0.003,
+    "down_move_pct": 0.003,
+    "trade_size": 20,
+    "total_trades": 216,
+    "winning_trades": 106,
+    "losing_trades": 110,
+    "win_rate": "0.4907407407407407407407407407",
+    "total_pnl": "-77.8000",
+    "average_profit": "2.783018867924528301886792453",
+    "average_loss": "-3.389090909090909090909090909",
+    "profit_factor": "0.7913090128755364806866952790",
+    "max_drawdown": "0.00811",
+    "sharpe_ratio": "-5.5945",
+    "decision_stats": {
+      "decisions": 2008,
+      "executed": 216,
+      "buy_yes": 110,
+      "sells": 106,
+      "holds": 1792
+    },
+    "orders": 216
+  },
+  "sort_key": "sharpe_ratio",
+  "output": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/grid_threshold_momentum.jsonl"
+}

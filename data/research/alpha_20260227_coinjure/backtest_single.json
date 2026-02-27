@@ -1,0 +1,20 @@
+{
+  "total_trades": 24,
+  "winning_trades": 12,
+  "losing_trades": 12,
+  "win_rate": "0.5",
+  "total_pnl": "-52.54492503179056794733273591",
+  "average_profit": "22.18907656873707878287696548",
+  "average_loss": "-26.56782032138629277848802679",
+  "profit_factor": "0.8351861876631084579025281625",
+  "max_drawdown": "0.0072281767137053725842069576",
+  "sharpe_ratio": "-1.8785",
+  "decision_stats": {
+    "decisions": 24,
+    "executed": 24,
+    "buy_yes": 12,
+    "sells": 12,
+    "holds": 0
+  },
+  "orders": 24
+}

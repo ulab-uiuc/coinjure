@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "message": "Alpha pipeline complete",
+  "selected_market": {
+    "market_id": "1198423",
+    "event_id": "114242",
+    "source": "manual"
+  },
+  "artifacts_dir": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure",
+  "files": {
+    "preflight": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/preflight.json",
+    "backtest_single": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/backtest_single.json",
+    "stress": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/stress.jsonl",
+    "gate": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/gate.json"
+  },
+  "batch_markets": {
+    "total_markets": 20,
+    "ok_markets": 20,
+    "output": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/batch_markets.jsonl"
+  },
+  "metrics": {
+    "total_trades": 24,
+    "winning_trades": 12,
+    "losing_trades": 12,
+    "win_rate": "0.5",
+    "total_pnl": "-52.54492503179056794733273591",
+    "average_profit": "22.18907656873707878287696548",
+    "average_loss": "-26.56782032138629277848802679",
+    "profit_factor": "0.8351861876631084579025281625",
+    "max_drawdown": "0.0072281767137053725842069576",
+    "sharpe_ratio": "-1.8785",
+    "decision_stats": {
+      "decisions": 24,
+      "executed": 24,
+      "buy_yes": 12,
+      "sells": 12,
+      "holds": 0
+    },
+    "orders": 24
+  }
+}

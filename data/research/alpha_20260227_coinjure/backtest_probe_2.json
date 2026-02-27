@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "total_trades": 4,
+  "winning_trades": 2,
+  "losing_trades": 2,
+  "win_rate": "0.5",
+  "total_pnl": "-4.06415094339622641509433962",
+  "average_profit": "28.56792452830188679245283018",
+  "average_loss": "-30.59999999999999999999999999",
+  "profit_factor": "0.9335923048464668886422493526",
+  "max_drawdown": "0.0032354716981132075471698113",
+  "sharpe_ratio": "-0.8193",
+  "decision_stats": {},
+  "orders": 14
+}

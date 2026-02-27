@@ -1,0 +1,33 @@
+{
+  "run": 2,
+  "ok": true,
+  "strategy_ref": "coinjure.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy",
+  "strategy_kwargs": {},
+  "metrics": {
+    "total_trades": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "win_rate": "0",
+    "total_pnl": "0",
+    "average_profit": "0",
+    "average_loss": "0",
+    "profit_factor": "0",
+    "max_drawdown": "0",
+    "sharpe_ratio": "0",
+    "decision_stats": {
+      "decisions": 0,
+      "executed": 0,
+      "buy_yes": 0,
+      "holds": 0,
+      "closes": 0
+    },
+    "orders": 0
+  },
+  "alpha_score": 0.0,
+  "gate_passed": false,
+  "gate_checks": {
+    "min_trades_ok": false,
+    "min_pnl_ok": true,
+    "max_drawdown_ok": true
+  }
+}

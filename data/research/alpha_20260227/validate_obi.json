@@ -1,0 +1,92 @@
+{
+  "ok": true,
+  "strategy_ref": "coinjure.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy",
+  "strategy_kwargs": {
+    "depth": 3,
+    "entry_threshold": 0.05,
+    "exit_threshold": -0.02,
+    "position_size": 20,
+    "max_hold_seconds": 300
+  },
+  "class": "OrderBookImbalanceStrategy",
+  "module": "coinjure.strategy.orderbook_imbalance_strategy",
+  "message": "Dry-run completed",
+  "events_requested": 10,
+  "events_processed": 10,
+  "orders_created": 5,
+  "decision_stats": {
+    "decisions": 5,
+    "executed": 5,
+    "buy_yes": 3,
+    "holds": 0,
+    "closes": 2
+  },
+  "decisions_sample": [
+    {
+      "timestamp": "17:39:36",
+      "ticker_name": "Dry Run Market",
+      "action": "BUY_YES",
+      "executed": true,
+      "confidence": 0.0,
+      "reasoning": "imbalance=0.052 > threshold=0.05",
+      "signal_values": {
+        "imbalance": 0.052132701421800945,
+        "bid_vol": 1110.0,
+        "ask_vol": 1000.0
+      }
+    },
+    {
+      "timestamp": "17:39:36",
+      "ticker_name": "Dry Run Market",
+      "action": "CLOSE_OBI",
+      "executed": true,
+      "confidence": 0.0,
+      "reasoning": "imbalance=-0.061, elapsed=0s",
+      "signal_values": {
+        "imbalance": -0.06103286384976526,
+        "bid_vol": 1000.0,
+        "ask_vol": 1130.0
+      }
+    },
+    {
+      "timestamp": "17:39:36",
+      "ticker_name": "Dry Run Market",
+      "action": "BUY_YES",
+      "executed": true,
+      "confidence": 0.0,
+      "reasoning": "imbalance=0.070 > threshold=0.05",
+      "signal_values": {
+        "imbalance": 0.06976744186046512,
+        "bid_vol": 1150.0,
+        "ask_vol": 1000.0
+      }
+    },
+    {
+      "timestamp": "17:39:36",
+      "ticker_name": "Dry Run Market",
+      "action": "CLOSE_OBI",
+      "executed": true,
+      "confidence": 0.0,
+      "reasoning": "imbalance=-0.078, elapsed=0s",
+      "signal_values": {
+        "imbalance": -0.07834101382488479,
+        "bid_vol": 1000.0,
+        "ask_vol": 1170.0
+      }
+    },
+    {
+      "timestamp": "17:39:36",
+      "ticker_name": "Dry Run Market",
+      "action": "BUY_YES",
+      "executed": true,
+      "confidence": 0.0,
+      "reasoning": "imbalance=0.087 > threshold=0.05",
+      "signal_values": {
+        "imbalance": 0.0867579908675799,
+        "bid_vol": 1190.0,
+        "ask_vol": 1000.0
+      }
+    }
+  ],
+  "error": null
+}

@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "duration": 60.0,
+  "history_file": "/Users/yuhaofei/Downloads/prediction-market-cli/data/backtest_5min.jsonl",
+  "market_id": "1198423",
+  "event_id": "114242"
+}

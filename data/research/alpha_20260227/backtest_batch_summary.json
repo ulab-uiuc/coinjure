@@ -1,0 +1,6 @@
+{
+  "message": "Batch backtest complete",
+  "output": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227/runs.jsonl",
+  "runs": 5,
+  "ok_runs": 5
+}

@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "strategy_ref": "strategies/alpha_momentum_v2.py:AlphaMomentumV2",
+  "strategy_kwargs": {
+    "min_move": 0.003,
+    "trade_size": 10,
+    "max_hold": 12,
+    "cooldown": 0
+  },
+  "class": "AlphaMomentumV2",
+  "module": "_swm_user_strategy_2a6d02dfb9fc420c9a21169f243ff2ad",
+  "message": "Dry-run completed",
+  "events_requested": 10,
+  "events_processed": 10,
+  "orders_created": 1,
+  "decision_stats": {
+    "decisions": 1,
+    "executed": 1,
+    "buy_yes": 1,
+    "sells": 0,
+    "holds": 0
+  },
+  "decisions_sample": [
+    {
+      "timestamp": "18:53:52",
+      "ticker_name": "Dry Run Market",
+      "action": "BUY_YES",
+      "executed": true,
+      "confidence": 0.0,
+      "reasoning": "entry on 2-leg momentum",
+      "signal_values": { "move1": 0.02, "move2": 0.01, "price": 0.49 }
+    }
+  ],
+  "error": null
+}

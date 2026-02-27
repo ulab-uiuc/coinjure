@@ -1,0 +1,39 @@
+{
+  "run": 1,
+  "ok": true,
+  "strategy_kwargs": {
+    "half_spread": "0.001",
+    "trade_size": "10",
+    "drop_threshold": "0.003",
+    "take_profit_pct": "0.004",
+    "max_hold": 8,
+    "cooldown": 2
+  },
+  "metrics": {
+    "total_trades": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "win_rate": "0",
+    "total_pnl": "0",
+    "average_profit": "0",
+    "average_loss": "0",
+    "profit_factor": "0",
+    "max_drawdown": "0",
+    "sharpe_ratio": "0",
+    "decision_stats": {
+      "decisions": 2008,
+      "executed": 0,
+      "buy_yes": 0,
+      "sells": 0,
+      "holds": 1888
+    },
+    "orders": 120
+  },
+  "alpha_score": 0.0,
+  "gate_passed": false,
+  "gate_checks": {
+    "min_trades_ok": false,
+    "min_pnl_ok": false,
+    "max_drawdown_ok": true
+  }
+}

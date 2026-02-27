@@ -1,0 +1,40 @@
+{
+  "run": 12,
+  "ok": true,
+  "strategy_ref": "strategies/mean_rev_dip_v1.py:MeanRevDipV1",
+  "strategy_kwargs": {
+    "trade_size": "10",
+    "drop_threshold": "0.008",
+    "take_profit_pct": "0.004",
+    "max_hold": 8,
+    "cooldown": 3,
+    "half_spread": "0.005"
+  },
+  "metrics": {
+    "total_trades": 6,
+    "winning_trades": 3,
+    "losing_trades": 3,
+    "win_rate": "0.5",
+    "total_pnl": "0.02000",
+    "average_profit": "4.09000",
+    "average_loss": "-4.083333333333333333333333333",
+    "profit_factor": "1.001632653061224489795918367",
+    "max_drawdown": "0.0004084965277795138741320698774",
+    "sharpe_ratio": "-2.7986",
+    "decision_stats": {
+      "decisions": 1952,
+      "executed": 6,
+      "buy_yes": 3,
+      "sells": 3,
+      "holds": 1946
+    },
+    "orders": 6
+  },
+  "alpha_score": -0.20212413194487847,
+  "gate_passed": true,
+  "gate_checks": {
+    "min_trades_ok": true,
+    "min_pnl_ok": true,
+    "max_drawdown_ok": true
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "passed": true,
+  "checks": {
+    "min_trades_ok": true,
+    "min_pnl_ok": true,
+    "max_drawdown_ok": true
+  },
+  "metrics": {
+    "total_trades": 6,
+    "winning_trades": 3,
+    "losing_trades": 3,
+    "win_rate": "0.5",
+    "total_pnl": "0.02000",
+    "average_profit": "4.09000",
+    "average_loss": "-4.083333333333333333333333333",
+    "profit_factor": "1.001632653061224489795918367",
+    "max_drawdown": "0.0004084965277795138741320698774",
+    "sharpe_ratio": "-2.7986",
+    "decision_stats": {
+      "decisions": 1952,
+      "executed": 6,
+      "buy_yes": 3,
+      "sells": 3,
+      "holds": 1946
+    },
+    "orders": 6
+  },
+  "thresholds": {
+    "min_trades": 0,
+    "min_total_pnl": "-1000000000",
+    "max_drawdown_pct": "1.0"
+  },
+  "message": "Strategy gate passed"
+}

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "ok_markets": 20,
+  "total_markets": 20,
+  "aggregate": {
+    "mean_win_rate": "0.4544",
+    "mean_sharpe": "-10.059",
+    "stddev_sharpe": "7.8178",
+    "pct_profitable": "0.0",
+    "mean_pnl": "-30.607"
+  },
+  "output": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227_coinjure/batch_threshold_momentum.jsonl"
+}

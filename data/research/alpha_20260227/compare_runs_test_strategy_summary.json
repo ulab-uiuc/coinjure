@@ -1,0 +1,28 @@
+{
+  "message": "Run comparison complete",
+  "sort_key": "sharpe_ratio",
+  "count": 1,
+  "top": [
+    {
+      "rank_hint": 1,
+      "name": "run-1",
+      "ok": true,
+      "score": -2.5012,
+      "metrics": {
+        "total_trades": 216,
+        "winning_trades": 106,
+        "losing_trades": 110,
+        "win_rate": "0.4907407407407407407407407407",
+        "total_pnl": "-389.0000",
+        "average_profit": "13.91509433962264150943396226",
+        "average_loss": "-16.94545454545454545454545455",
+        "profit_factor": "0.7913090128755364806866952790",
+        "max_drawdown": "0.04055",
+        "sharpe_ratio": "-2.5012",
+        "decision_stats": {},
+        "orders": 216
+      }
+    }
+  ],
+  "output": "/Users/yuhaofei/Downloads/prediction-market-cli/data/research/alpha_20260227/top_runs_test_strategy.jsonl"
+}

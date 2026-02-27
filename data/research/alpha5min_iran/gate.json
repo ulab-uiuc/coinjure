@@ -1,0 +1,34 @@
+{
+  "passed": false,
+  "checks": {
+    "dry_run_ok": true,
+    "min_trades_ok": true,
+    "min_pnl_ok": false,
+    "max_drawdown_ok": true
+  },
+  "metrics": {
+    "total_trades": 60,
+    "winning_trades": 30,
+    "losing_trades": 30,
+    "win_rate": "0.5",
+    "total_pnl": "-12.6250",
+    "average_profit": "2.9500",
+    "average_loss": "-3.370833333333333333333333333",
+    "profit_factor": "0.8751545117428924598269468480",
+    "max_drawdown": "0.0014375",
+    "sharpe_ratio": "-4.6994",
+    "decision_stats": {
+      "decisions": 2008,
+      "executed": 60,
+      "buy_yes": 30,
+      "sell_yes": 30,
+      "holds": 1948
+    },
+    "orders": 60
+  },
+  "thresholds": {
+    "min_trades": 1,
+    "min_total_pnl": "0",
+    "max_drawdown_pct": "0.30"
+  }
+}

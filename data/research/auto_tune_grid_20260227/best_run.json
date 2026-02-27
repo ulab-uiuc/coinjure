@@ -1,0 +1,37 @@
+{
+  "run": 1,
+  "ok": true,
+  "strategy_ref": "./examples/strategies/threshold_momentum_strategy.py:ThresholdMomentumStrategy",
+  "strategy_kwargs": {
+    "up_move_pct": "0.005",
+    "down_move_pct": "0.005",
+    "trade_size": "5"
+  },
+  "metrics": {
+    "total_trades": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "win_rate": "0",
+    "total_pnl": "0",
+    "average_profit": "0",
+    "average_loss": "0",
+    "profit_factor": "0",
+    "max_drawdown": "0",
+    "sharpe_ratio": "0",
+    "decision_stats": {
+      "decisions": 0,
+      "executed": 0,
+      "buy_yes": 0,
+      "sells": 0,
+      "holds": 0
+    },
+    "orders": 0
+  },
+  "alpha_score": 0.0,
+  "gate_passed": false,
+  "gate_checks": {
+    "min_trades_ok": false,
+    "min_pnl_ok": true,
+    "max_drawdown_ok": true
+  }
+}

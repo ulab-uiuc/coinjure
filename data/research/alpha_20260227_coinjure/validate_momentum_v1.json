@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "strategy_ref": "strategies/momentum_v1.py:MomentumV1",
+  "strategy_kwargs": {},
+  "class": "MomentumV1",
+  "module": "_swm_user_strategy_43acdb25869b4a34b4ac7ad28040298c",
+  "message": "Dry-run completed",
+  "events_requested": 10,
+  "events_processed": 10,
+  "orders_created": 0,
+  "decision_stats": {},
+  "decisions_sample": [],
+  "error": null
+}

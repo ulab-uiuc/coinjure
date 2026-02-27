@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "events_requested": 10,
+  "events_processed": 10,
+  "orders_created": 1,
+  "decision_stats": {
+    "decisions": 1,
+    "executed": 1,
+    "buy_yes": 1,
+    "sells": 0,
+    "holds": 0
+  },
+  "error": null
+}
