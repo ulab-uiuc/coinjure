@@ -198,3 +198,56 @@ class TestMarketDataManager:
 
         best = market_data.get_best_ask(test_ticker)
         assert best.price == Decimal('0.55')
+
+
+class TestNoSideBootstrap:
+    """Tests for No-side orderbook bootstrap from PriceChangeEvent."""
+
+    def test_no_orderbook_bootstrapped_on_first_yes_event(self, market_data: MarketDataManager):
+        yes = PolyMarketTicker(
+            symbol='YES', name='T', token_id='YES', no_token_id='NO',
+            market_id='M', event_id='E',
+        )
+        no = yes.get_no_ticker()
+        event = PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
+        market_data.process_price_change_event(event)
+
+        # No orderbook should exist with complement prices
+        no_bid = market_data.get_best_bid(no)
+        no_ask = market_data.get_best_ask(no)
+        assert no_bid is not None
+        assert no_ask is not None
+        assert no_bid.price == Decimal('0.395')  # 1 - 0.60 - 0.005
+        assert no_ask.price == Decimal('0.405')  # 1 - 0.60 + 0.005
+
+    def test_no_orderbook_not_overwritten_by_second_yes_event(self, market_data: MarketDataManager):
+        yes = PolyMarketTicker(
+            symbol='YES', name='T', token_id='YES', no_token_id='NO',
+            market_id='M', event_id='E',
+        )
+        no = yes.get_no_ticker()
+
+        # First Yes event bootstraps No OB
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
+        )
+        # Directly update No OB (simulating a No PriceChangeEvent)
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=no, price=Decimal('0.30'), timestamp='t1')
+        )
+        # Second Yes event should NOT overwrite No OB
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=yes, price=Decimal('0.80'), timestamp='t2')
+        )
+
+        no_bid = market_data.get_best_bid(no)
+        # Should still reflect the direct No event (0.30), not Yes-derived (0.20)
+        assert no_bid.price == Decimal('0.295')
+
+    def test_no_bootstrap_skipped_without_no_token(self, market_data: MarketDataManager):
+        ticker = PolyMarketTicker(symbol='SOLO', name='Solo')
+        event = PriceChangeEvent(ticker=ticker, price=Decimal('0.50'), timestamp='t0')
+        market_data.process_price_change_event(event)
+
+        # Only the Yes orderbook should exist
+        assert len(market_data.order_books) == 1

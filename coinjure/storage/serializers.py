@@ -44,6 +44,7 @@ def serialize_ticker(ticker: Ticker) -> dict:
             'market_ticker': ticker.market_ticker,
             'event_ticker': ticker.event_ticker,
             'series_ticker': ticker.series_ticker,
+            'is_no_side': ticker.is_no_side,
         }
     if isinstance(ticker, CashTicker):
         return {
@@ -73,6 +74,7 @@ def deserialize_ticker(d: dict) -> Ticker:
             market_ticker=d.get('market_ticker', ''),
             event_ticker=d.get('event_ticker', ''),
             series_ticker=d.get('series_ticker', ''),
+            is_no_side=d.get('is_no_side', False),
         )
     if ticker_type == 'CashTicker':
         symbol = d['symbol']

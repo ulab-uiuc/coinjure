@@ -19,6 +19,7 @@ class HistoricalDataSource(DataSource):
 
     def _load_events(self) -> list[Event]:
         events: list[Event] = []
+        no_ticker = self.ticker.get_no_ticker()
 
         try:
             with open(self.history_file) as f:
@@ -34,12 +35,23 @@ class HistoricalDataSource(DataSource):
                             for entry in ts_yes:
                                 timestamp = entry.get('t')
                                 price = entry.get('p')
+                                yes_price = Decimal(str(price))
                                 event = PriceChangeEvent(
                                     ticker=self.ticker,
-                                    price=Decimal(str(price)),
+                                    price=yes_price,
                                     timestamp=timestamp,
                                 )
                                 events.append(event)
+
+                                # Also emit No-side price event
+                                if no_ticker is not None:
+                                    no_price = Decimal('1') - yes_price
+                                    no_event = PriceChangeEvent(
+                                        ticker=no_ticker,
+                                        price=no_price,
+                                        timestamp=timestamp,
+                                    )
+                                    events.append(no_event)
         except Exception as e:
             logger.error('Error loading events from %s: %s', self.history_file, e)
 
