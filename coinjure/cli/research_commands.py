@@ -16,6 +16,7 @@ from typing import Any
 import click
 
 from coinjure.core.trading_engine import TradingEngine
+from coinjure.data.backtest.history_reader import iter_history_rows
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.position.position_manager import Position, PositionManager
@@ -52,11 +53,59 @@ def _to_decimal(value: object) -> Decimal | None:
         return None
 
 
-def _to_int(value: object) -> int | None:
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except Exception:  # noqa: BLE001
+def _to_timestamp_int(value: object) -> int | None:
+    if isinstance(value, bool):
         return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+        try:
+            # Support both "...Z" and explicit offsets.
+            iso = raw.replace('Z', '+00:00')
+            parsed = datetime.fromisoformat(iso)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return int(parsed.timestamp())
+        except ValueError:
+            return None
+    return None
+
+
+def _to_timestamp(value: object) -> int | None:
+    """Convert a timestamp value into epoch seconds.
+
+    Supports:
+    - integer / numeric epoch timestamps
+    - ISO-8601 strings like ``2025-12-06T06:00:14+00:00`` or ``...Z``
+    """
+    as_int = _to_int(value)
+    if as_int is not None:
+        return as_int
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            if raw.endswith('Z'):
+                raw = f'{raw[:-1]}+00:00'
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
+        except Exception:  # noqa: BLE001
+            return None
+
+    return None
 
 
 def _to_timestamp(value: object) -> int | None:
@@ -106,19 +155,22 @@ def _load_yes_series(  # noqa: C901
         raise click.ClickException(f'History file not found: {path}')
 
     raw_points: list[tuple[int, Decimal]] = []
-    with path.open(encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+    for row in iter_history_rows(str(path)):
+        if str(row.get('event_id')) != event_id or str(row.get('market_id')) != market_id:
+            continue
+        yes_series = (row.get('time_series') or {}).get('Yes')
+        if not isinstance(yes_series, list):
+            continue
+        for point in yes_series:
+            if not isinstance(point, dict):
                 continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
+            ts = _to_timestamp_int(point.get('t'))
+            price = _to_decimal(point.get('p'))
+            if ts is None or price is None:
                 continue
-            if row.get('event_id') != event_id or row.get('market_id') != market_id:
+            if start_ts is not None and ts < start_ts:
                 continue
-            yes_series = (row.get('time_series') or {}).get('Yes')
-            if not isinstance(yes_series, list):
+            if end_ts is not None and ts > end_ts:
                 continue
             for point in yes_series:
                 if not isinstance(point, dict):

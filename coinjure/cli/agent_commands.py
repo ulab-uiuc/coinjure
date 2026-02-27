@@ -12,6 +12,7 @@ from typing import Any
 import click
 
 from coinjure.backtest.backtester import run_backtest
+from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.composite_data_source import CompositeDataSource
 from coinjure.data.live.google_news_data_source import GoogleNewsDataSource
 from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
@@ -381,6 +382,12 @@ def backtest() -> None:
 @click.option('--event-id', required=True)
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
+    '--spread',
+    default='0.01',
+    show_default=True,
+    help='Synthetic bid-ask spread for simulated order book.',
+)
+@click.option(
     '--strategy-ref',
     default='coinjure.strategy.test_strategy:TestStrategy',
     show_default=True,
@@ -407,6 +414,7 @@ def backtest_run(
     market_id: str,
     event_id: str,
     initial_capital: str,
+    spread: str,
     strategy_ref: str,
     strategy_kwargs_json: str | None,
     min_fill_rate: str,
@@ -491,6 +499,7 @@ def backtest_run(
             ticker_symbol=ticker,
             initial_capital=capital,
             strategy=strategy_obj,
+            spread=spread_val,
         )
     )
     _emit({'mode': 'backtest', 'message': 'Backtest completed'}, as_json=as_json)
@@ -512,6 +521,34 @@ def paper() -> None:
 )
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
+    '--history-file',
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help='Replay local historical data file for offline paper trading.',
+)
+@click.option(
+    '--market-id',
+    default=None,
+    help='Required with --history-file (target market id in history file).',
+)
+@click.option(
+    '--event-id',
+    default=None,
+    help='Required with --history-file (target event id in history file).',
+)
+@click.option(
+    '--symbol',
+    default='BACKTEST_TOKEN',
+    show_default=True,
+    help='Ticker symbol used in historical replay mode.',
+)
+@click.option(
+    '--name',
+    default='Backtest Market',
+    show_default=True,
+    help='Market name used in historical replay mode.',
+)
+@click.option(
     '--strategy-ref',
     default=None,
     help='Strategy ref: module:Class or /path/file.py:Class. If omitted, run in idle mode (no orders).',
@@ -529,12 +566,26 @@ def paper_run(
     exchange: str,
     duration: float | None,
     initial_capital: str,
+    history_file: str | None,
+    market_id: str | None,
+    event_id: str | None,
+    symbol: str,
+    name: str,
     strategy_ref: str,
     strategy_kwargs_json: str | None,
     as_json: bool,
     monitor: bool,
 ) -> None:
     """Run paper trading in simulation mode."""
+    if history_file and (not market_id or not event_id):
+        raise click.ClickException(
+            '--history-file requires both --market-id and --event-id.'
+        )
+    if not history_file and (market_id or event_id):
+        raise click.ClickException(
+            '--market-id/--event-id are only valid with --history-file.'
+        )
+
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     if strategy_kwargs and not strategy_ref:
         raise click.ClickException(
@@ -554,16 +605,52 @@ def paper_run(
             'strategy_ref': strategy_ref,
             'strategy_kwargs': strategy_kwargs,
             'strategy_mode': strategy_mode,
+            'history_file': history_file,
+            'market_id': market_id,
+            'event_id': event_id,
             'message': (
-                f'Starting paper mode ({exchange})'
+                (
+                    f'Starting paper replay mode from {history_file}'
+                    if history_file
+                    else f'Starting paper mode ({exchange})'
+                )
                 if strategy_ref
-                else f'Starting paper mode ({exchange}) in idle mode (no strategy orders)'
+                else (
+                    (
+                        f'Starting paper replay mode from {history_file} in idle mode (no strategy orders)'
+                    )
+                    if history_file
+                    else (
+                        f'Starting paper mode ({exchange}) in idle mode (no strategy orders)'
+                    )
+                )
             ),
         },
         as_json=as_json,
     )
 
-    if exchange == 'polymarket':
+    if history_file:
+        ticker = PolyMarketTicker(
+            symbol=symbol,
+            name=name,
+            market_id=market_id,
+            event_id=event_id,
+            token_id=symbol,
+            no_token_id=f'{symbol}_NO',
+        )
+        data_source = HistoricalDataSource(history_file, ticker)
+        asyncio.run(
+            run_live_paper_trading(
+                data_source=data_source,
+                strategy=strategy_obj,
+                initial_capital=capital,
+                duration=duration,
+                continuous=False,
+                monitor=monitor,
+                exchange_name='Historical Replay',
+            )
+        )
+    elif exchange == 'polymarket':
         data_source = _build_news_augmented_source('polymarket')
         asyncio.run(
             run_live_paper_trading(
