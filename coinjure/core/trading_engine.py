@@ -161,6 +161,10 @@ class TradingEngine:
         # [P1] Deferred news events: collected during market-event draining.
         self._deferred_news: deque[NewsEvent] = deque(maxlen=500)
 
+        # [D1] Data-flow pause flag: when True the event loop sleeps instead
+        # of calling data_source.get_next_event().  Set by ControlServer.
+        self._data_paused: bool = False
+
     # ------------------------------------------------------------------ #
     # Main loop                                                           #
     # ------------------------------------------------------------------ #
@@ -187,6 +191,11 @@ class TradingEngine:
         consecutive_none = 0
 
         while self.running:
+            # [D1] When data flow is paused, sleep instead of polling the source.
+            if self._data_paused:
+                await asyncio.sleep(0.5)
+                continue
+
             try:
                 event = await self.data_source.get_next_event()
             except Exception:

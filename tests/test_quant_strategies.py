@@ -127,7 +127,29 @@ def test_strategy_interface_defaults() -> None:
 
     base = DummyStrategy()
     assert base.get_decisions() == []
-    assert base.get_decision_stats() == {}
+    stats = base.get_decision_stats()
+    assert stats['decisions'] == 0
+    assert stats['executed'] == 0
+    assert stats['holds'] == 0
+
+
+def test_strategy_record_decision_default_buffer() -> None:
+    base = DummyStrategy()
+    base.record_decision(
+        ticker_name='Test',
+        action='BUY',
+        executed=True,
+        reasoning='compat path',
+        signal_values={'edge': 0.1},
+    )
+    decisions = base.get_decisions()
+    stats = base.get_decision_stats()
+    assert len(decisions) == 1
+    assert decisions[0].action == 'BUY'
+    assert decisions[0].signal_values['edge'] == 0.1
+    assert stats['decisions'] == 1
+    assert stats['executed'] == 1
+    assert stats['buy_yes'] == 1
 
 
 def test_simple_strategy_decision_wrapping() -> None:

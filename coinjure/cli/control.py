@@ -7,8 +7,8 @@ Response: {"ok": true, "status": "paused"}
 
 Supported commands
 ------------------
-pause     — suspend LLM decision-making (market data continues)
-resume    — resume LLM decision-making
+pause     — stop data ingestion and LLM decision-making
+resume    — restart data ingestion and LLM decision-making
 stop      — gracefully stop the engine
 status    — return current engine stats
 """
@@ -100,7 +100,7 @@ class ControlServer:
             except Exception:
                 pass
 
-    async def _dispatch(self, req: dict) -> dict[str, Any]:
+    async def _dispatch(self, req: dict) -> dict[str, Any]:  # noqa: C901
         """Route a command and return a response dict."""
         cmd = req.get('cmd', '')
 
@@ -123,10 +123,63 @@ class ControlServer:
         if cmd == 'get_state':
             return self._cmd_get_state()
 
+        if cmd == 'swap_strategy':
+            return await self._cmd_swap_strategy(req)
+
         return {'ok': False, 'error': f'Unknown command: {cmd!r}'}
+
+    async def _cmd_swap_strategy(self, req: dict) -> dict:
+        """Hot-swap the engine's strategy without restarting.
+
+        Request keys:
+          strategy_ref  — required, e.g. 'strategies/foo.py:Foo'
+          kwargs        — optional dict of constructor keyword arguments
+        """
+        from coinjure.strategy.loader import load_strategy_class
+
+        strategy_ref = req.get('strategy_ref', '')
+        kwargs = req.get('kwargs') or {}
+
+        if not strategy_ref:
+            return {'ok': False, 'error': 'strategy_ref is required'}
+
+        # Remember whether we were running so we can restore state after swap.
+        was_paused = self.paused
+
+        # Pause while we swap to avoid partial-state decisions.
+        self._cmd_pause()
+
+        try:
+            strategy_cls = load_strategy_class(strategy_ref)
+        except ValueError as exc:
+            # Restore previous pause state before returning error.
+            if not was_paused:
+                self._cmd_resume()
+            return {'ok': False, 'error': str(exc)}
+
+        try:
+            new_strategy = strategy_cls(**kwargs)
+        except TypeError as exc:
+            if not was_paused:
+                self._cmd_resume()
+            return {
+                'ok': False,
+                'error': f'Could not instantiate {strategy_ref!r} with kwargs={kwargs}: {exc}',
+            }
+
+        # Assign new strategy; existing positions on the trader are preserved.
+        self.engine.strategy = new_strategy
+        logger.info('Strategy hot-swapped to %s', strategy_ref)
+
+        if not was_paused:
+            self._cmd_resume()
+
+        return {'ok': True, 'status': 'swapped', 'strategy_ref': strategy_ref}
 
     def _cmd_pause(self) -> dict:
         self.paused = True
+        # Stop data flow: engine will sleep instead of polling the data source.
+        self.engine._data_paused = True
         # Propagate to strategy so LLM decisions are skipped
         strategy = getattr(self.engine, 'strategy', None)
         trader = getattr(self.engine, 'trader', None)
@@ -138,6 +191,8 @@ class ControlServer:
 
     def _cmd_resume(self) -> dict:
         self.paused = False
+        # Restore data flow.
+        self.engine._data_paused = False
         strategy = getattr(self.engine, 'strategy', None)
         trader = getattr(self.engine, 'trader', None)
         if strategy is not None:
@@ -150,7 +205,11 @@ class ControlServer:
         """Serialize the full engine state for the standalone socket monitor."""
         from decimal import Decimal as D
 
-        state: dict[str, Any] = {'ok': True, 'paused': self.paused}
+        state: dict[str, Any] = {
+            'ok': True,
+            'paused': self.paused,
+            'data_paused': getattr(self.engine, '_data_paused', False),
+        }
         state['runtime'] = str(datetime.now() - self._start_time).split('.')[0]
 
         strategy = getattr(self.engine, 'strategy', None)
@@ -304,6 +363,7 @@ class ControlServer:
         return {
             'ok': True,
             'paused': self.paused,
+            'data_paused': getattr(self.engine, '_data_paused', False),
             'runtime': runtime,
             'event_count': getattr(self.engine, '_event_count', 0),
             'decision_stats': decision_stats,

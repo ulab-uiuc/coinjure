@@ -8,7 +8,6 @@ from coinjure.cli.market_commands import market
 from coinjure.cli.monitor import monitor
 from coinjure.cli.news_commands import news
 from coinjure.cli.research_commands import research
-from coinjure.cli.token import token
 from coinjure.cli.trade_commands import trade
 
 
@@ -20,7 +19,6 @@ def cli() -> None:
 
 
 cli.add_command(monitor)
-cli.add_command(token)
 cli.add_command(trade)
 cli.add_command(strategy)
 cli.add_command(backtest)

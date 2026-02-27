@@ -983,9 +983,20 @@ class SocketTradingMonitorApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title = 'Coinjure — Socket Monitor'
-        self.sub_title = f'Connecting to {self.socket_path} …'
+        self.title = 'Coinjure — Monitor'
+        self.sub_title = (
+            'Waiting for engine…  '
+            'Start one with: coinjure paper run --exchange polymarket'
+        )
+        # Disable all control buttons until first poll confirms connection
+        self.call_after_refresh(self._set_initial_disconnected_state)
         self.set_interval(2.0, self._poll_state)
+
+    def _set_initial_disconnected_state(self) -> None:
+        try:
+            self.query_one('#ctrl-bar', ControlBar).update_state(False, connected=False)
+        except Exception:
+            pass
 
     async def _poll_state(self) -> None:
         """Fetch state from the engine via socket and refresh all widgets."""
@@ -995,7 +1006,14 @@ class SocketTradingMonitorApp(App[None]):
             state = await send_command('get_state', socket_path=self.socket_path)
         except FileNotFoundError:
             self._connected = False
-            self.sub_title = f'⚠  Engine not running ({self.socket_path})'
+            self.sub_title = (
+                '⚠  Waiting for engine…  '
+                'Start one with: coinjure paper run --exchange polymarket'
+            )
+            try:
+                self.query_one('#ctrl-bar', ControlBar).update_state(False, connected=False)
+            except Exception:
+                pass
             return
         except Exception as exc:
             self._connected = False
@@ -1004,11 +1022,14 @@ class SocketTradingMonitorApp(App[None]):
 
         self._connected = True
         self._paused = state.get('paused', False)
-        self.sub_title = (
-            '⏸  Engine PAUSED — click ▶ Resume or: coinjure trade resume'
-            if self._paused
-            else '▶  Engine running — click ⏸ Pause or: coinjure trade pause'
-        )
+        data_paused = state.get('data_paused', False)
+        if self._paused:
+            status_tag = '⏸  Engine PAUSED (data flow stopped) — coinjure trade resume'
+        elif data_paused:
+            status_tag = '⏸  Data flow PAUSED — coinjure trade resume'
+        else:
+            status_tag = '▶  Engine running — click ⏸ Pause or: coinjure trade pause'
+        self.sub_title = status_tag
         last_activity = state.get('activity_log') or []
         last_msg = last_activity[-1][1] if last_activity else 'No activity yet'
         self.sub_title = f'{self.sub_title}  |  Last: {last_msg[:60]}  |  E-Stop: s'
