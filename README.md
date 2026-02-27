@@ -164,11 +164,20 @@ coinjure trade stop
 ```bash
 coinjure data record --exchange polymarket --output ./data/events.jsonl --duration 300
 
+# Standard backtest (interactive output)
 coinjure backtest run \
   --history-file ./data/events.jsonl \
   --market-id M1 \
   --event-id E1 \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy
+
+# Machine-readable JSON output (agent-friendly)
+coinjure backtest run \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --json
+# → {"ok": true, "total_trades": 12, "win_rate": "0.583", "sharpe_ratio": "1.24", ...}
 ```
 
 ### 6) Agent strategy-discovery toolkit (`research`)
@@ -224,7 +233,7 @@ coinjure research scan-markets \
   --output ./data/market_scan.jsonl
 ```
 
-Also available: `research universe`, `research walk-forward`, `research stress-test`, `research strategy-gate`, and `research memory list`.
+Supported intervals: `1d` (default), `6h`, `1h`.
 
 ## Human-in-the-Loop Model
 

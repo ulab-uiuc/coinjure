@@ -6,8 +6,14 @@ from coinjure.ticker.ticker import Ticker
 
 
 class MarketDataManager:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        spread: Decimal = Decimal('0.01'),
+        synthetic_size: Decimal = Decimal('1000'),
+    ) -> None:
         self.order_books: dict[Ticker, OrderBook] = {}
+        self.spread = spread
+        self.synthetic_size = synthetic_size
 
     def update_order_book(self, ticker: Ticker, order_book: OrderBook) -> None:
         self.order_books[ticker] = order_book
@@ -48,12 +54,11 @@ class MarketDataManager:
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
 
-        spread: Decimal = Decimal('0.01')  # Default spread of 0.01
-        half_spread = spread / Decimal('2')
+        half_spread = self.spread / Decimal('2')
         bid_price = max(Decimal('0'), event.price - half_spread)
         ask_price = min(Decimal('1'), event.price + half_spread)
 
-        size = Decimal('1000')
+        size = self.synthetic_size
 
         bids = [Level(price=bid_price, size=size)] if bid_price > Decimal('0') else []
         asks = [Level(price=ask_price, size=size)] if ask_price < Decimal('1') else []

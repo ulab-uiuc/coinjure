@@ -58,9 +58,10 @@ async def run_backtest(
     ticker_symbol: PolyMarketTicker,
     initial_capital: Decimal,
     strategy: Strategy,
+    spread: Decimal = Decimal('0.01'),
 ) -> None:
     data_source = HistoricalDataSource(history_file, ticker_symbol)
-    market_data = MarketDataManager()
+    market_data = MarketDataManager(spread=spread)
     position_manager = PositionManager()
     position_manager.update_position(
         Position(

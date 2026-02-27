@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(# Get the token_id from the market to use CLOB API\ncurl -s \"https://gamma-api.polymarket.com/markets?id=516926\" | python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d[0].get\\('clobTokenIds', []\\)\\)\" 2>/dev/null)",
+      "Bash(poetry run:*)",
+      "Skill(strategy-lab)"
+    ]
+  }
+}
