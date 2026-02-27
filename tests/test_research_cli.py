@@ -88,8 +88,8 @@ def test_research_group_help_lists_tools() -> None:
     assert 'markets' in result.output
     assert 'walk-forward-auto' in result.output
     assert 'alpha-pipeline' in result.output
+    assert 'discover-alpha' in result.output
     assert 'memory' in result.output
-    assert 'scan-markets' in result.output
 
 
 def test_research_slice_features_labels(tmp_path: Path) -> None:
@@ -321,66 +321,9 @@ def test_research_slice_supports_iso_timestamps_in_json_array(tmp_path: Path) ->
     assert rows_out[0]['time_series']['Yes'][0]['t'] == start_ts
 
 
-def test_research_scan_markets_selects_best_run(monkeypatch, tmp_path: Path) -> None:
+def test_research_scan_markets_removed(tmp_path: Path) -> None:
     history = tmp_path / 'history.jsonl'
-    rows = [
-        {
-            'event_id': 'E1',
-            'market_id': 'M1',
-            'time_series': {'Yes': [{'t': 1, 'p': 0.40}, {'t': 2, 'p': 0.45}]},
-        },
-        {
-            'event_id': 'E1',
-            'market_id': 'M1',
-            'time_series': {'Yes': [{'t': 3, 'p': 0.55}, {'t': 4, 'p': 0.50}]},
-        },
-        {
-            'event_id': 'E2',
-            'market_id': 'M2',
-            'time_series': {'Yes': [{'t': 1, 'p': 0.10}, {'t': 2, 'p': 0.20}]},
-        },
-        {
-            'event_id': 'E2',
-            'market_id': 'M2',
-            'time_series': {'Yes': [{'t': 3, 'p': 0.15}, {'t': 4, 'p': 0.30}]},
-        },
-    ]
-    history.write_text(
-        '\n'.join(json.dumps(row) for row in rows) + '\n', encoding='utf-8'
-    )
-    params = tmp_path / 'params.jsonl'
-    params.write_text(
-        '\n'.join(
-            [
-                json.dumps({'id': 'slow', 'strategy_kwargs': {'mode': 'slow'}}),
-                json.dumps({'id': 'fast', 'strategy_kwargs': {'mode': 'fast'}}),
-            ]
-        )
-        + '\n',
-        encoding='utf-8',
-    )
-    output = tmp_path / 'scan_out.jsonl'
-
-    def fake_run_backtest_once(**kwargs):
-        market_id = kwargs['market_id']
-        mode = kwargs['strategy_kwargs'].get('mode')
-        if market_id == 'M1' and mode == 'fast':
-            pnl = Decimal('5')
-        elif market_id == 'M2' and mode == 'slow':
-            pnl = Decimal('2')
-        else:
-            pnl = Decimal('-1')
-        return {
-            'total_trades': 2,
-            'total_pnl': str(pnl),
-            'sharpe_ratio': '1.0' if pnl > 0 else '-1.0',
-            'win_rate': '0.5',
-            'max_drawdown': '0.1',
-        }
-
-    monkeypatch.setattr(
-        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
-    )
+    _write_history(history)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -392,26 +335,95 @@ def test_research_scan_markets_selects_best_run(monkeypatch, tmp_path: Path) -> 
             str(history),
             '--strategy-ref',
             'coinjure.strategy.test_strategy:TestStrategy',
-            '--params-jsonl',
-            str(params),
-            '--max-markets',
-            '2',
-            '--min-points',
-            '3',
             '--output',
-            str(output),
+            str(tmp_path / 'unused.jsonl'),
+        ],
+    )
+    assert result.exit_code != 0
+    assert 'was removed as redundant' in result.output
+
+
+def test_research_discover_alpha_runs_end_to_end(monkeypatch, tmp_path: Path) -> None:
+    history = tmp_path / 'history_iso.jsonl'
+    _write_iso_history(history)
+    artifacts = tmp_path / 'discover_alpha'
+    strategy_file = tmp_path / 'discover_strategy.py'
+    strategy_file.write_text(
+        '\n'.join(
+            [
+                'from coinjure.events.events import Event',
+                'from coinjure.strategy.strategy import Strategy',
+                'from coinjure.trader.trader import Trader',
+                '',
+                'class DiscoverStrategy(Strategy):',
+                '    def __init__(self, momentum_entry: float = 0.01):',
+                '        self.momentum_entry = momentum_entry',
+                '',
+                '    async def process_event(self, event: Event, trader: Trader) -> None:',
+                '        return',
+            ]
+        ),
+        encoding='utf-8',
+    )
+
+    def fake_run_backtest_once(**kwargs):
+        params = kwargs['strategy_kwargs']
+        momentum = params.get('momentum_entry', 0.02)
+        if momentum <= 0.01:
+            pnl = Decimal('5.0')
+            dd = Decimal('0.02')
+        else:
+            pnl = Decimal('-1.0')
+            dd = Decimal('0.08')
+        return {
+            'total_trades': 4,
+            'total_pnl': str(pnl),
+            'sharpe_ratio': '0.8',
+            'win_rate': '0.5',
+            'max_drawdown': str(dd),
+        }
+
+    async def fake_paper_run(**kwargs):
+        return None
+
+    monkeypatch.setattr(
+        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.research_commands.run_live_paper_trading', fake_paper_run
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'discover-alpha',
+            '--history-file',
+            str(history),
+            '--strategy-ref',
+            f'{strategy_file}:DiscoverStrategy',
+            '--market-rank',
+            '1',
+            '--param-grid-json',
+            '{"momentum_entry":[0.01,0.02]}',
+            '--run-paper',
+            '--paper-duration',
+            '1',
+            '--artifacts-dir',
+            str(artifacts),
             '--json',
         ],
     )
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload['markets_scanned'] == 2
-
-    out_rows = _load_jsonl(output)
-    assert len(out_rows) == 2
-    best_by_market = {row['market_id']: row['best_run']['run_id'] for row in out_rows}
-    assert best_by_market['M1'] == 'fast'
-    assert best_by_market['M2'] == 'slow'
+    assert payload['passed'] is True
+    assert payload['ok_runs'] == 2
+    assert payload['best_run']['strategy_kwargs']['momentum_entry'] == 0.01
+    assert (artifacts / 'discover_runs.jsonl').exists()
+    assert (artifacts / 'best_run.json').exists()
+    assert (artifacts / 'gate.json').exists()
+    assert (artifacts / 'paper.json').exists()
 
 
 def test_research_compare_runs_and_memory(tmp_path: Path) -> None:
@@ -689,6 +701,61 @@ def test_research_markets_filters_and_alpha_score(tmp_path: Path) -> None:
     assert ranked.exit_code == 0
     ranked_payload = json.loads(ranked.output)
     assert ranked_payload['top'][0]['name'] == 'balanced'
+
+
+def test_research_grid_supports_alpha_score_sort(monkeypatch, tmp_path: Path) -> None:
+    history = tmp_path / 'history.jsonl'
+    _write_history(history)
+    output = tmp_path / 'grid.jsonl'
+
+    def fake_run_backtest_once(**kwargs):
+        threshold = kwargs['strategy_kwargs'].get('threshold', 0.2)
+        if threshold <= 0.1:
+            return {
+                'total_trades': 5,
+                'total_pnl': '10.0',
+                'sharpe_ratio': '0.6',
+                'win_rate': '0.5',
+                'max_drawdown': '0.10',
+            }
+        return {
+            'total_trades': 5,
+            'total_pnl': '9.0',
+            'sharpe_ratio': '0.7',
+            'win_rate': '0.6',
+            'max_drawdown': '0.01',
+        }
+
+    monkeypatch.setattr(
+        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'research',
+            'grid',
+            '--history-file',
+            str(history),
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--strategy-ref',
+            'coinjure.strategy.test_strategy:TestStrategy',
+            '--param-grid-json',
+            '{"threshold":[0.05,0.2]}',
+            '--sort-key',
+            'alpha_score',
+            '--output',
+            str(output),
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload['best']['threshold'] == 0.2
 
 
 def test_research_alpha_pipeline(monkeypatch, tmp_path: Path) -> None:
