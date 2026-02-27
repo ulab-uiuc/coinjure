@@ -136,11 +136,12 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
         cli,
         [
             'strategy',
-            'dry-run',
+            'validate',
             '--strategy-ref',
             f'{strategy_file}:DryRunStrategy',
             '--strategy-kwargs-json',
             '{"multiplier": 2}',
+            '--dry-run',
             '--events',
             '6',
             '--json',
@@ -292,6 +293,54 @@ def test_paper_run_historical_replay_invokes_runner(monkeypatch, tmp_path):
     assert captured['ticker'].event_id == 'E1'
     assert captured['paper_kwargs']['duration'] == 1.0
     assert captured['paper_kwargs']['continuous'] is False
+    assert captured['paper_kwargs']['emit_text'] is True
+
+
+def test_paper_run_historical_json_disables_text_output(monkeypatch, tmp_path):
+    history_file = tmp_path / 'history.jsonl'
+    history_file.write_text(
+        '{"event_id":"E1","market_id":"M1","time_series":{"Yes":[{"t":1,"p":0.5}]}}\n'
+    )
+
+    captured = {}
+
+    class DummyHistoricalSource:
+        def __init__(self, history_file, ticker):
+            captured['history_file'] = history_file
+            captured['ticker'] = ticker
+
+    async def fake_paper(**kwargs):
+        captured['paper_kwargs'] = kwargs
+
+    monkeypatch.setattr(
+        'coinjure.cli.agent_commands.HistoricalDataSource', DummyHistoricalSource
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.agent_commands.run_live_paper_trading', fake_paper
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'paper',
+            'run',
+            '--history-file',
+            str(history_file),
+            '--market-id',
+            'M1',
+            '--event-id',
+            'E1',
+            '--duration',
+            '1',
+            '--strategy-ref',
+            'coinjure.strategy.test_strategy:TestStrategy',
+            '--json',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured['paper_kwargs']['emit_text'] is False
 
 
 def test_paper_run_historical_requires_market_and_event(tmp_path):

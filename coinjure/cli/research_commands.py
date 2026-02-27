@@ -20,6 +20,7 @@ from coinjure.core.trading_engine import TradingEngine
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.backtest.history_reader import iter_history_rows
 from coinjure.data.market_data_manager import MarketDataManager
+from coinjure.live.live_trader import run_live_paper_trading
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
 from coinjure.strategy.strategy import Strategy
@@ -755,6 +756,24 @@ def _alpha_score_from_metrics(metrics: dict[str, Any]) -> float | None:
     return pnl - drawdown_penalty - turnover_penalty
 
 
+def _build_gate_checks(
+    *,
+    metrics: dict[str, Any],
+    min_trades: int,
+    min_total_pnl: Decimal,
+    max_drawdown_pct: Decimal,
+) -> tuple[bool, dict[str, bool]]:
+    trades = int(metrics.get('total_trades', 0))
+    pnl = _to_decimal(metrics.get('total_pnl'))
+    dd = _to_decimal(metrics.get('max_drawdown'))
+    checks = {
+        'min_trades_ok': trades >= min_trades,
+        'min_pnl_ok': pnl is not None and pnl >= min_total_pnl,
+        'max_drawdown_ok': dd is not None and dd <= max_drawdown_pct,
+    }
+    return all(checks.values()), checks
+
+
 @click.group()
 def research() -> None:
     """Research and strategy-discovery tooling."""
@@ -1114,7 +1133,7 @@ def research_backtest_batch(
     _emit(payload, as_json=as_json)
 
 
-@research.command('scan-markets')
+@research.command('scan-markets', hidden=True)
 @click.option(
     '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
 )
@@ -1147,6 +1166,12 @@ def research_scan_markets(
     as_json: bool,
 ) -> None:
     """Scan many market/event pairs and keep the best run per market."""
+    raise click.ClickException(
+        '`research scan-markets` was removed as redundant. '
+        'Use `research discover-alpha` for end-to-end discovery, or '
+        '`research markets` + `research grid` + `research batch-markets`.'
+    )
+
     if max_markets <= 0:
         raise click.ClickException('--max-markets must be > 0')
     if min_points <= 1:
@@ -2067,6 +2092,293 @@ def research_alpha_pipeline(
         raise click.ClickException('Alpha pipeline gate failed.')
 
 
+@research.command('discover-alpha')
+@click.option(
+    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
+)
+@click.option('--strategy-ref', required=True)
+@click.option('--strategy-kwargs-json', default='{}', show_default=True)
+@click.option('--market-id', default=None)
+@click.option('--event-id', default=None)
+@click.option(
+    '--market-sort-by',
+    default='points',
+    show_default=True,
+    type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
+)
+@click.option('--market-rank', default=1, show_default=True, type=int)
+@click.option('--initial-capital', default='10000', show_default=True)
+@click.option(
+    '--spread',
+    default='0.01',
+    show_default=True,
+    help='Synthetic bid/ask half-spread for simulated backtests.',
+)
+@click.option(
+    '--param-grid-json',
+    default=None,
+    help='Optional JSON object mapping param names to lists.',
+)
+@click.option('--max-runs', default=60, show_default=True, type=int)
+@click.option('--min-trades', default=1, show_default=True, type=int)
+@click.option('--min-total-pnl', default='0', show_default=True)
+@click.option('--max-drawdown-pct', default='0.30', show_default=True)
+@click.option('--run-paper/--no-run-paper', default=False)
+@click.option('--paper-duration', default=30.0, show_default=True, type=float)
+@click.option(
+    '--artifacts-dir',
+    default='data/research/discover_alpha',
+    show_default=True,
+    type=click.Path(file_okay=False),
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def research_discover_alpha(
+    history_file: str,
+    strategy_ref: str,
+    strategy_kwargs_json: str,
+    market_id: str | None,
+    event_id: str | None,
+    market_sort_by: str,
+    market_rank: int,
+    initial_capital: str,
+    spread: str,
+    param_grid_json: str | None,
+    max_runs: int,
+    min_trades: int,
+    min_total_pnl: str,
+    max_drawdown_pct: str,
+    run_paper: bool,
+    paper_duration: float,
+    artifacts_dir: str,
+    as_json: bool,
+) -> None:
+    """Fast end-to-end alpha discovery with optional paper replay."""
+    if market_rank <= 0:
+        raise click.ClickException('--market-rank must be > 0')
+    if max_runs <= 0:
+        raise click.ClickException('--max-runs must be > 0')
+    if paper_duration <= 0:
+        raise click.ClickException('--paper-duration must be > 0')
+
+    capital = _to_decimal(initial_capital)
+    spread_decimal = _to_decimal(spread)
+    min_pnl = _to_decimal(min_total_pnl)
+    max_dd = _to_decimal(max_drawdown_pct)
+    if capital is None or spread_decimal is None or min_pnl is None or max_dd is None:
+        raise click.ClickException('Invalid capital/spread/gate threshold value.')
+    if spread_decimal < Decimal('0'):
+        raise click.ClickException('--spread must be >= 0.')
+
+    base_kwargs = _parse_json_object(
+        strategy_kwargs_json, option_name='--strategy-kwargs-json'
+    )
+
+    summaries = _collect_market_summaries(history_file)
+    ranked = _sort_market_summaries(summaries, sort_by=market_sort_by)
+    if not ranked:
+        raise click.ClickException('No valid markets found in history file.')
+
+    if market_id and event_id:
+        selected_market = {
+            'market_id': market_id,
+            'event_id': event_id,
+            'source': 'manual',
+        }
+    elif not market_id and not event_id:
+        idx = market_rank - 1
+        if idx >= len(ranked):
+            raise click.ClickException(
+                f'--market-rank {market_rank} exceeds available markets ({len(ranked)}).'
+            )
+        selected = ranked[idx]
+        selected_market = {
+            'market_id': str(selected['market_id']),
+            'event_id': str(selected['event_id']),
+            'source': 'auto',
+            'rank': market_rank,
+            'sort_by': market_sort_by,
+            'question': selected.get('question') or '',
+        }
+    else:
+        raise click.ClickException(
+            'Pass both --market-id and --event-id, or omit both for auto selection.'
+        )
+
+    if param_grid_json:
+        param_grid = _parse_json_object(
+            param_grid_json, option_name='--param-grid-json'
+        )
+        for key, vals in param_grid.items():
+            if not isinstance(vals, list):
+                raise click.ClickException(
+                    f'--param-grid-json: value for "{key}" must be a list.'
+                )
+        if not param_grid:
+            combos: list[dict[str, Any]] = [{}]
+        else:
+            keys = list(param_grid.keys())
+            value_lists = [param_grid[k] for k in keys]
+            combos = [
+                dict(zip(keys, combo)) for combo in itertools.product(*value_lists)
+            ]
+    else:
+        combos = [{}]
+    combos = combos[:max_runs]
+    if not combos:
+        raise click.ClickException('No parameter combinations produced for discovery.')
+
+    market_id = str(selected_market['market_id'])
+    event_id = str(selected_market['event_id'])
+
+    out_dir = Path(artifacts_dir).expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    discovery_rows: list[dict[str, object]] = []
+    for idx, combo_kwargs in enumerate(combos, start=1):
+        merged_kwargs = {**base_kwargs, **combo_kwargs}
+        try:
+            metrics = _run_backtest_once(
+                history_file=history_file,
+                strategy_ref=strategy_ref,
+                strategy_kwargs=merged_kwargs,
+                market_id=market_id,
+                event_id=event_id,
+                initial_capital=capital,
+                spread=spread_decimal,
+            )
+            gate_passed, checks = _build_gate_checks(
+                metrics=metrics,
+                min_trades=min_trades,
+                min_total_pnl=min_pnl,
+                max_drawdown_pct=max_dd,
+            )
+            discovery_rows.append(
+                {
+                    'run': idx,
+                    'ok': True,
+                    'strategy_kwargs': merged_kwargs,
+                    'metrics': metrics,
+                    'alpha_score': _alpha_score_from_metrics(metrics),
+                    'gate_passed': gate_passed,
+                    'gate_checks': checks,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            discovery_rows.append(
+                {
+                    'run': idx,
+                    'ok': False,
+                    'strategy_kwargs': merged_kwargs,
+                    'error': str(exc),
+                }
+            )
+
+    runs_path = out_dir / 'discover_runs.jsonl'
+    _write_jsonl(str(runs_path), discovery_rows)
+    ok_rows = [row for row in discovery_rows if row.get('ok')]
+    if not ok_rows:
+        payload = {
+            'passed': False,
+            'message': 'No successful backtest runs in discover-alpha.',
+            'selected_market': selected_market,
+            'artifacts_dir': str(out_dir),
+            'files': {'runs': str(runs_path)},
+        }
+        _emit(payload, as_json=as_json)
+        raise click.ClickException('discover-alpha produced no successful runs.')
+
+    def _rank_key(row: dict[str, object]) -> tuple[float, float, float]:
+        metrics = row.get('metrics')
+        if not isinstance(metrics, dict):
+            return (0.0, float('-inf'), float('-inf'))
+        gate_rank = 1.0 if row.get('gate_passed') else 0.0
+        alpha = row.get('alpha_score')
+        alpha_score = float(alpha) if alpha is not None else float('-inf')
+        pnl = _to_float_metric(metrics.get('total_pnl')) or float('-inf')
+        return (gate_rank, alpha_score, pnl)
+
+    best_row = max(ok_rows, key=_rank_key)
+    best_path = out_dir / 'best_run.json'
+    _write_json(str(best_path), best_row)
+
+    best_metrics = best_row.get('metrics')
+    if not isinstance(best_metrics, dict):
+        raise click.ClickException('Invalid best-run metrics in discovery output.')
+
+    gate_payload = {
+        'passed': bool(best_row.get('gate_passed')),
+        'checks': best_row.get('gate_checks'),
+        'metrics': best_metrics,
+        'thresholds': {
+            'min_trades': min_trades,
+            'min_total_pnl': str(min_pnl),
+            'max_drawdown_pct': str(max_dd),
+        },
+        'message': 'Strategy gate passed'
+        if best_row.get('gate_passed')
+        else 'Strategy gate failed',
+    }
+    gate_path = out_dir / 'gate.json'
+    _write_json(str(gate_path), gate_payload)
+
+    paper_payload: dict[str, object] | None = None
+    if run_paper:
+        strategy_kwargs = best_row.get('strategy_kwargs')
+        if not isinstance(strategy_kwargs, dict):
+            raise click.ClickException('Best run has invalid strategy kwargs.')
+        strategy_obj = _strategy_from_ref(strategy_ref, strategy_kwargs)
+        ticker = PolyMarketTicker(
+            symbol='BACKTEST_TOKEN',
+            name='Backtest Market',
+            market_id=market_id,
+            event_id=event_id,
+            token_id='BACKTEST_TOKEN',
+            no_token_id='BACKTEST_TOKEN_NO',
+        )
+        data_source = HistoricalDataSource(history_file, ticker)
+        asyncio.run(
+            run_live_paper_trading(
+                data_source=data_source,
+                strategy=strategy_obj,
+                initial_capital=capital,
+                duration=paper_duration,
+                continuous=False,
+                exchange_name='Historical Replay',
+                emit_text=not as_json,
+            )
+        )
+        paper_payload = {
+            'ok': True,
+            'duration': paper_duration,
+            'history_file': str(Path(history_file).resolve()),
+            'market_id': market_id,
+            'event_id': event_id,
+        }
+        _write_json(str(out_dir / 'paper.json'), paper_payload)
+
+    payload = {
+        'passed': bool(gate_payload['passed']),
+        'message': 'discover-alpha complete'
+        if gate_payload['passed']
+        else 'discover-alpha gate failed',
+        'selected_market': selected_market,
+        'runs': len(discovery_rows),
+        'ok_runs': len(ok_rows),
+        'best_run': best_row,
+        'paper': paper_payload,
+        'artifacts_dir': str(out_dir),
+        'files': {
+            'runs': str(runs_path),
+            'best': str(best_path),
+            'gate': str(gate_path),
+            'paper': str(out_dir / 'paper.json') if paper_payload else None,
+        },
+    }
+    _emit(payload, as_json=as_json)
+    if not gate_payload['passed']:
+        raise click.ClickException('discover-alpha gate failed')
+
+
 @research.group('memory')
 def research_memory() -> None:
     """Persist and query experiment memory."""
@@ -2293,7 +2605,9 @@ def research_batch_markets(
     '--sort-key',
     default='sharpe_ratio',
     show_default=True,
-    type=click.Choice(['sharpe_ratio', 'total_pnl', 'win_rate', 'max_drawdown']),
+    type=click.Choice(
+        ['sharpe_ratio', 'total_pnl', 'win_rate', 'max_drawdown', 'alpha_score']
+    ),
 )
 @click.option('--output', required=True, type=click.Path(dir_okay=False))
 @click.option('--json', 'as_json', is_flag=True, default=False)
@@ -2367,7 +2681,13 @@ def research_grid(
         reverse = sort_key != 'max_drawdown'
 
         def _score(r: dict[str, object]) -> float:
-            v = _to_float_metric((r.get('metrics') or {}).get(sort_key))  # type: ignore[arg-type]
+            metrics = r.get('metrics')
+            if not isinstance(metrics, dict):
+                return float('-inf') if reverse else float('inf')
+            if sort_key == 'alpha_score':
+                v = _alpha_score_from_metrics(metrics)
+            else:
+                v = _to_float_metric(metrics.get(sort_key))
             return v if v is not None else (float('-inf') if reverse else float('inf'))
 
         best_run = (
