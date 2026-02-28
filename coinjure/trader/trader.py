@@ -39,6 +39,8 @@ class Trader(ABC):
         self._seen_client_order_ids: set[str] = set()
         self._seen_client_order_queue: deque[str] = deque()
         self._max_seen_client_order_ids: int = 5000
+        self._recent_news: deque[dict[str, str]] = deque(maxlen=200)
+        self._allowed_ticker_symbols: set[str] | None = None
 
     @abstractmethod
     async def place_order(
@@ -55,6 +57,26 @@ class Trader(ABC):
     def set_read_only(self, enabled: bool) -> None:
         """Enable/disable read-only mode (blocks new orders when enabled)."""
         self.read_only = enabled
+
+    def set_allowed_tickers(self, tickers: list[Ticker | str] | None) -> None:
+        """Restrict trading to a known set of ticker symbols."""
+        if tickers is None:
+            self._allowed_ticker_symbols = None
+            return
+
+        allowed: set[str] = set()
+        for ticker in tickers:
+            if isinstance(ticker, str):
+                symbol = ticker.strip()
+            else:
+                symbol = ticker.symbol.strip()
+            if symbol:
+                allowed.add(symbol)
+        self._allowed_ticker_symbols = allowed
+
+    def is_ticker_tradable(self, ticker: Ticker) -> bool:
+        allowed = self._allowed_ticker_symbols
+        return allowed is None or ticker.symbol in allowed
 
     def _kill_switch_active(self) -> bool:
         """Global kill-switch that can be toggled outside the process.
@@ -86,3 +108,29 @@ class Trader(ABC):
                 stale = self._seen_client_order_queue.popleft()
                 self._seen_client_order_ids.discard(stale)
         return None
+
+    def record_news(
+        self,
+        *,
+        timestamp: str,
+        title: str,
+        source: str = '',
+        url: str = '',
+    ) -> None:
+        """Store recent news items so all strategy types can inspect them."""
+        self._recent_news.append(
+            {
+                'timestamp': timestamp,
+                'title': title,
+                'source': source,
+                'url': url,
+            }
+        )
+
+    def get_recent_news(self, limit: int | None = None) -> list[dict[str, str]]:
+        news = list(self._recent_news)
+        if limit is not None:
+            if limit <= 0:
+                return []
+            return news[-limit:]
+        return news

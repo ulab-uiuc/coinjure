@@ -6,14 +6,16 @@ from decimal import Decimal
 import pytest
 
 from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.events.events import OrderBookEvent
+from coinjure.events.events import OrderBookEvent, PriceChangeEvent
 from coinjure.order.order_book import Level, OrderBook
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.strategy.agent_strategy import AgentStrategy
 from coinjure.strategy.market_making_strategy import MarketMakingStrategy
 from coinjure.strategy.orderbook_imbalance_strategy import (
     OrderBookImbalanceStrategy,
 )
+from coinjure.strategy.quant_strategy import QuantStrategy
 from coinjure.strategy.simple_strategy import LLMDecision, SimpleStrategy
 from coinjure.strategy.strategy import Strategy, StrategyDecision
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
@@ -21,6 +23,16 @@ from coinjure.trader.paper_trader import PaperTrader
 
 
 class DummyStrategy(Strategy):
+    async def process_event(self, event, trader) -> None:  # type: ignore[no-untyped-def]
+        return
+
+
+class DummyAgentStrategy(AgentStrategy):
+    async def process_event(self, event, trader) -> None:  # type: ignore[no-untyped-def]
+        return
+
+
+class DummyQuantStrategy(QuantStrategy):
     async def process_event(self, event, trader) -> None:  # type: ignore[no-untyped-def]
         return
 
@@ -150,6 +162,87 @@ def test_strategy_record_decision_default_buffer() -> None:
     assert stats['decisions'] == 1
     assert stats['executed'] == 1
     assert stats['buy_yes'] == 1
+
+
+def test_unified_strategy_context_helpers(
+    test_ticker: PolyMarketTicker, paper_trader: PaperTrader
+) -> None:
+    event = PriceChangeEvent(
+        ticker=test_ticker,
+        price=Decimal('0.52'),
+        timestamp='t1',
+    )
+    paper_trader.market_data.process_price_change_event(event)
+    paper_trader.record_news(
+        timestamp='12:00:00',
+        title='Linked market moved',
+        source='test',
+        url='https://example.com',
+    )
+
+    base = DummyStrategy()
+    context = base.bind_context(event, paper_trader)
+
+    assert base.get_context() is context
+    assert context.event_type == 'PriceChangeEvent'
+    assert context.ticker == test_ticker
+    assert context.price_history() == [Decimal('0.52')]
+    assert len(context.market_history()) == 1
+    assert context.recent_news(limit=1)[0]['title'] == 'Linked market moved'
+    assert any(book.symbol == test_ticker.symbol for book in context.order_books())
+    assert any(pos.is_cash for pos in context.positions())
+    assert context.resolve_ticker(test_ticker.symbol) == test_ticker
+    assert context.resolve_trade_ticker(test_ticker.symbol, 'yes') == test_ticker
+
+
+def test_agent_and_quant_helpers_share_same_context_contract(
+    test_ticker: PolyMarketTicker, paper_trader: PaperTrader
+) -> None:
+    event = PriceChangeEvent(
+        ticker=test_ticker,
+        price=Decimal('0.54'),
+        timestamp='t2',
+    )
+    paper_trader.market_data.process_price_change_event(event)
+    paper_trader.record_news(
+        timestamp='12:01:00',
+        title='Related market repriced',
+        source='test',
+        url='https://example.com/2',
+    )
+    related_ticker = PolyMarketTicker(
+        symbol='RELATED',
+        name='Related Market',
+        token_id='related',
+        market_id='M2',
+        event_id='E2',
+    )
+    related_event = PriceChangeEvent(
+        ticker=related_ticker,
+        price=Decimal('0.61'),
+        timestamp='t2',
+    )
+    paper_trader.market_data.process_price_change_event(related_event)
+
+    agent = DummyAgentStrategy()
+    quant = DummyQuantStrategy()
+    agent_context = agent.bind_context(event, paper_trader)
+    quant_context = quant.bind_context(event, paper_trader)
+
+    prompt = agent.build_prompt_context(agent_context)
+    prepared = quant.prepare_data(quant_context)
+
+    assert 'context.price_history' in prompt
+    assert 'price_history' in prompt
+    assert 'recent_news' in prompt
+    assert prepared['ticker'] == test_ticker.symbol
+    assert prepared['price_history'] == [Decimal('0.54')]
+    assert len(prepared['market_history']) == 2
+    assert prepared['recent_news'][0]['title'] == 'Related market repriced'
+    assert quant_context.resolve_ticker('RELATED') == related_ticker
+    assert quant_context.resolve_trade_ticker(test_ticker.symbol, 'no') is None
+    assert len(quant_context.available_tickers()) >= 2
+    assert len(quant_context.available_tickers(include_complements=False)) >= 2
 
 
 def test_simple_strategy_decision_wrapping() -> None:

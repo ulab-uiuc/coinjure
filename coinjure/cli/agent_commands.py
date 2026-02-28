@@ -13,7 +13,6 @@ import click
 
 from coinjure.backtest.backtester import run_backtest
 from coinjure.cli.utils import _emit
-from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.composite_data_source import CompositeDataSource
 from coinjure.data.live.google_news_data_source import GoogleNewsDataSource
 from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
@@ -184,50 +183,125 @@ def strategy() -> None:
 
 @strategy.command('create')
 @click.option('--output', 'output_path', required=True, type=click.Path(path_type=Path))
-@click.option('--class-name', default='AgentStrategy', show_default=True)
+@click.option(
+    '--class-name',
+    default=None,
+    help='Class name (defaults: MyQuantStrategy / MyAgentStrategy)',
+)
 @click.option(
     '--force', is_flag=True, default=False, help='Overwrite output file if it exists.'
 )
-def strategy_create(output_path: Path, class_name: str, force: bool) -> None:
+@click.option(
+    '--type',
+    'strategy_type',
+    default='quant',
+    show_default=True,
+    type=click.Choice(['quant', 'agent']),
+    help="'quant' → QuantStrategy (auto-tunable); 'agent' → AgentStrategy (LLM/tools).",
+)
+def strategy_create(
+    output_path: Path, class_name: str | None, force: bool, strategy_type: str
+) -> None:
     """Create a strategy template that agents can edit."""
     if output_path.exists() and not force:
         raise click.ClickException(
             f'File already exists: {output_path}. Pass --force to overwrite.'
         )
 
-    template = f"""from decimal import Decimal
+    if class_name is None:
+        class_name = (
+            'MyQuantStrategy' if strategy_type == 'quant' else 'MyAgentStrategy'
+        )
 
-from coinjure.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
-from coinjure.strategy.strategy import Strategy
+    if strategy_type == 'quant':
+        template = f"""from __future__ import annotations
+
+from decimal import Decimal
+
+from coinjure.events.events import Event, OrderBookEvent, PriceChangeEvent
+from coinjure.strategy.quant_strategy import QuantStrategy
 from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
 
-class {class_name}(Strategy):
-    \"\"\"Template strategy for agent-driven development.
+class {class_name}(QuantStrategy):
+    \"\"\"Deterministic, numerically-parameterised strategy.
 
-    Implement your signal logic in ``process_event`` and call:
-      await trader.place_order(side=..., ticker=..., limit_price=..., quantity=...)
+    Constructor kwargs are auto-tunable via `research discover-alpha --param-grid-json`.
+    Keep them JSON-serialisable numerics.
+    \"\"\"
+
+    def __init__(
+        self,
+        trade_size: float = 10.0,
+        threshold: float = 0.05,
+    ) -> None:
+        self.trade_size = Decimal(str(trade_size))
+        self.threshold = threshold
+
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        if self.is_paused():
+            return
+        context = self.require_context()
+        if isinstance(event, PriceChangeEvent):
+            # Use prepare_data()/context helpers to load all visible state.
+            data = self.prepare_data(context)
+            self.record_decision(
+                ticker_name=str(event.ticker),
+                action='HOLD',
+                executed=False,
+                reasoning=f'skeleton — replace with your signal logic using {{len(data["price_history"])}} prices',
+                signal_values={{}},
+            )
+            return
+        if isinstance(event, OrderBookEvent):
+            # Use bid/ask updates for microstructure-aware execution.
+            return
+"""
+    else:
+        template = f"""from __future__ import annotations
+
+from decimal import Decimal
+
+from coinjure.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
+from coinjure.strategy.agent_strategy import AgentStrategy
+from coinjure.trader.trader import Trader
+from coinjure.trader.types import TradeSide
+
+
+class {class_name}(AgentStrategy):
+    \"\"\"LLM-driven or tool-using strategy.
+
+    May call external APIs (LLMs, web search, MCP tools).
+    NOT eligible for parameter grid search — evaluate via `paper run --monitor`.
     \"\"\"
 
     def __init__(self) -> None:
         self.trade_size = Decimal('10')
 
     async def process_event(self, event: Event, trader: Trader) -> None:
-        # Example skeleton:
+        if self.is_paused():
+            return
+        context = self.require_context()
         if isinstance(event, NewsEvent):
-            # Analyze event.title / event.news and decide.
+            # build_prompt_context() explains the visible data/tools.
+            prompt = self.build_prompt_context(context)
+            self.record_decision(
+                ticker_name=str(event.ticker) if hasattr(event, 'ticker') else 'unknown',
+                action='HOLD',
+                executed=False,
+                reasoning=f'skeleton — replace with your LLM/tool call\\n{{prompt[:200]}}',
+                signal_values={{}},
+            )
             return
         if isinstance(event, PriceChangeEvent):
-            # Use event.price dynamics for momentum/reversion logic.
             return
         if isinstance(event, OrderBookEvent):
-            # Use bid/ask updates for microstructure-aware execution.
             return
 """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(template)
-    click.echo(f'Created strategy template: {output_path}')
+    click.echo(f'Created {strategy_type} strategy template: {output_path}')
 
 
 @strategy.command('validate')
@@ -402,6 +476,18 @@ def backtest() -> None:
     show_default=True,
     type=click.Choice(['none', 'standard']),
 )
+@click.option(
+    '--all-markets-context/--primary-market-context',
+    default=False,
+    show_default=True,
+    help='Expose all markets from the history file to the strategy context.',
+)
+@click.option(
+    '--allow-cross-market-trading/--primary-market-only',
+    default=False,
+    show_default=True,
+    help='Allow the strategy to place trades outside the requested market.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 def backtest_run(
     history_file: str,
@@ -417,6 +503,8 @@ def backtest_run(
     max_fill_rate: str,
     commission_rate: str,
     risk_profile: str,
+    all_markets_context: bool,
+    allow_cross_market_trading: bool,
     as_json: bool,
 ) -> None:
     """Run backtest mode with historical data + paper execution."""
@@ -452,6 +540,8 @@ def backtest_run(
                 max_fill_rate=fill_max,
                 commission_rate=fee,
                 risk_profile=risk_profile,
+                include_all_markets_context=all_markets_context,
+                allow_cross_market_trading=allow_cross_market_trading,
             )
         except Exception as exc:  # noqa: BLE001
             _emit({'ok': False, 'error': str(exc)}, as_json=True)
@@ -497,6 +587,8 @@ def backtest_run(
             initial_capital=capital,
             strategy=strategy_obj,
             spread=spread_val,
+            include_all_markets_context=all_markets_context,
+            allow_cross_market_trading=allow_cross_market_trading,
         )
     )
     _emit({'mode': 'backtest', 'message': 'Backtest completed'}, as_json=as_json)
@@ -518,34 +610,6 @@ def paper() -> None:
 )
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
-    '--history-file',
-    default=None,
-    type=click.Path(exists=True, dir_okay=False),
-    help='Replay local historical data file for offline paper trading.',
-)
-@click.option(
-    '--market-id',
-    default=None,
-    help='Required with --history-file (target market id in history file).',
-)
-@click.option(
-    '--event-id',
-    default=None,
-    help='Required with --history-file (target event id in history file).',
-)
-@click.option(
-    '--symbol',
-    default='BACKTEST_TOKEN',
-    show_default=True,
-    help='Ticker symbol used in historical replay mode.',
-)
-@click.option(
-    '--name',
-    default='Backtest Market',
-    show_default=True,
-    help='Market name used in historical replay mode.',
-)
-@click.option(
     '--strategy-ref',
     default=None,
     help='Strategy ref: module:Class or /path/file.py:Class. If omitted, run in idle mode (no orders).',
@@ -563,26 +627,12 @@ def paper_run(
     exchange: str,
     duration: float | None,
     initial_capital: str,
-    history_file: str | None,
-    market_id: str | None,
-    event_id: str | None,
-    symbol: str,
-    name: str,
     strategy_ref: str,
     strategy_kwargs_json: str | None,
     as_json: bool,
     monitor: bool,
 ) -> None:
-    """Run paper trading in simulation mode."""
-    if history_file and (not market_id or not event_id):
-        raise click.ClickException(
-            '--history-file requires both --market-id and --event-id.'
-        )
-    if not history_file and (market_id or event_id):
-        raise click.ClickException(
-            '--market-id/--event-id are only valid with --history-file.'
-        )
-
+    """Run paper trading against a live exchange feed."""
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     if strategy_kwargs and not strategy_ref:
         raise click.ClickException(
@@ -602,53 +652,16 @@ def paper_run(
             'strategy_ref': strategy_ref,
             'strategy_kwargs': strategy_kwargs,
             'strategy_mode': strategy_mode,
-            'history_file': history_file,
-            'market_id': market_id,
-            'event_id': event_id,
             'message': (
-                (
-                    f'Starting paper replay mode from {history_file}'
-                    if history_file
-                    else f'Starting paper mode ({exchange})'
-                )
+                f'Starting paper mode ({exchange})'
                 if strategy_ref
-                else (
-                    (
-                        f'Starting paper replay mode from {history_file} in idle mode (no strategy orders)'
-                    )
-                    if history_file
-                    else (
-                        f'Starting paper mode ({exchange}) in idle mode (no strategy orders)'
-                    )
-                )
+                else f'Starting paper mode ({exchange}) in idle mode (no strategy orders)'
             ),
         },
         as_json=as_json,
     )
 
-    if history_file:
-        ticker = PolyMarketTicker(
-            symbol=symbol,
-            name=name,
-            market_id=market_id,
-            event_id=event_id,
-            token_id=symbol,
-            no_token_id=f'{symbol}_NO',
-        )
-        data_source = HistoricalDataSource(history_file, ticker)
-        asyncio.run(
-            run_live_paper_trading(
-                data_source=data_source,
-                strategy=strategy_obj,
-                initial_capital=capital,
-                duration=duration,
-                continuous=False,
-                monitor=monitor,
-                exchange_name='Historical Replay',
-                emit_text=not as_json,
-            )
-        )
-    elif exchange == 'polymarket':
+    if exchange == 'polymarket':
         data_source = _build_news_augmented_source('polymarket')
         asyncio.run(
             run_live_paper_trading(

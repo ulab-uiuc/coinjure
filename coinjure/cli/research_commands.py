@@ -24,6 +24,7 @@ from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.live.live_trader import run_live_paper_trading
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.strategy.loader import load_strategy_class
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
@@ -578,6 +579,8 @@ def _run_backtest_once(
     commission_rate: Decimal = Decimal('0.0'),
     spread: Decimal = Decimal('0.01'),
     risk_profile: str = 'none',
+    include_all_markets_context: bool = False,
+    allow_cross_market_trading: bool = False,
 ) -> dict[str, object]:
     strategy = _strategy_from_ref(strategy_ref, strategy_kwargs)
     ticker = PolyMarketTicker(
@@ -589,8 +592,16 @@ def _run_backtest_once(
     )
 
     async def _run() -> dict[str, object]:
-        data_source = HistoricalDataSource(history_file, ticker)
-        market_data = MarketDataManager(spread=spread)
+        data_source = HistoricalDataSource(
+            history_file,
+            ticker,
+            include_all_markets=include_all_markets_context,
+        )
+        market_data = MarketDataManager(
+            spread=spread,
+            max_history_per_ticker=None,
+            max_timeline_events=None,
+        )
         position_manager = PositionManager()
         position_manager.update_position(
             Position(
@@ -617,6 +628,12 @@ def _run_backtest_once(
             max_fill_rate=max_fill_rate,
             commission_rate=commission_rate,
         )
+        if not allow_cross_market_trading:
+            tradable_tickers = [ticker]
+            no_ticker = ticker.get_no_ticker()
+            if no_ticker is not None:
+                tradable_tickers.append(no_ticker)
+            trader.set_allowed_tickers(tradable_tickers)
         engine = TradingEngine(
             data_source=data_source,
             strategy=strategy,
@@ -1062,243 +1079,6 @@ def research_labels(
     _emit(payload, as_json=as_json)
 
 
-@research.command('backtest-batch')
-@click.option(
-    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--market-id', required=True)
-@click.option('--event-id', required=True)
-@click.option('--strategy-ref', required=True)
-@click.option(
-    '--params-jsonl', default=None, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--initial-capital', default='10000', show_default=True)
-@click.option('--max-runs', default=None, type=int)
-@click.option('--output', required=True, type=click.Path(dir_okay=False))
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def research_backtest_batch(
-    history_file: str,
-    market_id: str,
-    event_id: str,
-    strategy_ref: str,
-    params_jsonl: str | None,
-    initial_capital: str,
-    max_runs: int | None,
-    output: str,
-    as_json: bool,
-) -> None:
-    """Run a batch of parameterized backtests."""
-    capital = _to_decimal(initial_capital)
-    if capital is None:
-        raise click.ClickException(f'Invalid --initial-capital: {initial_capital}')
-
-    if params_jsonl:
-        params_rows = _load_jsonl_rows(params_jsonl)
-        if not params_rows:
-            raise click.ClickException('No valid rows found in --params-jsonl')
-    else:
-        params_rows = [{}]
-
-    if max_runs and max_runs > 0:
-        params_rows = params_rows[:max_runs]
-
-    results: list[dict[str, object]] = []
-    for idx, row in enumerate(params_rows, start=1):
-        strategy_kwargs = row.get('strategy_kwargs')
-        if not isinstance(strategy_kwargs, dict):
-            strategy_kwargs = {
-                k: v for k, v in row.items() if k not in {'name', 'id', 'run_id'}
-            }
-        run_id = str(row.get('id') or row.get('run_id') or f'run-{idx}')
-        run_name = str(row.get('name') or run_id)
-        try:
-            metrics = _run_backtest_once(
-                history_file=history_file,
-                strategy_ref=strategy_ref,
-                strategy_kwargs=strategy_kwargs,
-                market_id=market_id,
-                event_id=event_id,
-                initial_capital=capital,
-            )
-            results.append(
-                {
-                    'run_id': run_id,
-                    'name': run_name,
-                    'strategy_kwargs': strategy_kwargs,
-                    'ok': True,
-                    'metrics': metrics,
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            results.append(
-                {
-                    'run_id': run_id,
-                    'name': run_name,
-                    'strategy_kwargs': strategy_kwargs,
-                    'ok': False,
-                    'error': str(exc),
-                }
-            )
-
-    _write_jsonl(output, results)
-    payload = {
-        'message': 'Batch backtest complete',
-        'output': str(Path(output).resolve()),
-        'runs': len(results),
-        'ok_runs': sum(1 for r in results if r.get('ok')),
-    }
-    _emit(payload, as_json=as_json)
-
-
-@research.command('scan-markets', hidden=True)
-@click.option(
-    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--strategy-ref', required=True)
-@click.option('--strategy-kwargs-json', default='{}', show_default=True)
-@click.option(
-    '--params-jsonl', default=None, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--initial-capital', default='10000', show_default=True)
-@click.option('--max-markets', default=20, show_default=True, type=int)
-@click.option('--min-points', default=20, show_default=True, type=int)
-@click.option(
-    '--sort-key',
-    default='price_range',
-    show_default=True,
-    type=click.Choice(['price_range', 'abs_move', 'points']),
-)
-@click.option('--output', required=True, type=click.Path(dir_okay=False))
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def research_scan_markets(
-    history_file: str,
-    strategy_ref: str,
-    strategy_kwargs_json: str,
-    params_jsonl: str | None,
-    initial_capital: str,
-    max_markets: int,
-    min_points: int,
-    sort_key: str,
-    output: str,
-    as_json: bool,
-) -> None:
-    """Scan many market/event pairs and keep the best run per market."""
-    raise click.ClickException(
-        '`research scan-markets` was removed as redundant. '
-        'Use `research auto-tune` for end-to-end discovery, or '
-        '`research markets` + `research grid` + `research batch-markets`.'
-    )
-
-    if max_markets <= 0:
-        raise click.ClickException('--max-markets must be > 0')
-    if min_points <= 1:
-        raise click.ClickException('--min-points must be > 1')
-
-    capital = _to_decimal(initial_capital)
-    if capital is None:
-        raise click.ClickException(f'Invalid --initial-capital: {initial_capital}')
-    base_kwargs = _parse_json_object(
-        strategy_kwargs_json, option_name='--strategy-kwargs-json'
-    )
-
-    if params_jsonl:
-        param_rows = _load_jsonl_rows(params_jsonl)
-        if not param_rows:
-            raise click.ClickException('No valid rows found in --params-jsonl')
-    else:
-        param_rows = [{'id': 'default', 'strategy_kwargs': base_kwargs}]
-
-    summaries = _build_market_summaries(history_file, min_points=min_points)
-    if not summaries:
-        raise click.ClickException('No markets matched --min-points constraint.')
-
-    reverse = True
-    if sort_key == 'points':
-        summaries.sort(key=lambda x: int(x['points']), reverse=reverse)
-    else:
-        summaries.sort(
-            key=lambda x: float(x[sort_key]),  # type: ignore[arg-type]
-            reverse=reverse,
-        )
-    selected = summaries[:max_markets]
-
-    rows: list[dict[str, object]] = []
-    for market in selected:
-        market_id = str(market['market_id'])
-        event_id = str(market['event_id'])
-        best_result: dict[str, object] | None = None
-        best_key: tuple[float, float] | None = None
-
-        for idx, row in enumerate(param_rows, start=1):
-            strategy_kwargs = row.get('strategy_kwargs')
-            if not isinstance(strategy_kwargs, dict):
-                strategy_kwargs = {
-                    k: v for k, v in row.items() if k not in {'id', 'name', 'run_id'}
-                }
-            merged_kwargs = {**base_kwargs, **strategy_kwargs}
-            run_id = str(row.get('id') or row.get('run_id') or f'run-{idx}')
-            run_name = str(row.get('name') or run_id)
-            try:
-                metrics = _run_backtest_once(
-                    history_file=history_file,
-                    strategy_ref=strategy_ref,
-                    strategy_kwargs=merged_kwargs,
-                    market_id=market_id,
-                    event_id=event_id,
-                    initial_capital=capital,
-                )
-            except Exception as exc:  # noqa: BLE001
-                metrics = None
-                candidate_result = {
-                    'run_id': run_id,
-                    'name': run_name,
-                    'strategy_kwargs': merged_kwargs,
-                    'ok': False,
-                    'error': str(exc),
-                }
-                if best_result is None:
-                    best_result = candidate_result
-                continue
-
-            pnl = _to_float_metric(metrics.get('total_pnl')) or float('-inf')
-            sharpe = _to_float_metric(metrics.get('sharpe_ratio')) or float('-inf')
-            rank_key = (pnl, sharpe)
-            candidate_result = {
-                'run_id': run_id,
-                'name': run_name,
-                'strategy_kwargs': merged_kwargs,
-                'ok': True,
-                'metrics': metrics,
-            }
-            if best_key is None or rank_key > best_key:
-                best_key = rank_key
-                best_result = candidate_result
-
-        rows.append(
-            {
-                'market_id': market_id,
-                'event_id': event_id,
-                'points': market['points'],
-                'first_ts': market['first_ts'],
-                'last_ts': market['last_ts'],
-                'abs_move': market['abs_move'],
-                'price_range': market['price_range'],
-                'best_run': best_result,
-            }
-        )
-
-    _write_jsonl(output, rows)
-    payload = {
-        'message': 'Market scan complete',
-        'output': str(Path(output).resolve()),
-        'markets_scanned': len(rows),
-        'markets_with_successful_run': sum(
-            1 for row in rows if bool((row.get('best_run') or {}).get('ok'))
-        ),
-    }
-    _emit(payload, as_json=as_json)
-
-
 @research.command('walk-forward')
 @click.option(
     '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
@@ -1536,589 +1316,6 @@ def research_walk_forward_auto(
     _emit(payload, as_json=as_json)
 
 
-@research.command('stress-test')
-@click.option(
-    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--market-id', required=True)
-@click.option('--event-id', required=True)
-@click.option('--strategy-ref', required=True)
-@click.option('--strategy-kwargs-json', default='{}', show_default=True)
-@click.option('--initial-capital', default='10000', show_default=True)
-@click.option('--output', required=True, type=click.Path(dir_okay=False))
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def research_stress_test(
-    history_file: str,
-    market_id: str,
-    event_id: str,
-    strategy_ref: str,
-    strategy_kwargs_json: str,
-    initial_capital: str,
-    output: str,
-    as_json: bool,
-) -> None:
-    """Run execution/stability stress scenarios for one strategy."""
-    capital = _to_decimal(initial_capital)
-    if capital is None:
-        raise click.ClickException(f'Invalid --initial-capital: {initial_capital}')
-    strategy_kwargs = _parse_json_object(
-        strategy_kwargs_json, option_name='--strategy-kwargs-json'
-    )
-
-    scenarios = [
-        {
-            'name': 'baseline',
-            'min_fill_rate': Decimal('0.5'),
-            'max_fill_rate': Decimal('1.0'),
-            'commission_rate': Decimal('0.0'),
-        },
-        {
-            'name': 'low_fill',
-            'min_fill_rate': Decimal('0.2'),
-            'max_fill_rate': Decimal('0.6'),
-            'commission_rate': Decimal('0.0'),
-        },
-        {
-            'name': 'high_fee',
-            'min_fill_rate': Decimal('0.5'),
-            'max_fill_rate': Decimal('1.0'),
-            'commission_rate': Decimal('0.01'),
-        },
-        {
-            'name': 'low_fill_high_fee',
-            'min_fill_rate': Decimal('0.2'),
-            'max_fill_rate': Decimal('0.6'),
-            'commission_rate': Decimal('0.02'),
-        },
-    ]
-
-    rows: list[dict[str, object]] = []
-    for scenario in scenarios:
-        try:
-            metrics = _run_backtest_once(
-                history_file=history_file,
-                strategy_ref=strategy_ref,
-                strategy_kwargs=strategy_kwargs,
-                market_id=market_id,
-                event_id=event_id,
-                initial_capital=capital,
-                min_fill_rate=scenario['min_fill_rate'],
-                max_fill_rate=scenario['max_fill_rate'],
-                commission_rate=scenario['commission_rate'],
-            )
-            rows.append(
-                {
-                    'scenario': scenario['name'],
-                    'ok': True,
-                    'config': {
-                        'min_fill_rate': str(scenario['min_fill_rate']),
-                        'max_fill_rate': str(scenario['max_fill_rate']),
-                        'commission_rate': str(scenario['commission_rate']),
-                    },
-                    'metrics': metrics,
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            rows.append(
-                {
-                    'scenario': scenario['name'],
-                    'ok': False,
-                    'error': str(exc),
-                }
-            )
-    _write_jsonl(output, rows)
-    payload = {
-        'message': 'Stress test complete',
-        'output': str(Path(output).resolve()),
-        'scenarios': len(rows),
-    }
-    _emit(payload, as_json=as_json)
-
-
-@research.command('compare-runs')
-@click.option(
-    '--input-file', required=True, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option(
-    '--sort-key',
-    default='sharpe_ratio',
-    show_default=True,
-    type=click.Choice(
-        ['sharpe_ratio', 'total_pnl', 'win_rate', 'max_drawdown', 'alpha_score']
-    ),
-)
-@click.option('--top', default=20, show_default=True, type=int)
-@click.option('--output', default=None, type=click.Path(dir_okay=False))
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def research_compare_runs(
-    input_file: str,
-    sort_key: str,
-    top: int,
-    output: str | None,
-    as_json: bool,
-) -> None:
-    """Compare run outputs and rank by the selected metric."""
-    rows = _load_jsonl_rows(input_file)
-    ranked: list[dict[str, object]] = []
-    for i, row in enumerate(rows, start=1):
-        metrics = row.get('metrics', row)
-        if not isinstance(metrics, dict):
-            continue
-        if sort_key == 'alpha_score':
-            score = _alpha_score_from_metrics(metrics)
-        else:
-            score = _to_float_metric(metrics.get(sort_key))
-        if score is None:
-            continue
-        ranked.append(
-            {
-                'rank_hint': i,
-                'name': row.get('name') or row.get('scenario') or row.get('run_id'),
-                'ok': bool(row.get('ok', True)),
-                'score': score,
-                'metrics': metrics,
-            }
-        )
-
-    reverse = sort_key != 'max_drawdown'
-    ranked.sort(key=lambda x: float(x['score']), reverse=reverse)
-    ranked = ranked[: max(top, 1)]
-    if output:
-        _write_jsonl(output, ranked)
-    payload = {
-        'message': 'Run comparison complete',
-        'sort_key': sort_key,
-        'count': len(ranked),
-        'top': ranked,
-        'output': str(Path(output).resolve()) if output else None,
-    }
-    _emit(payload, as_json=as_json)
-
-
-@research.command('strategy-gate')
-@click.option(
-    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--market-id', required=True)
-@click.option('--event-id', required=True)
-@click.option('--strategy-ref', required=True)
-@click.option('--strategy-kwargs-json', default='{}', show_default=True)
-@click.option('--dry-run-events', default=10, show_default=True, type=int)
-@click.option('--min-trades', default=1, show_default=True, type=int)
-@click.option('--min-total-pnl', default='0', show_default=True)
-@click.option('--max-drawdown-pct', default='0.30', show_default=True)
-@click.option('--initial-capital', default='10000', show_default=True)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def research_strategy_gate(
-    history_file: str,
-    market_id: str,
-    event_id: str,
-    strategy_ref: str,
-    strategy_kwargs_json: str,
-    dry_run_events: int,
-    min_trades: int,
-    min_total_pnl: str,
-    max_drawdown_pct: str,
-    initial_capital: str,
-    as_json: bool,
-) -> None:
-    """Run strategy validation gate checks before promotion."""
-    min_pnl = _to_decimal(min_total_pnl)
-    max_dd = _to_decimal(max_drawdown_pct)
-    capital = _to_decimal(initial_capital)
-    if min_pnl is None or max_dd is None or capital is None:
-        raise click.ClickException('Invalid gate threshold value.')
-    strategy_kwargs = _parse_json_object(
-        strategy_kwargs_json, option_name='--strategy-kwargs-json'
-    )
-
-    # Validate/load strategy
-    _strategy_from_ref(strategy_ref, strategy_kwargs)
-
-    # Dry run on mock events
-    from coinjure.cli.agent_commands import _build_mock_events
-
-    ticker = PolyMarketTicker(
-        symbol='GATE_TOKEN',
-        name='Gate Market',
-        token_id='GATE_TOKEN',
-        market_id='GATE_MKT',
-        event_id='GATE_EVT',
-    )
-    strategy = _strategy_from_ref(strategy_ref, strategy_kwargs)
-    market_data = MarketDataManager()
-    position_manager = PositionManager()
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.POLYMARKET_USDC,
-            quantity=capital,
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
-        )
-    )
-    trader = PaperTrader(
-        market_data=market_data,
-        risk_manager=NoRiskManager(),
-        position_manager=position_manager,
-        min_fill_rate=Decimal('1.0'),
-        max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
-    )
-
-    async def _run_dry() -> tuple[bool, str]:
-        for event in _build_mock_events(ticker, max(1, dry_run_events)):
-            if hasattr(event, 'side'):
-                market_data.process_orderbook_event(event)  # type: ignore[arg-type]
-            elif hasattr(event, 'price'):
-                market_data.process_price_change_event(event)  # type: ignore[arg-type]
-            await strategy.process_event(event, trader)
-        return True, ''
-
-    dry_ok = True
-    dry_err = ''
-    try:
-        asyncio.run(_run_dry())
-    except Exception as exc:  # noqa: BLE001
-        dry_ok = False
-        dry_err = str(exc)
-
-    metrics = _run_backtest_once(
-        history_file=history_file,
-        strategy_ref=strategy_ref,
-        strategy_kwargs=strategy_kwargs,
-        market_id=market_id,
-        event_id=event_id,
-        initial_capital=capital,
-    )
-
-    trades = int(metrics.get('total_trades', 0))
-    pnl = _to_decimal(metrics.get('total_pnl'))
-    dd = _to_decimal(metrics.get('max_drawdown'))
-    checks = {
-        'dry_run_ok': dry_ok,
-        'min_trades_ok': trades >= min_trades,
-        'min_pnl_ok': pnl is not None and pnl >= min_pnl,
-        'max_drawdown_ok': dd is not None and dd <= max_dd,
-    }
-    passed = all(checks.values())
-    payload = {
-        'passed': passed,
-        'checks': checks,
-        'dry_run_error': dry_err or None,
-        'metrics': metrics,
-        'thresholds': {
-            'min_trades': min_trades,
-            'min_total_pnl': str(min_pnl),
-            'max_drawdown_pct': str(max_dd),
-        },
-        'message': 'Strategy gate passed' if passed else 'Strategy gate failed',
-    }
-    _emit(payload, as_json=as_json)
-    if not passed:
-        raise click.ClickException('Strategy gate failed')
-
-
-@research.command('alpha-pipeline')
-@click.option(
-    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
-)
-@click.option('--strategy-ref', required=True)
-@click.option('--strategy-kwargs-json', default='{}', show_default=True)
-@click.option('--market-id', default=None)
-@click.option('--event-id', default=None)
-@click.option(
-    '--market-sort-by',
-    default='volatility',
-    show_default=True,
-    type=click.Choice(['file', 'points', 'volume', 'span', 'volatility', 'trend']),
-)
-@click.option(
-    '--market-rank',
-    default=1,
-    show_default=True,
-    type=int,
-    help='When market/event are omitted, pick Nth market from ranked dataset.',
-)
-@click.option('--dry-run-events', default=10, show_default=True, type=int)
-@click.option('--initial-capital', default='10000', show_default=True)
-@click.option(
-    '--spread',
-    default='0.01',
-    show_default=True,
-    help='Synthetic bid/ask half-spread for the backtest MarketDataManager (e.g. 0.003).',
-)
-@click.option('--min-trades', default=1, show_default=True, type=int)
-@click.option('--min-total-pnl', default='0', show_default=True)
-@click.option('--max-drawdown-pct', default='0.30', show_default=True)
-@click.option('--batch-limit', default=20, show_default=True, type=int)
-@click.option('--run-batch-markets/--no-run-batch-markets', default=True)
-@click.option(
-    '--skip-batch-if-gate-fails/--no-skip-batch-if-gate-fails',
-    default=True,
-    show_default=True,
-    help='Skip batch-markets and stress tests when the primary backtest has 0 trades or gate fails.',
-)
-@click.option(
-    '--artifacts-dir',
-    default='data/research/alpha_pipeline',
-    show_default=True,
-    type=click.Path(file_okay=False),
-)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def research_alpha_pipeline(
-    history_file: str,
-    strategy_ref: str,
-    strategy_kwargs_json: str,
-    market_id: str | None,
-    event_id: str | None,
-    market_sort_by: str,
-    market_rank: int,
-    dry_run_events: int,
-    initial_capital: str,
-    spread: str,
-    min_trades: int,
-    min_total_pnl: str,
-    max_drawdown_pct: str,
-    batch_limit: int,
-    run_batch_markets: bool,
-    skip_batch_if_gate_fails: bool,
-    artifacts_dir: str,
-    as_json: bool,
-) -> None:
-    """Run validate + backtest + stress + gate (+ optional batch) in one command."""
-    if dry_run_events <= 0:
-        raise click.ClickException('--dry-run-events must be > 0')
-    if market_rank <= 0:
-        raise click.ClickException('--market-rank must be > 0')
-    if batch_limit <= 0:
-        raise click.ClickException('--batch-limit must be > 0')
-
-    capital = _to_decimal(initial_capital)
-    min_pnl = _to_decimal(min_total_pnl)
-    max_dd = _to_decimal(max_drawdown_pct)
-    spread_decimal = _to_decimal(spread)
-    if capital is None or min_pnl is None or max_dd is None:
-        raise click.ClickException('Invalid capital or gate threshold value.')
-    if spread_decimal is None or spread_decimal < Decimal('0'):
-        raise click.ClickException(f'Invalid --spread: {spread}')
-    strategy_kwargs = _parse_json_object(
-        strategy_kwargs_json, option_name='--strategy-kwargs-json'
-    )
-
-    summaries = _collect_market_summaries(history_file)
-    ranked = _sort_market_summaries(summaries, sort_by=market_sort_by)
-    if not ranked:
-        raise click.ClickException('No valid markets found in history file.')
-
-    selected_market = None
-    if market_id and event_id:
-        selected_market = {
-            'market_id': market_id,
-            'event_id': event_id,
-            'source': 'manual',
-        }
-    elif not market_id and not event_id:
-        idx = market_rank - 1
-        if idx >= len(ranked):
-            raise click.ClickException(
-                f'--market-rank {market_rank} exceeds available markets ({len(ranked)}).'
-            )
-        selected = ranked[idx]
-        selected_market = {
-            'market_id': str(selected['market_id']),
-            'event_id': str(selected['event_id']),
-            'source': 'auto',
-            'rank': market_rank,
-            'sort_by': market_sort_by,
-            'question': selected.get('question') or '',
-        }
-    else:
-        raise click.ClickException(
-            'Pass both --market-id and --event-id, or omit both for auto selection.'
-        )
-
-    market_id = str(selected_market['market_id'])
-    event_id = str(selected_market['event_id'])
-
-    out_dir = Path(artifacts_dir).expanduser().resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    preflight = _run_strategy_dry_run(
-        strategy_ref=strategy_ref,
-        strategy_kwargs=strategy_kwargs,
-        initial_capital=capital,
-        dry_run_events=dry_run_events,
-    )
-    preflight_path = out_dir / 'preflight.json'
-    _write_json(str(preflight_path), preflight)
-    if not preflight.get('ok'):
-        payload = {
-            'passed': False,
-            'message': 'Alpha pipeline failed preflight',
-            'selected_market': selected_market,
-            'preflight_file': str(preflight_path),
-            'artifacts_dir': str(out_dir),
-        }
-        _emit(payload, as_json=as_json)
-        raise click.ClickException('Alpha pipeline failed preflight.')
-
-    metrics = _run_backtest_once(
-        history_file=history_file,
-        strategy_ref=strategy_ref,
-        strategy_kwargs=strategy_kwargs,
-        market_id=market_id,
-        event_id=event_id,
-        initial_capital=capital,
-        spread=spread_decimal,
-    )
-    single_path = out_dir / 'backtest_single.json'
-    _write_json(str(single_path), metrics)
-
-    primary_trades = int(metrics.get('total_trades', 0))
-    skip_heavy = skip_batch_if_gate_fails and primary_trades == 0
-
-    stress_rows: list[dict[str, object]] = []
-    stress_scenarios = [
-        {
-            'name': 'baseline',
-            'min_fill_rate': Decimal('0.5'),
-            'max_fill_rate': Decimal('1.0'),
-            'commission_rate': Decimal('0.0'),
-        },
-        {
-            'name': 'low_fill',
-            'min_fill_rate': Decimal('0.2'),
-            'max_fill_rate': Decimal('0.6'),
-            'commission_rate': Decimal('0.0'),
-        },
-        {
-            'name': 'high_fee',
-            'min_fill_rate': Decimal('0.5'),
-            'max_fill_rate': Decimal('1.0'),
-            'commission_rate': Decimal('0.01'),
-        },
-        {
-            'name': 'low_fill_high_fee',
-            'min_fill_rate': Decimal('0.2'),
-            'max_fill_rate': Decimal('0.6'),
-            'commission_rate': Decimal('0.02'),
-        },
-    ]
-    for scenario in [] if skip_heavy else stress_scenarios:
-        try:
-            scenario_metrics = _run_backtest_once(
-                history_file=history_file,
-                strategy_ref=strategy_ref,
-                strategy_kwargs=strategy_kwargs,
-                market_id=market_id,
-                event_id=event_id,
-                initial_capital=capital,
-                min_fill_rate=scenario['min_fill_rate'],
-                max_fill_rate=scenario['max_fill_rate'],
-                commission_rate=scenario['commission_rate'],
-                spread=spread_decimal,
-            )
-            stress_rows.append(
-                {
-                    'scenario': scenario['name'],
-                    'ok': True,
-                    'metrics': scenario_metrics,
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            stress_rows.append(
-                {'scenario': scenario['name'], 'ok': False, 'error': str(exc)}
-            )
-    stress_path = out_dir / 'stress.jsonl'
-    _write_jsonl(str(stress_path), stress_rows)
-
-    trades = int(metrics.get('total_trades', 0))
-    pnl = _to_decimal(metrics.get('total_pnl'))
-    dd = _to_decimal(metrics.get('max_drawdown'))
-    gate_checks = {
-        'dry_run_ok': bool(preflight.get('ok')),
-        'min_trades_ok': trades >= min_trades,
-        'min_pnl_ok': pnl is not None and pnl >= min_pnl,
-        'max_drawdown_ok': dd is not None and dd <= max_dd,
-    }
-    gate_passed = all(gate_checks.values())
-    gate_payload = {
-        'passed': gate_passed,
-        'checks': gate_checks,
-        'metrics': metrics,
-        'thresholds': {
-            'min_trades': min_trades,
-            'min_total_pnl': str(min_pnl),
-            'max_drawdown_pct': str(max_dd),
-        },
-    }
-    gate_path = out_dir / 'gate.json'
-    _write_json(str(gate_path), gate_payload)
-
-    batch_summary: dict[str, object] | None = None
-    if run_batch_markets and not skip_heavy:
-        ranked_batch = ranked[:batch_limit]
-        batch_rows: list[dict[str, object]] = []
-        for candidate in ranked_batch:
-            candidate_market_id = str(candidate['market_id'])
-            candidate_event_id = str(candidate['event_id'])
-            try:
-                candidate_metrics = _run_backtest_once(
-                    history_file=history_file,
-                    strategy_ref=strategy_ref,
-                    strategy_kwargs=strategy_kwargs,
-                    market_id=candidate_market_id,
-                    event_id=candidate_event_id,
-                    initial_capital=capital,
-                    spread=spread_decimal,
-                )
-                batch_rows.append(
-                    {
-                        'market_id': candidate_market_id,
-                        'event_id': candidate_event_id,
-                        'ok': True,
-                        'metrics': candidate_metrics,
-                    }
-                )
-            except Exception as exc:  # noqa: BLE001
-                batch_rows.append(
-                    {
-                        'market_id': candidate_market_id,
-                        'event_id': candidate_event_id,
-                        'ok': False,
-                        'error': str(exc),
-                    }
-                )
-        batch_path = out_dir / 'batch_markets.jsonl'
-        _write_jsonl(str(batch_path), batch_rows)
-        ok_rows = [r for r in batch_rows if r.get('ok')]
-        batch_summary = {
-            'total_markets': len(batch_rows),
-            'ok_markets': len(ok_rows),
-            'output': str(batch_path),
-        }
-
-    payload = {
-        'passed': gate_passed,
-        'message': 'Alpha pipeline complete'
-        if gate_passed
-        else 'Alpha pipeline gate failed',
-        'selected_market': selected_market,
-        'artifacts_dir': str(out_dir),
-        'files': {
-            'preflight': str(preflight_path),
-            'backtest_single': str(single_path),
-            'stress': str(stress_path),
-            'gate': str(gate_path),
-        },
-        'batch_markets': batch_summary,
-        'metrics': metrics,
-    }
-    _emit(payload, as_json=as_json)
-    if not gate_passed:
-        raise click.ClickException('Alpha pipeline gate failed.')
-
-
 @click.option(
     '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
 )
@@ -2228,6 +1425,20 @@ def research_discover_alpha(
         strategy_kwargs_json, option_name='--strategy-kwargs-json'
     )
     combos = _build_param_combos(param_grid_json)
+
+    try:
+        _strategy_cls = load_strategy_class(strategy_ref)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+
+    if not _strategy_cls.supports_auto_tune() and len(combos) > 1:
+        raise click.ClickException(
+            f"Strategy '{_strategy_cls.__name__}' has strategy_type="
+            f"'{_strategy_cls.strategy_type}' and does not support parameter grid search.\n"
+            f'Remove --param-grid-json or switch to a QuantStrategy subclass.\n'
+            f'To evaluate an agent strategy, use: coinjure paper run --strategy-ref ...'
+        )
+
     candidates = [{**base_kwargs, **combo_kwargs} for combo_kwargs in combos]
 
     summaries = _collect_market_summaries(history_file)
@@ -2386,7 +1597,11 @@ def research_discover_alpha(
             token_id='BACKTEST_TOKEN',
             no_token_id='BACKTEST_TOKEN_NO',
         )
-        data_source = HistoricalDataSource(history_file, ticker)
+        data_source = HistoricalDataSource(
+            history_file,
+            ticker,
+            include_all_markets=False,
+        )
         asyncio.run(
             run_live_paper_trading(
                 data_source=data_source,
