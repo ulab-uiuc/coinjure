@@ -165,6 +165,184 @@ class TradingEngine:
         # of calling data_source.get_next_event().  Set by ControlServer.
         self._data_paused: bool = False
 
+    def _drain_backtest_timestamp_batch(self, event: object) -> list[object]:
+        """Return all queued backtest events that share a timestamp."""
+        if self._continuous:
+            return [event]
+
+        drain = getattr(self.data_source, 'drain_same_timestamp_events', None)
+        if not callable(drain):
+            return [event]
+
+        try:
+            drained = drain(event)
+        except Exception:
+            logger.debug(
+                'Failed to drain same-timestamp backtest events',
+                exc_info=True,
+            )
+            return [event]
+
+        if not drained:
+            return [event]
+        return [event, *drained]
+
+    def _apply_market_event(self, event: object) -> None:
+        if isinstance(event, OrderBookEvent):
+            self.market_data.process_orderbook_event(event)
+        elif isinstance(event, PriceChangeEvent):
+            self.market_data.process_price_change_event(event)
+            logger.debug('Price %s → %s', event.ticker.symbol, event.price)
+
+    def _log_event_milestone(self) -> None:
+        if self._event_count in (1, 10, 50, 100) or self._event_count % 500 == 0:
+            now_str = datetime.now().strftime('%H:%M:%S')
+            ob_count = len(self.market_data.order_books)
+            self._activity_log.append(
+                (
+                    now_str,
+                    f'Milestone: {self._event_count} events processed, {ob_count} order books',
+                )
+            )
+
+    async def _process_one_event(
+        self,
+        event: object,
+        *,
+        market_data_already_applied: bool = False,
+    ) -> None:
+        self._event_count += 1
+        self._log_event_milestone()
+
+        try:
+            now_str = datetime.now().strftime('%H:%M:%S')
+
+            if not market_data_already_applied:
+                self._apply_market_event(event)
+
+            if isinstance(event, NewsEvent):
+                headline = event.title or event.news[:100]
+                source = getattr(event, 'source', '') or ''
+                url = getattr(event, 'url', '') or ''
+                self.trader.record_news(
+                    timestamp=now_str,
+                    title=headline,
+                    source=source,
+                    url=url,
+                )
+                self._news.append(
+                    {
+                        'timestamp': now_str,
+                        'title': headline,
+                        'source': source,
+                        'url': url,
+                    }
+                )
+                self._activity_log.append(
+                    (now_str, f'News [{source[:15]}] "{headline[:55]}"')
+                )
+                logger.info('NewsEvent: %s', headline)
+
+            prev_orders = len(self.trader.orders)
+            self.strategy.bind_context(event, self.trader)
+            await self.strategy.process_event(event, self.trader)
+
+            decisions = self.strategy.get_decisions()
+            stats = self.strategy.get_decision_stats()
+            total_d = int(stats.get('decisions', len(decisions)))
+            if total_d > self._last_decisions_count:
+                new_count = total_d - self._last_decisions_count
+                start_idx = max(0, len(decisions) - new_count)
+                for i in range(start_idx, len(decisions)):
+                    d = decisions[i]
+                    exec_mark = 'TRADED' if d.executed else 'no trade'
+                    signals = d.signal_values or {}
+                    signal_pairs = list(signals.items())[:2]
+                    signal_str = (
+                        ' '.join(f'{k}={v:.3f}' for k, v in signal_pairs)
+                        if signal_pairs
+                        else ''
+                    )
+                    name = d.ticker_name[:30]
+                    self._activity_log.append(
+                        (now_str, f'{d.action} {signal_str} [{exec_mark}] "{name}"')
+                    )
+                self._last_decisions_count = total_d
+
+            await self._sync_trades()
+            new_orders = self.trader.orders[prev_orders:]
+            for order in new_orders:
+                status = order.status.value.upper()
+                side = order.side.value.upper()
+                ticker_name = (
+                    getattr(order.ticker, 'name', '') or order.ticker.symbol[:25]
+                )
+                self._activity_log.append(
+                    (
+                        now_str,
+                        f'{side} {order.filled_quantity} @ ${order.average_price:.4f} → {status} "{ticker_name[:25]}"',
+                    )
+                )
+                if hasattr(order.ticker, 'token_id'):
+                    if order.side.value.upper() == 'BUY':
+                        watch = getattr(self.data_source, 'watch_token', None)
+                        if watch:
+                            watch(order.ticker.token_id)
+                            no_token_id = getattr(order.ticker, 'no_token_id', '')
+                            if no_token_id:
+                                watch(no_token_id)
+                    elif order.side.value.upper() == 'SELL':
+                        pos = self.trader.position_manager.get_position(order.ticker)
+                        if pos is None or pos.quantity <= 0:
+                            unwatch = getattr(self.data_source, 'unwatch_token', None)
+                            if unwatch:
+                                unwatch(order.ticker.token_id)
+        except Exception as exc:
+            now_str = datetime.now().strftime('%H:%M:%S')
+            self._activity_log.append(
+                (now_str, f'Error processing event #{self._event_count}')
+            )
+            logger.exception('Error processing event #%d', self._event_count)
+            self._consecutive_processing_errors += 1
+            if self._alerter:
+                try:
+                    await self._alerter.on_error(exc)
+                except Exception:
+                    pass
+            await self._auto_degrade_if_needed()
+        else:
+            self._consecutive_processing_errors = 0
+
+        self._save_event_counter += 1
+        if self._save_event_counter >= self._SAVE_INTERVAL:
+            self._save_event_counter = 0
+            if self._state_store:
+                try:
+                    self._state_store.save_all(self.trader.position_manager, self._perf)
+                except Exception:
+                    logger.debug(
+                        'periodic state_store.save_all() failed',
+                        exc_info=True,
+                    )
+            await self._check_drawdown_alert()
+            await self._check_portfolio_health()
+
+        if self._event_count - self._last_prune_event >= self._PRUNE_INTERVAL:
+            self._last_prune_event = self._event_count
+            known = getattr(self.data_source, '_known_tickers', None)
+            if known is None:
+                for src in getattr(self.data_source, 'sources', []):
+                    known = getattr(src, '_known_tickers', None)
+                    if known is not None:
+                        break
+            if known is not None:
+                removed = self.market_data.prune_stale_tickers(set(known.keys()))
+                if removed:
+                    logger.info(
+                        'Pruned %d stale order books from MarketDataManager',
+                        removed,
+                    )
+
     # ------------------------------------------------------------------ #
     # Main loop                                                           #
     # ------------------------------------------------------------------ #
@@ -233,7 +411,6 @@ class TradingEngine:
 
             # Got a real event — reset the silence counter.
             consecutive_none = 0
-            self._event_count += 1
 
             # [P1] Before processing a NewsEvent (slow, LLM call), drain all
             # pending OrderBookEvents so market data is up-to-date. This
@@ -265,158 +442,17 @@ class TradingEngine:
                 if drained > 0:
                     logger.debug('Drained %d market events before NewsEvent', drained)
 
-            # Log milestones to activity log
-            if self._event_count in (1, 10, 50, 100) or self._event_count % 500 == 0:
-                now_str = datetime.now().strftime('%H:%M:%S')
-                ob_count = len(self.market_data.order_books)
-                self._activity_log.append(
-                    (
-                        now_str,
-                        f'Milestone: {self._event_count} events processed, {ob_count} order books',
-                    )
+            batch = self._drain_backtest_timestamp_batch(event)
+            batch_has_prefetched_market_updates = len(batch) > 1
+            if batch_has_prefetched_market_updates:
+                for batch_event in batch:
+                    self._apply_market_event(batch_event)
+
+            for batch_event in batch:
+                await self._process_one_event(
+                    batch_event,
+                    market_data_already_applied=batch_has_prefetched_market_updates,
                 )
-
-            try:
-                now_str = datetime.now().strftime('%H:%M:%S')
-
-                if isinstance(event, OrderBookEvent):
-                    self.market_data.process_orderbook_event(event)
-                elif isinstance(event, PriceChangeEvent):
-                    self.market_data.process_price_change_event(event)
-                    logger.debug('Price %s → %s', event.ticker.symbol, event.price)
-
-                if isinstance(event, NewsEvent):
-                    headline = event.title or event.news[:100]
-                    source = getattr(event, 'source', '') or ''
-                    url = getattr(event, 'url', '') or ''
-                    self._news.append(
-                        {
-                            'timestamp': now_str,
-                            'title': headline,
-                            'source': source,
-                            'url': url,
-                        }
-                    )
-                    self._activity_log.append(
-                        (now_str, f'News [{source[:15]}] "{headline[:55]}"')
-                    )
-                    logger.info('NewsEvent: %s', headline)
-
-                prev_orders = len(self.trader.orders)
-                await self.strategy.process_event(event, self.trader)
-
-                # Log strategy decisions (only new ones).
-                # Prefer strategy-reported running counter because decisions
-                # storage may be bounded (e.g. deque maxlen).
-                decisions = self.strategy.get_decisions()
-                stats = self.strategy.get_decision_stats()
-                total_d = int(stats.get('decisions', len(decisions)))
-                if total_d > self._last_decisions_count:
-                    new_count = total_d - self._last_decisions_count
-                    # Log the newest entries from the tail of the deque
-                    start_idx = max(0, len(decisions) - new_count)
-                    for i in range(start_idx, len(decisions)):
-                        d = decisions[i]
-                        exec_mark = 'TRADED' if d.executed else 'no trade'
-                        signals = d.signal_values or {}
-                        signal_pairs = list(signals.items())[:2]
-                        signal_str = (
-                            ' '.join(f'{k}={v:.3f}' for k, v in signal_pairs)
-                            if signal_pairs
-                            else ''
-                        )
-                        name = d.ticker_name[:30]
-                        self._activity_log.append(
-                            (now_str, f'{d.action} {signal_str} [{exec_mark}] "{name}"')
-                        )
-                    self._last_decisions_count = total_d
-
-                # Log new trades and register tokens for priority refresh
-                await self._sync_trades()
-                new_orders = self.trader.orders[prev_orders:]
-                for order in new_orders:
-                    status = order.status.value.upper()
-                    side = order.side.value.upper()
-                    ticker_name = (
-                        getattr(order.ticker, 'name', '') or order.ticker.symbol[:25]
-                    )
-                    self._activity_log.append(
-                        (
-                            now_str,
-                            f'{side} {order.filled_quantity} @ ${order.average_price:.4f} → {status} "{ticker_name[:25]}"',
-                        )
-                    )
-                    # Tell data source to prioritize this token's order book
-                    if hasattr(order.ticker, 'token_id'):
-                        if order.side.value.upper() == 'BUY':
-                            watch = getattr(self.data_source, 'watch_token', None)
-                            if watch:
-                                watch(order.ticker.token_id)
-                                # Also watch the complement (NO) token if it exists,
-                                # so exit re-evaluations have fresh order book data.
-                                no_token_id = getattr(order.ticker, 'no_token_id', '')
-                                if no_token_id:
-                                    watch(no_token_id)
-                        elif order.side.value.upper() == 'SELL':
-                            # Unwatch tokens when position is fully closed
-                            pos = self.trader.position_manager.get_position(
-                                order.ticker
-                            )
-                            if pos is None or pos.quantity <= 0:
-                                unwatch = getattr(
-                                    self.data_source, 'unwatch_token', None
-                                )
-                                if unwatch:
-                                    unwatch(order.ticker.token_id)
-            except Exception as exc:
-                now_str = datetime.now().strftime('%H:%M:%S')
-                self._activity_log.append(
-                    (now_str, f'Error processing event #{self._event_count}')
-                )
-                logger.exception('Error processing event #%d', self._event_count)
-                self._consecutive_processing_errors += 1
-                if self._alerter:
-                    try:
-                        await self._alerter.on_error(exc)
-                    except Exception:
-                        pass
-                await self._auto_degrade_if_needed()
-            else:
-                self._consecutive_processing_errors = 0
-
-            # Periodic state save and drawdown check.
-            self._save_event_counter += 1
-            if self._save_event_counter >= self._SAVE_INTERVAL:
-                self._save_event_counter = 0
-                if self._state_store:
-                    try:
-                        self._state_store.save_all(
-                            self.trader.position_manager, self._perf
-                        )
-                    except Exception:
-                        logger.debug(
-                            'periodic state_store.save_all() failed', exc_info=True
-                        )
-                await self._check_drawdown_alert()
-                await self._check_portfolio_health()
-
-            # [M4] Periodically prune stale order books from MarketDataManager.
-            if self._event_count - self._last_prune_event >= self._PRUNE_INTERVAL:
-                self._last_prune_event = self._event_count
-                known = getattr(self.data_source, '_known_tickers', None)
-                if known is None:
-                    # CompositeDataSource: check child sources
-                    for src in getattr(self.data_source, 'sources', []):
-                        known = getattr(src, '_known_tickers', None)
-                        if known is not None:
-                            break
-                if known is not None:
-                    removed = self.market_data.prune_stale_tickers(set(known.keys()))
-                    if removed:
-                        logger.info(
-                            'Pruned %d stale order books from MarketDataManager',
-                            removed,
-                        )
 
         logger.info('TradingEngine stopped  (events=%d)', self._event_count)
 

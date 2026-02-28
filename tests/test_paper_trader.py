@@ -255,6 +255,38 @@ class TestPaperTrader:
         assert result.failure_reason == OrderFailureReason.RISK_CHECK_FAILED
 
     @pytest.mark.asyncio
+    async def test_trade_scope_rejects_unapproved_market(
+        self,
+        paper_trader: PaperTrader,
+        market_data: MarketDataManager,
+        test_ticker: PolyMarketTicker,
+    ):
+        other_ticker = PolyMarketTicker(
+            symbol='OTHER_TOKEN',
+            name='Other Market',
+            token_id='other-token',
+            market_id='market456',
+            event_id='event456',
+        )
+        other_book = OrderBook()
+        other_book.update(
+            asks=[Level(price=Decimal('0.40'), size=Decimal('1000'))],
+            bids=[Level(price=Decimal('0.35'), size=Decimal('1000'))],
+        )
+        market_data.order_books[other_ticker] = other_book
+        paper_trader.set_allowed_tickers([test_ticker])
+
+        result = await paper_trader.place_order(
+            side=TradeSide.BUY,
+            ticker=other_ticker,
+            limit_price=Decimal('0.40'),
+            quantity=Decimal('10'),
+        )
+
+        assert result.order is None
+        assert result.failure_reason == OrderFailureReason.MARKET_NOT_ALLOWED
+
+    @pytest.mark.asyncio
     async def test_position_updated_after_trade(
         self,
         paper_trader: PaperTrader,

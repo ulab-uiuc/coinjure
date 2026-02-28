@@ -72,6 +72,8 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert captured['history_file'] == str(history_file)
     assert captured['ticker_symbol'].market_id == 'M1'
+    assert captured['include_all_markets_context'] is False
+    assert captured['allow_cross_market_trading'] is False
 
 
 def test_strategy_validate_with_kwargs_json(tmp_path):

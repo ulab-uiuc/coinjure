@@ -1,8 +1,11 @@
+import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from coinjure.core.trading_engine import TradingEngine
+from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.data_source import DataSource
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.events.events import (
@@ -55,6 +58,43 @@ class MockStrategy(Strategy):
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         self.processed_events.append(event)
+
+
+class HistoryAwareStrategy(Strategy):
+    """Strategy used to verify replay-time market history visibility."""
+
+    def __init__(self):
+        self.history_lengths: list[int] = []
+        self.price_windows: list[list[Decimal]] = []
+
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        if not isinstance(event, PriceChangeEvent):
+            return
+        self.history_lengths.append(
+            len(trader.market_data.get_market_history(event.ticker))
+        )
+        self.price_windows.append(trader.market_data.get_price_history(event.ticker))
+
+
+class SameTimestampVisibilityStrategy(Strategy):
+    def __init__(self, primary_symbol: str, related_symbol: str):
+        self.primary_symbol = primary_symbol
+        self.related_symbol = related_symbol
+        self.related_history_lengths: list[int] = []
+
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        if not isinstance(event, PriceChangeEvent):
+            return
+        if event.ticker.symbol != self.primary_symbol:
+            return
+
+        context = self.require_context()
+        related_ticker = context.resolve_ticker(self.related_symbol)
+        self.related_history_lengths.append(
+            len(context.price_history(related_ticker))
+            if related_ticker is not None
+            else 0
+        )
 
 
 @pytest.fixture
@@ -229,6 +269,80 @@ class TestTradingEngine:
 
         # Market data should be updated with synthetic order book
         assert test_ticker in market_data.order_books
+
+    @pytest.mark.asyncio
+    async def test_engine_exposes_cumulative_market_history_to_strategy(
+        self,
+        paper_trader: PaperTrader,
+        test_ticker: PolyMarketTicker,
+    ):
+        events = [
+            PriceChangeEvent(ticker=test_ticker, price=Decimal('0.50')),
+            PriceChangeEvent(ticker=test_ticker, price=Decimal('0.55')),
+            PriceChangeEvent(ticker=test_ticker, price=Decimal('0.57')),
+        ]
+
+        data_source = MockDataSource(events)
+        strategy = HistoryAwareStrategy()
+        engine = TradingEngine(
+            data_source=data_source,
+            strategy=strategy,
+            trader=paper_trader,
+        )
+
+        await engine.start()
+
+        assert strategy.history_lengths == [1, 2, 3]
+        assert strategy.price_windows == [
+            [Decimal('0.50')],
+            [Decimal('0.50'), Decimal('0.55')],
+            [Decimal('0.50'), Decimal('0.55'), Decimal('0.57')],
+        ]
+
+    @pytest.mark.asyncio
+    async def test_engine_exposes_same_timestamp_cross_market_snapshot(
+        self,
+        paper_trader: PaperTrader,
+        test_ticker: PolyMarketTicker,
+        tmp_path: Path,
+    ):
+        history_file = tmp_path / 'history.jsonl'
+        rows = [
+            {
+                'event_id': test_ticker.event_id,
+                'market_id': test_ticker.market_id,
+                'time_series': {'Yes': [{'t': 1, 'p': 0.50}]},
+            },
+            {
+                'event_id': test_ticker.event_id,
+                'market_id': 'linked-market',
+                'question': 'Linked market',
+                'time_series': {'Yes': [{'t': 1, 'p': 0.80}]},
+            },
+        ]
+        history_file.write_text(
+            '\n'.join(json.dumps(row) for row in rows) + '\n',
+            encoding='utf-8',
+        )
+
+        data_source = HistoricalDataSource(
+            str(history_file),
+            test_ticker,
+            include_all_markets=True,
+        )
+        strategy = SameTimestampVisibilityStrategy(
+            primary_symbol=test_ticker.symbol,
+            related_symbol='BT_linked-market',
+        )
+        engine = TradingEngine(
+            data_source=data_source,
+            strategy=strategy,
+            trader=paper_trader,
+        )
+
+        await engine.start()
+
+        assert strategy.related_history_lengths == [1]
 
     @pytest.mark.asyncio
     async def test_engine_stop(

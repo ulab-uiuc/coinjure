@@ -44,6 +44,7 @@ class OrderFailureReason(Enum):
     INVALID_ORDER = 'invalid_order'
     INSUFFICIENT_CASH = 'insufficient_cash'
     DUPLICATE_ORDER = 'duplicate_order'
+    MARKET_NOT_ALLOWED = 'market_not_allowed'
     TRADING_DISABLED = 'trading_disabled'
     UNKNOWN = 'unknown'
 

@@ -23,10 +23,11 @@ from coinjure.ticker.ticker import Ticker
 from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
-from .strategy import Strategy, StrategyDecision
+from .quant_strategy import QuantStrategy
+from .strategy import StrategyDecision
 
 
-class MarketMakingStrategy(Strategy):
+class MarketMakingStrategy(QuantStrategy):
     def __init__(
         self,
         tickers: list[Ticker] | None = None,

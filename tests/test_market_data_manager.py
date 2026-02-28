@@ -37,8 +37,8 @@ class TestMarketDataManager:
         event = PriceChangeEvent(ticker=test_ticker, price=Decimal('0.50'))
         mdm.process_price_change_event(event)
         ob = mdm.order_books[test_ticker]
-        assert ob.best_bid.price == Decimal('0.49')   # 0.50 - 0.01
-        assert ob.best_ask.price == Decimal('0.51')   # 0.50 + 0.01
+        assert ob.best_bid.price == Decimal('0.49')  # 0.50 - 0.01
+        assert ob.best_ask.price == Decimal('0.51')  # 0.50 + 0.01
 
     def test_custom_synthetic_size(self, test_ticker: PolyMarketTicker):
         """Test that custom synthetic size is applied."""
@@ -217,14 +217,62 @@ class TestMarketDataManager:
         best = market_data.get_best_ask(test_ticker)
         assert best.price == Decimal('0.55')
 
+    def test_market_history_tracks_visible_snapshots(
+        self, market_data: MarketDataManager, test_ticker: PolyMarketTicker
+    ):
+        """Strategies should be able to inspect the cumulative replay timeline."""
+        market_data.process_price_change_event(
+            PriceChangeEvent(
+                ticker=test_ticker,
+                price=Decimal('0.50'),
+                timestamp='t0',
+            )
+        )
+        market_data.process_orderbook_event(
+            OrderBookEvent(
+                ticker=test_ticker,
+                price=Decimal('0.503'),
+                size=Decimal('250'),
+                size_delta=Decimal('50'),
+                side='bid',
+            )
+        )
+
+        history = market_data.get_market_history(test_ticker)
+
+        assert [point.event_type for point in history] == [
+            'price_change',
+            'order_book',
+        ]
+        assert history[0].timestamp == 't0'
+        assert history[0].event_price == Decimal('0.50')
+        assert history[0].best_bid == Decimal('0.495')
+        assert history[0].best_ask == Decimal('0.505')
+        assert history[1].event_side == 'bid'
+        assert history[1].event_size == Decimal('250')
+        assert history[1].best_bid == Decimal('0.503')
+        assert (
+            market_data.get_market_history(limit=1)[0].sequence == history[1].sequence
+        )
+        assert market_data.get_price_history(test_ticker) == [
+            Decimal('0.50'),
+            Decimal('0.504'),
+        ]
+
 
 class TestNoSideBootstrap:
     """Tests for No-side orderbook bootstrap from PriceChangeEvent."""
 
-    def test_no_orderbook_bootstrapped_on_first_yes_event(self, market_data: MarketDataManager):
+    def test_no_orderbook_bootstrapped_on_first_yes_event(
+        self, market_data: MarketDataManager
+    ):
         yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', no_token_id='NO',
-            market_id='M', event_id='E',
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            no_token_id='NO',
+            market_id='M',
+            event_id='E',
         )
         no = yes.get_no_ticker()
         event = PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
@@ -238,10 +286,16 @@ class TestNoSideBootstrap:
         assert no_bid.price == Decimal('0.395')  # 1 - 0.60 - 0.005
         assert no_ask.price == Decimal('0.405')  # 1 - 0.60 + 0.005
 
-    def test_no_orderbook_not_overwritten_by_second_yes_event(self, market_data: MarketDataManager):
+    def test_no_orderbook_not_overwritten_by_second_yes_event(
+        self, market_data: MarketDataManager
+    ):
         yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', no_token_id='NO',
-            market_id='M', event_id='E',
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            no_token_id='NO',
+            market_id='M',
+            event_id='E',
         )
         no = yes.get_no_ticker()
 
@@ -262,7 +316,9 @@ class TestNoSideBootstrap:
         # Should still reflect the direct No event (0.30), not Yes-derived (0.20)
         assert no_bid.price == Decimal('0.295')
 
-    def test_no_bootstrap_skipped_without_no_token(self, market_data: MarketDataManager):
+    def test_no_bootstrap_skipped_without_no_token(
+        self, market_data: MarketDataManager
+    ):
         ticker = PolyMarketTicker(symbol='SOLO', name='Solo')
         event = PriceChangeEvent(ticker=ticker, price=Decimal('0.50'), timestamp='t0')
         market_data.process_price_change_event(event)

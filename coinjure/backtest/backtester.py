@@ -59,9 +59,20 @@ async def run_backtest(
     initial_capital: Decimal,
     strategy: Strategy,
     spread: Decimal = Decimal('0.01'),
+    *,
+    include_all_markets_context: bool = False,
+    allow_cross_market_trading: bool = False,
 ) -> None:
-    data_source = HistoricalDataSource(history_file, ticker_symbol)
-    market_data = MarketDataManager(spread=spread)
+    data_source = HistoricalDataSource(
+        history_file,
+        ticker_symbol,
+        include_all_markets=include_all_markets_context,
+    )
+    market_data = MarketDataManager(
+        spread=spread,
+        max_history_per_ticker=None,
+        max_timeline_events=None,
+    )
     position_manager = PositionManager()
     position_manager.update_position(
         Position(
@@ -81,6 +92,12 @@ async def run_backtest(
         max_fill_rate=Decimal('1.0'),
         commission_rate=Decimal('0.0'),
     )
+    if not allow_cross_market_trading:
+        tradable_tickers = [ticker_symbol]
+        no_ticker = ticker_symbol.get_no_ticker()
+        if no_ticker is not None:
+            tradable_tickers.append(no_ticker)
+        trader.set_allowed_tickers(tradable_tickers)
 
     engine = TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
