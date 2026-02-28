@@ -231,6 +231,10 @@ class {class_name}(QuantStrategy):
     Keep them JSON-serialisable numerics.
     \"\"\"
 
+    name = '{class_name}'
+    version = '0.1.0'
+    author = ''
+
     def __init__(
         self,
         trade_size: float = 10.0,
@@ -276,8 +280,13 @@ class {class_name}(AgentStrategy):
     NOT eligible for parameter grid search — evaluate via `paper run --monitor`.
     \"\"\"
 
-    def __init__(self) -> None:
-        self.trade_size = Decimal('10')
+    name = '{class_name}'
+    version = '0.1.0'
+    author = ''
+
+    def __init__(self, trade_size: float = 10.0) -> None:
+        super().__init__()
+        self.trade_size = Decimal(str(trade_size))
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused():

@@ -11,7 +11,6 @@ Fires on OrderBookEvent. Computes volume imbalance across ``depth`` price levels
 from __future__ import annotations
 
 import logging
-from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
@@ -21,10 +20,13 @@ from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
 from .quant_strategy import QuantStrategy
-from .strategy import StrategyDecision
 
 
 class OrderBookImbalanceStrategy(QuantStrategy):
+    name = 'orderbook_imbalance'
+    version = '0.2.0'
+    author = 'coinjure'
+
     def __init__(
         self,
         tickers: list[Ticker] | None = None,
@@ -34,6 +36,7 @@ class OrderBookImbalanceStrategy(QuantStrategy):
         position_size: Decimal = Decimal('10'),
         max_hold_seconds: int = 300,
     ) -> None:
+        super().__init__()
         ticker_list = tickers or []
         self.tickers: set[str] = {t.symbol for t in ticker_list}
         self._ticker_map: dict[str, Ticker] = {t.symbol: t for t in ticker_list}
@@ -43,13 +46,6 @@ class OrderBookImbalanceStrategy(QuantStrategy):
         self.position_size = position_size
         self.max_hold_seconds = max_hold_seconds
         self.logger = logging.getLogger(__name__)
-
-        self.decisions: deque[StrategyDecision] = deque(maxlen=200)
-        self.total_decisions: int = 0
-        self.total_executed: int = 0
-        self.total_buy_yes: int = 0
-        self.total_holds: int = 0
-        self.total_closes: int = 0
 
         # symbol → entry_time
         self._entries: dict[str, datetime] = {}
@@ -111,8 +107,7 @@ class OrderBookImbalanceStrategy(QuantStrategy):
                     executed = result.order is not None
                     if executed:
                         self._entries.pop(ticker.symbol, None)
-                        self.total_executed += 1
-                    self._record_decision(
+                    self.record_decision(
                         ticker_name=ticker.name or ticker.symbol,
                         action=action,
                         executed=executed,
@@ -123,7 +118,6 @@ class OrderBookImbalanceStrategy(QuantStrategy):
                             'ask_vol': ask_vol,
                         },
                     )
-                    self.total_closes += 1
                 finally:
                     self._closing_in_progress.discard(ticker.symbol)
         else:
@@ -141,9 +135,7 @@ class OrderBookImbalanceStrategy(QuantStrategy):
                 executed = result.order is not None
                 if executed:
                     self._entries[ticker.symbol] = now
-                    self.total_executed += 1
-                    self.total_buy_yes += 1
-                self._record_decision(
+                self.record_decision(
                     ticker_name=ticker.name or ticker.symbol,
                     action='BUY_YES',
                     executed=executed,
@@ -155,8 +147,7 @@ class OrderBookImbalanceStrategy(QuantStrategy):
                     },
                 )
             else:
-                self.total_holds += 1
-                self._record_decision(
+                self.record_decision(
                     ticker_name=ticker.name or ticker.symbol,
                     action='HOLD',
                     executed=False,
@@ -167,35 +158,3 @@ class OrderBookImbalanceStrategy(QuantStrategy):
                         'ask_vol': ask_vol,
                     },
                 )
-
-    def _record_decision(
-        self,
-        ticker_name: str,
-        action: str,
-        executed: bool,
-        reasoning: str,
-        signal_values: dict[str, float],
-    ) -> None:
-        self.decisions.append(
-            StrategyDecision(
-                timestamp=datetime.now().strftime('%H:%M:%S'),
-                ticker_name=ticker_name[:40],
-                action=action,
-                executed=executed,
-                reasoning=reasoning,
-                signal_values=signal_values,
-            )
-        )
-        self.total_decisions += 1
-
-    def get_decisions(self) -> list[StrategyDecision]:
-        return list(self.decisions)
-
-    def get_decision_stats(self) -> dict[str, int | float]:
-        return {
-            'decisions': self.total_decisions,
-            'executed': self.total_executed,
-            'buy_yes': self.total_buy_yes,
-            'holds': self.total_holds,
-            'closes': self.total_closes,
-        }

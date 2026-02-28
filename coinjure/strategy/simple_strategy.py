@@ -16,7 +16,6 @@ from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
 from .agent_strategy import AgentStrategy
-from .strategy import StrategyDecision
 
 # API endpoint: auto-select based on available keys
 # DeepSeek: set DEEPSEEK_API_KEY; OpenAI: set OPENAI_API_KEY
@@ -47,18 +46,6 @@ class LLMAnalysisResult(TypedDict):
 
 
 @dataclass
-class LLMDecision:
-    timestamp: str
-    ticker_name: str
-    action: str  # BUY_YES / BUY_NO / HOLD / CLOSE_EDGE / CLOSE_REEVAL / CLOSE_TIMEOUT
-    confidence: float
-    executed: bool = False
-    reasoning: str = ''
-    llm_prob: float = 0.0
-    market_price: float = 0.0
-
-
-@dataclass
 class PositionMeta:
     """Tracks metadata for an open position to drive exit decisions."""
 
@@ -72,6 +59,10 @@ class PositionMeta:
 
 
 class SimpleStrategy(AgentStrategy):
+    name = 'simple_llm'
+    version = '0.2.0'
+    author = 'coinjure'
+
     def __init__(
         self,
         trade_size: Decimal = Decimal('1.0'),
@@ -88,16 +79,7 @@ class SimpleStrategy(AgentStrategy):
         self.reeval_cooldown = timedelta(seconds=reeval_cooldown)
         self.max_holding = timedelta(seconds=max_holding)
         self.logger = logging.getLogger(__name__)
-        self.decisions: deque[LLMDecision] = deque(maxlen=200)
-        self.total_decisions: int = (
-            0  # Running counter (not affected by deque eviction)
-        )
-        self.total_executed: int = 0  # Running counter (not affected by deque eviction)
-        # Per-action running counters (not affected by deque eviction)
-        self.total_buy_yes: int = 0
-        self.total_buy_no: int = 0
-        self.total_holds: int = 0
-        self.total_closes: int = 0
+        super().__init__()
         # Position metadata: ticker_symbol → PositionMeta
         self._position_meta: dict[str, PositionMeta] = {}
         # Guard against concurrent close attempts on the same ticker
@@ -171,35 +153,40 @@ class SimpleStrategy(AgentStrategy):
                 analysis = await self._analyze_news_with_llm(event, market_price)
                 self.logger.info(f'LLM Analysis: {analysis}')
 
-                decision = LLMDecision(
-                    timestamp=datetime.now().strftime('%H:%M:%S'),
-                    ticker_name=(event.title or event.news or '')[:40],
-                    action=analysis['action'].upper(),
-                    confidence=analysis['confidence'],
-                    executed=False,
-                    reasoning=analysis.get('reasoning', '') or '',
-                    llm_prob=analysis.get('llm_prob', 0.0),
-                    market_price=analysis.get('market_price', 0.0),
-                )
+                llm_prob = analysis.get('llm_prob', 0.0)
+                market_price_val = analysis.get('market_price', 0.0)
+                action_str = analysis['action'].upper()
+                confidence = analysis['confidence']
+                reasoning = analysis.get('reasoning', '') or ''
+                ticker_name = (event.title or event.news or '')[:40]
+                sig = {
+                    'llm_prob': llm_prob,
+                    'market_price': market_price_val,
+                    'edge': round(llm_prob - market_price_val, 4),
+                }
 
                 if analysis['action'] == 'hold':
-                    self.decisions.append(decision)
-                    self.total_decisions += 1
-                    self.total_holds += 1
+                    self.record_decision(
+                        ticker_name=ticker_name,
+                        action=action_str,
+                        executed=False,
+                        reasoning=reasoning,
+                        confidence=confidence,
+                        signal_values=sig,
+                    )
                     return
 
                 executed, fill_price = await self._execute_trade(
                     analysis, ticker, trader
                 )
-                decision.executed = executed
-                if executed:
-                    self.total_executed += 1
-                self.decisions.append(decision)
-                self.total_decisions += 1
-                if analysis['action'] == 'buy_yes':
-                    self.total_buy_yes += 1
-                elif analysis['action'] == 'buy_no':
-                    self.total_buy_no += 1
+                self.record_decision(
+                    ticker_name=ticker_name,
+                    action=action_str,
+                    executed=executed,
+                    reasoning=reasoning,
+                    confidence=confidence,
+                    signal_values=sig,
+                )
 
                 # Record position metadata if trade was executed
                 if executed:
@@ -515,7 +502,7 @@ The market has moved since then. Re-evaluate.
 
 Market: {meta.title}
 Your previous estimate: {meta.llm_prob:.0%}
-Current YES market price: ${yes_implied_price:.2f} (implies {yes_implied_price*100:.0f}% probability)
+Current YES market price: ${yes_implied_price:.2f} (implies {yes_implied_price * 100:.0f}% probability)
 You bought {'YES' if meta.side == 'yes' else 'NO'} at ${display_entry:.2f}
 
 Should you still hold this position? Re-estimate the true probability (of YES happening).
@@ -657,7 +644,6 @@ Respond in JSON only:
         if executed:
             self._position_meta.pop(ticker.symbol, None)
             self._close_failures.pop(ticker.symbol, None)
-            self.total_executed += 1
         else:
             # Count consecutive failures; drop meta after 3 to avoid infinite retry
             # (e.g. market already resolved, token delisted)
@@ -671,20 +657,17 @@ Respond in JSON only:
                 self._position_meta.pop(ticker.symbol, None)
                 self._close_failures.pop(ticker.symbol, None)
 
-        self.total_closes += 1
-        self.decisions.append(
-            LLMDecision(
-                timestamp=datetime.now().strftime('%H:%M:%S'),
-                ticker_name=f'{action[:12]}: {ticker.name[:25]}',
-                action=action,
-                confidence=0.0,
-                executed=executed,
-                reasoning=reasoning,
-                llm_prob=llm_prob,
-                market_price=current_price,
-            )
+        self.record_decision(
+            ticker_name=f'{action[:12]}: {ticker.name[:25]}',
+            action=action,
+            executed=executed,
+            reasoning=reasoning,
+            signal_values={
+                'llm_prob': llm_prob,
+                'market_price': current_price,
+                'edge': round(llm_prob - current_price, 4),
+            },
         )
-        self.total_decisions += 1
 
     # ------------------------------------------------------------------
     # Opening trade logic
@@ -707,7 +690,7 @@ Respond in JSON only:
         try:
             price_info = ''
             if market_price > 0:
-                price_info = f'\nCurrent market price: ${market_price:.2f} (implies {market_price*100:.0f}% probability)'
+                price_info = f'\nCurrent market price: ${market_price:.2f} (implies {market_price * 100:.0f}% probability)'
 
             # Find relevant Google News
             relevant_news = self._find_relevant_news(event.title or '')
@@ -1032,31 +1015,3 @@ Respond in JSON only:
     # ------------------------------------------------------------------
     # Generic strategy interface
     # ------------------------------------------------------------------
-
-    def get_decisions(self) -> list[StrategyDecision]:
-        return [
-            StrategyDecision(
-                timestamp=d.timestamp,
-                ticker_name=d.ticker_name,
-                action=d.action,
-                executed=d.executed,
-                reasoning=d.reasoning,
-                confidence=d.confidence,
-                signal_values={
-                    'llm_prob': d.llm_prob,
-                    'market_price': d.market_price,
-                    'edge': round(d.llm_prob - d.market_price, 4),
-                },
-            )
-            for d in self.decisions
-        ]
-
-    def get_decision_stats(self) -> dict[str, int | float]:
-        return {
-            'decisions': self.total_decisions,
-            'executed': self.total_executed,
-            'buy_yes': self.total_buy_yes,
-            'buy_no': self.total_buy_no,
-            'holds': self.total_holds,
-            'closes': self.total_closes,
-        }
