@@ -131,6 +131,13 @@ class PaperTrader(Trader):
             await self._alert_rejected(guard_failure, ticker)
             return PlaceOrderResult(order=None, failure_reason=guard_failure)
 
+        if not self.is_ticker_tradable(ticker):
+            await self._alert_rejected(OrderFailureReason.MARKET_NOT_ALLOWED, ticker)
+            return PlaceOrderResult(
+                order=None,
+                failure_reason=OrderFailureReason.MARKET_NOT_ALLOWED,
+            )
+
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
             result = PlaceOrderResult(

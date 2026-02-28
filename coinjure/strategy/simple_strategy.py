@@ -15,7 +15,8 @@ from coinjure.ticker.ticker import KalshiTicker, PolyMarketTicker, Ticker
 from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
-from .strategy import Strategy, StrategyDecision
+from .agent_strategy import AgentStrategy
+from .strategy import StrategyDecision
 
 # API endpoint: auto-select based on available keys
 # DeepSeek: set DEEPSEEK_API_KEY; OpenAI: set OPENAI_API_KEY
@@ -70,7 +71,7 @@ class PositionMeta:
     title: str = ''  # market title for logging
 
 
-class SimpleStrategy(Strategy):
+class SimpleStrategy(AgentStrategy):
     def __init__(
         self,
         trade_size: Decimal = Decimal('1.0'),

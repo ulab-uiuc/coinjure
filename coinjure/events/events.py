@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from coinjure.ticker.ticker import Ticker
+
+if TYPE_CHECKING:
+    from coinjure.order.order_book import OrderBook
 
 
 class Event(ABC):

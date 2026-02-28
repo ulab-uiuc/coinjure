@@ -4,10 +4,10 @@ from coinjure.events.events import Event, PriceChangeEvent
 from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
-from .strategy import Strategy
+from .quant_strategy import QuantStrategy
 
 
-class TestStrategy(Strategy):
+class TestStrategy(QuantStrategy):
     def __init__(self):
         self.last_prices = {}
         self.fixed_quantity = Decimal('100')

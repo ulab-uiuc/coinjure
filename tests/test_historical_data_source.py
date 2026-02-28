@@ -63,3 +63,66 @@ def test_historical_data_source_sorts_iso_timestamps(tmp_path: Path) -> None:
     assert len(source.events) == 4
     assert source.events[0].timestamp == '2025-01-01T00:00:00+00:00'
     assert source.events[-1].timestamp == '2025-01-02T00:00:00+00:00'
+
+
+def test_historical_data_source_can_include_other_markets(tmp_path: Path) -> None:
+    history_file = tmp_path / 'history.json'
+    rows = [
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'question': 'Primary market',
+            'time_series': {'Yes': [{'t': 1, 'p': 0.40}]},
+        },
+        {
+            'event_id': 'E1',
+            'market_id': 'M2',
+            'question': 'Linked market',
+            'time_series': {'Yes': [{'t': 2, 'p': 0.75}]},
+        },
+    ]
+    history_file.write_text(json.dumps(rows), encoding='utf-8')
+
+    source = HistoricalDataSource(
+        str(history_file),
+        _ticker(),
+        include_all_markets=True,
+    )
+
+    symbols = [event.ticker.symbol for event in source.events]
+
+    assert len(source.events) == 4
+    assert 'YES' in symbols
+    assert 'NO' in symbols
+    assert 'BT_M2' in symbols
+    assert 'BT_M2_NO' in symbols
+
+
+def test_historical_data_source_can_drain_same_timestamp_batch(tmp_path: Path) -> None:
+    history_file = tmp_path / 'history.json'
+    rows = [
+        {
+            'event_id': 'E1',
+            'market_id': 'M1',
+            'time_series': {'Yes': [{'t': 1, 'p': 0.40}, {'t': 2, 'p': 0.45}]},
+        },
+        {
+            'event_id': 'E1',
+            'market_id': 'M2',
+            'time_series': {'Yes': [{'t': 1, 'p': 0.75}]},
+        },
+    ]
+    history_file.write_text(json.dumps(rows), encoding='utf-8')
+
+    source = HistoricalDataSource(
+        str(history_file),
+        _ticker(),
+        include_all_markets=True,
+    )
+
+    first_event = source.events[0]
+    source.index = 1
+    batch = source.drain_same_timestamp_events(first_event)
+
+    assert [event.ticker.symbol for event in batch] == ['NO', 'BT_M2', 'BT_M2_NO']
+    assert source.index == 4
