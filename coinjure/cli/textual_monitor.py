@@ -17,7 +17,6 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -698,7 +697,7 @@ class NewsLog(RichLog):
                 str(item.get('source', '')),
                 str(item.get('url', '')),
             )
-        if isinstance(item, (tuple, list)) and len(item) >= 2:
+        if isinstance(item, tuple | list) and len(item) >= 2:
             return (str(item[0]), str(item[1]), '', '')
         return ('', str(item), '', '')
 
@@ -911,7 +910,7 @@ class TradingMonitorApp(App[None]):
         if focused is not None:
             focused.scroll_up()
 
-    def action_quit(self) -> None:
+    def action_quit(self) -> None:  # type: ignore[override]
         """q — exit the app (worker and engine stop automatically)."""
         self.exit()
 

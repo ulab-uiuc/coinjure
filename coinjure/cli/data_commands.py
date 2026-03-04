@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import signal
 import time
 from datetime import datetime, timezone
-from decimal import Decimal
 from pathlib import Path
 
 import click
@@ -212,6 +210,7 @@ def data_record(
     output_path = Path(output).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    data_source: LivePolyMarketDataSource | LiveKalshiDataSource | LiveRSSNewsDataSource
     if exchange == 'polymarket':
         data_source = LivePolyMarketDataSource(
             event_cache_file='record_events_cache.jsonl',

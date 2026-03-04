@@ -53,7 +53,7 @@ class OpenAIRelatedMarketAgentStrategy(AgentStrategy):
             ]
         )
 
-    async def process_event(self, event: Event, trader: Trader) -> None:
+    async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
         if self.is_paused():
             return
         if not isinstance(event, PriceChangeEvent):

@@ -164,7 +164,7 @@ class RelatedMarketAgentStrategy(AgentStrategy):
     @staticmethod
     def _returns(prices: list[Decimal]) -> list[float]:
         returns: list[float] = []
-        for prev, curr in zip(prices, prices[1:]):
+        for prev, curr in zip(prices, prices[1:], strict=False):
             if prev <= 0:
                 continue
             returns.append(float((curr - prev) / prev))
@@ -180,5 +180,5 @@ class RelatedMarketAgentStrategy(AgentStrategy):
         var_y = sum((y - mean_y) ** 2 for y in ys)
         if var_x <= 0 or var_y <= 0:
             return None
-        cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+        cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=False))
         return cov / (var_x**0.5 * var_y**0.5)

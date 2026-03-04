@@ -8,7 +8,12 @@ from .quant_strategy import QuantStrategy
 
 
 class TestStrategy(QuantStrategy):
+    name = 'test'
+    version = '0.1.0'
+    author = 'coinjure'
+
     def __init__(self):
+        super().__init__()
         self.last_prices = {}
         self.fixed_quantity = Decimal('100')
 

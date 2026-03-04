@@ -205,7 +205,7 @@ class TradingEngine:
                 )
             )
 
-    async def _process_one_event(
+    async def _process_one_event(  # noqa: C901
         self,
         event: object,
         *,

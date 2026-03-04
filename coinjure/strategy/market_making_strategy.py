@@ -14,7 +14,6 @@ Fires on OrderBookEvent. Monitors spread width.
 from __future__ import annotations
 
 import logging
-from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
@@ -24,10 +23,13 @@ from coinjure.trader.trader import Trader
 from coinjure.trader.types import TradeSide
 
 from .quant_strategy import QuantStrategy
-from .strategy import StrategyDecision
 
 
 class MarketMakingStrategy(QuantStrategy):
+    name = 'market_making'
+    version = '0.2.0'
+    author = 'coinjure'
+
     def __init__(
         self,
         tickers: list[Ticker] | None = None,
@@ -38,6 +40,7 @@ class MarketMakingStrategy(QuantStrategy):
         max_hold_seconds: int = 120,
         tick: Decimal = Decimal('0.01'),
     ) -> None:
+        super().__init__()
         ticker_list = tickers or []
         self.tickers: set[str] = {t.symbol for t in ticker_list}
         self._ticker_map: dict[str, Ticker] = {t.symbol: t for t in ticker_list}
@@ -49,18 +52,11 @@ class MarketMakingStrategy(QuantStrategy):
         self.tick = tick
         self.logger = logging.getLogger(__name__)
 
-        self.decisions: deque[StrategyDecision] = deque(maxlen=200)
-        self.total_decisions: int = 0
-        self.total_executed: int = 0
-        self.total_buy_yes: int = 0
-        self.total_holds: int = 0
-        self.total_closes: int = 0
-
         # symbol → (entry_time, entry_price, take_profit, stop_loss)
         self._entries: dict[str, tuple[datetime, Decimal, Decimal, Decimal]] = {}
         self._closing_in_progress: set[str] = set()
 
-    async def process_event(self, event: Event, trader: Trader) -> None:
+    async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
         if self.is_paused():
             return
         if not isinstance(event, OrderBookEvent):
@@ -114,20 +110,18 @@ class MarketMakingStrategy(QuantStrategy):
                         side=TradeSide.SELL,
                         ticker=ticker,
                         limit_price=cur_price,
-                        quantity=position.quantity,
+                        quantity=position.quantity,  # type: ignore[union-attr]
                     )
                     executed = result.order is not None
                     if executed:
                         self._entries.pop(sym, None)
-                        self.total_executed += 1
-                    self._record_decision(
+                    self.record_decision(
                         ticker_name=ticker.name or sym,
                         action=close_reason,
                         executed=executed,
                         reasoning=f'spread={float(spread):.4f}, cur={float(cur_price):.4f}, tp={float(take_profit):.4f}, sl={float(stop_loss):.4f}',
                         signal_values={'spread': float(spread), 'mid': float(mid)},
                     )
-                    self.total_closes += 1
                 finally:
                     self._closing_in_progress.discard(sym)
         else:
@@ -135,8 +129,7 @@ class MarketMakingStrategy(QuantStrategy):
                 entry_price = best_bid.price + self.tick
                 # Must not cross the spread
                 if entry_price >= best_ask.price:
-                    self.total_holds += 1
-                    self._record_decision(
+                    self.record_decision(
                         ticker_name=ticker.name or sym,
                         action='HOLD',
                         executed=False,
@@ -157,9 +150,7 @@ class MarketMakingStrategy(QuantStrategy):
                 executed = result.order is not None
                 if executed:
                     self._entries[sym] = (now, entry_price, take_profit, stop_loss)
-                    self.total_executed += 1
-                    self.total_buy_yes += 1
-                self._record_decision(
+                self.record_decision(
                     ticker_name=ticker.name or sym,
                     action='BUY_YES',
                     executed=executed,
@@ -167,43 +158,10 @@ class MarketMakingStrategy(QuantStrategy):
                     signal_values={'spread': float(spread), 'mid': float(mid)},
                 )
             else:
-                self.total_holds += 1
-                self._record_decision(
+                self.record_decision(
                     ticker_name=ticker.name or sym,
                     action='HOLD',
                     executed=False,
                     reasoning=f'spread={float(spread):.4f} < min={float(self.min_spread):.4f}',
                     signal_values={'spread': float(spread), 'mid': float(mid)},
                 )
-
-    def _record_decision(
-        self,
-        ticker_name: str,
-        action: str,
-        executed: bool,
-        reasoning: str,
-        signal_values: dict[str, float],
-    ) -> None:
-        self.decisions.append(
-            StrategyDecision(
-                timestamp=datetime.now().strftime('%H:%M:%S'),
-                ticker_name=ticker_name[:40],
-                action=action,
-                executed=executed,
-                reasoning=reasoning,
-                signal_values=signal_values,
-            )
-        )
-        self.total_decisions += 1
-
-    def get_decisions(self) -> list[StrategyDecision]:
-        return list(self.decisions)
-
-    def get_decision_stats(self) -> dict[str, int | float]:
-        return {
-            'decisions': self.total_decisions,
-            'executed': self.total_executed,
-            'buy_yes': self.total_buy_yes,
-            'holds': self.total_holds,
-            'closes': self.total_closes,
-        }
