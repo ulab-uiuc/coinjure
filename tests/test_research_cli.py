@@ -78,26 +78,27 @@ def test_research_group_help_lists_tools() -> None:
     assert result.exit_code == 0
     assert 'strategy-discovery tooling' in result.output
     assert 'slice' in result.output
-    assert 'features' in result.output
-    assert 'labels' in result.output
-    assert 'backtest-batch' in result.output
     assert 'walk-forward' in result.output
     assert 'stress-test' in result.output
     assert 'compare-runs' in result.output
     assert 'strategy-gate' in result.output
     assert 'markets' in result.output
-    assert 'walk-forward-auto' in result.output
     assert 'alpha-pipeline' in result.output
     assert 'auto-tune' in result.output
     assert 'memory' in result.output
+    assert 'grid' in result.output
+    # Removed commands should NOT appear
+    assert 'features' not in result.output
+    assert 'labels' not in result.output
+    assert 'backtest-batch' not in result.output
+    assert 'walk-forward-auto' not in result.output
+    assert 'scan-markets' not in result.output
 
 
-def test_research_slice_features_labels(tmp_path: Path) -> None:
+def test_research_slice(tmp_path: Path) -> None:
     history = tmp_path / 'history.jsonl'
     _write_history(history)
     sliced = tmp_path / 'slice.jsonl'
-    features = tmp_path / 'features.jsonl'
-    labels = tmp_path / 'labels.jsonl'
 
     runner = CliRunner()
     slice_result = runner.invoke(
@@ -122,57 +123,6 @@ def test_research_slice_features_labels(tmp_path: Path) -> None:
     )
     assert slice_result.exit_code == 0
     assert '"points": 3' in slice_result.output
-
-    feature_result = runner.invoke(
-        cli,
-        [
-            'research',
-            'features',
-            '--history-file',
-            str(history),
-            '--market-id',
-            'M1',
-            '--event-id',
-            'E1',
-            '--windows',
-            '2,3',
-            '--z-window',
-            '3',
-            '--output',
-            str(features),
-            '--json',
-        ],
-    )
-    assert feature_result.exit_code == 0
-    feature_rows = _load_jsonl(features)
-    assert len(feature_rows) == 4
-    assert 'momentum_2' in feature_rows[0]
-    assert 'zscore_3' in feature_rows[-1]
-
-    label_result = runner.invoke(
-        cli,
-        [
-            'research',
-            'labels',
-            '--history-file',
-            str(history),
-            '--market-id',
-            'M1',
-            '--event-id',
-            'E1',
-            '--horizon-steps',
-            '1',
-            '--threshold',
-            '0.01',
-            '--output',
-            str(labels),
-            '--json',
-        ],
-    )
-    assert label_result.exit_code == 0
-    label_rows = _load_jsonl(labels)
-    assert len(label_rows) == 3
-    assert 'label_up' in label_rows[0]
 
 
 def test_research_slice_supports_iso_timestamps(tmp_path: Path) -> None:
@@ -221,19 +171,20 @@ def test_research_slice_supports_iso_timestamps(tmp_path: Path) -> None:
     assert '"points": 2' in result.output
 
 
-def test_research_backtest_batch_writes_output(monkeypatch, tmp_path: Path) -> None:
+def test_research_grid_with_params_jsonl(monkeypatch, tmp_path: Path) -> None:
+    """grid --params-jsonl replaces the old backtest-batch command."""
     history = tmp_path / 'history.jsonl'
     _write_history(history)
     params = tmp_path / 'params.jsonl'
     params_rows = [
-        {'id': 'r1', 'strategy_kwargs': {'trade_size': 10}},
-        {'id': 'r2', 'entry_z': 1.2},
+        {'trade_size': 10},
+        {'entry_z': 1.2},
     ]
     params.write_text(
         '\n'.join(json.dumps(row) for row in params_rows) + '\n',
         encoding='utf-8',
     )
-    output = tmp_path / 'batch_out.jsonl'
+    output = tmp_path / 'grid_out.jsonl'
 
     def fake_run_backtest_once(**kwargs):
         return {
@@ -254,7 +205,7 @@ def test_research_backtest_batch_writes_output(monkeypatch, tmp_path: Path) -> N
         cli,
         [
             'research',
-            'backtest-batch',
+            'grid',
             '--history-file',
             str(history),
             '--market-id',
@@ -321,26 +272,11 @@ def test_research_slice_supports_iso_timestamps_in_json_array(tmp_path: Path) ->
     assert rows_out[0]['time_series']['Yes'][0]['t'] == start_ts
 
 
-def test_research_scan_markets_removed(tmp_path: Path) -> None:
-    history = tmp_path / 'history.jsonl'
-    _write_history(history)
-
+def test_research_scan_markets_removed() -> None:
     runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [
-            'research',
-            'scan-markets',
-            '--history-file',
-            str(history),
-            '--strategy-ref',
-            'coinjure.strategy.test_strategy:TestStrategy',
-            '--output',
-            str(tmp_path / 'unused.jsonl'),
-        ],
-    )
+    result = runner.invoke(cli, ['research', 'scan-markets'])
     assert result.exit_code != 0
-    assert 'was removed as redundant' in result.output
+    assert 'No such command' in result.output
 
 
 def test_research_auto_tune_runs_end_to_end(monkeypatch, tmp_path: Path) -> None:
@@ -581,7 +517,9 @@ def test_research_compare_runs_and_memory(tmp_path: Path) -> None:
     assert payload['count'] == 1
 
 
-def test_research_markets_and_walk_forward_auto(monkeypatch, tmp_path: Path) -> None:
+def test_research_markets_and_walk_forward_target_runs(
+    monkeypatch, tmp_path: Path
+) -> None:
     history = tmp_path / 'history_iso.jsonl'
     _write_iso_history(history)
     wf_output = tmp_path / 'wf_auto.jsonl'
@@ -625,7 +563,7 @@ def test_research_markets_and_walk_forward_auto(monkeypatch, tmp_path: Path) -> 
         cli,
         [
             'research',
-            'walk-forward-auto',
+            'walk-forward',
             '--history-file',
             str(history),
             '--market-id',
@@ -634,9 +572,9 @@ def test_research_markets_and_walk_forward_auto(monkeypatch, tmp_path: Path) -> 
             'E1',
             '--strategy-ref',
             'coinjure.strategy.test_strategy:TestStrategy',
-            '--min-train-size',
+            '--train-size',
             '20',
-            '--min-test-size',
+            '--test-size',
             '10',
             '--target-runs',
             '2',

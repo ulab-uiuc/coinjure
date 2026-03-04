@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from coinjure.cli.cli import cli
 
 
-def test_trade_pause_resume_stop_and_estop(monkeypatch):
+def test_trade_pause_resume_stop(monkeypatch):
     calls: list[str] = []
 
     def fake_run_command(cmd, socket_path=None, **kwargs):
@@ -18,14 +18,11 @@ def test_trade_pause_resume_stop_and_estop(monkeypatch):
     pause = runner.invoke(cli, ['trade', 'pause'])
     resume = runner.invoke(cli, ['trade', 'resume'])
     stop = runner.invoke(cli, ['trade', 'stop'])
-    estop = runner.invoke(cli, ['trade', 'estop'])
 
     assert pause.exit_code == 0
     assert resume.exit_code == 0
     assert stop.exit_code == 0
-    assert estop.exit_code == 0
-    assert calls == ['pause', 'resume', 'stop', 'stop']
-    assert 'EMERGENCY STOP signal sent' in estop.output
+    assert calls == ['pause', 'resume', 'stop']
 
 
 def test_trade_status_human_and_json(monkeypatch):

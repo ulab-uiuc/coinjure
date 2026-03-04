@@ -41,7 +41,7 @@ async def _polymarket_list_markets(limit: int) -> list[dict]:
             f'Polymarket API returned HTTP {resp.status_code}: {resp.text[:200]}'
         )
     events = resp.json()
-    markets = []
+    markets: list[dict[str, Any]] = []
     for event in events[:limit]:
         for mkt in event.get('markets', []):
             if len(markets) >= limit:
@@ -187,7 +187,7 @@ async def _kalshi_market_info(
     if not response:
         return None
     m = response.market if hasattr(response, 'market') else response
-    d = m.to_dict() if hasattr(m, 'to_dict') else dict(m)
+    d = m.to_dict() if hasattr(m, 'to_dict') else dict(m)  # type: ignore[union-attr, call-overload]
     return {
         'ticker': d.get('ticker', ''),
         'title': d.get('title', ''),

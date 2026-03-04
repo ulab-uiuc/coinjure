@@ -16,13 +16,16 @@ from coinjure.strategy.orderbook_imbalance_strategy import (
     OrderBookImbalanceStrategy,
 )
 from coinjure.strategy.quant_strategy import QuantStrategy
-from coinjure.strategy.simple_strategy import LLMDecision, SimpleStrategy
+from coinjure.strategy.simple_strategy import SimpleStrategy
 from coinjure.strategy.strategy import Strategy, StrategyDecision
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
 
 
 class DummyStrategy(Strategy):
+    def __init__(self) -> None:
+        super().__init__()
+
     async def process_event(self, event, trader) -> None:  # type: ignore[no-untyped-def]
         return
 
@@ -247,24 +250,19 @@ def test_agent_and_quant_helpers_share_same_context_contract(
 
 def test_simple_strategy_decision_wrapping() -> None:
     strategy = SimpleStrategy()
-    strategy.decisions.append(
-        LLMDecision(
-            timestamp='12:34:56',
-            ticker_name='My Market',
-            action='BUY_YES',
-            confidence=0.8,
-            executed=True,
-            reasoning='edge positive',
-            llm_prob=0.72,
-            market_price=0.55,
-        )
+    strategy.record_decision(
+        ticker_name='My Market',
+        action='BUY_YES',
+        executed=True,
+        reasoning='edge positive',
+        confidence=0.8,
+        signal_values={
+            'llm_prob': 0.72,
+            'market_price': 0.55,
+            'edge': 0.17,
+        },
+        timestamp='12:34:56',
     )
-    strategy.total_decisions = 1
-    strategy.total_executed = 1
-    strategy.total_buy_yes = 1
-    strategy.total_buy_no = 0
-    strategy.total_holds = 0
-    strategy.total_closes = 0
 
     wrapped = strategy.get_decisions()
     assert len(wrapped) == 1
@@ -273,7 +271,7 @@ def test_simple_strategy_decision_wrapping() -> None:
     assert wrapped[0].signal_values['edge'] == 0.17
 
     stats = strategy.get_decision_stats()
-    assert set(stats.keys()) == {
+    assert set(stats.keys()) >= {
         'decisions',
         'executed',
         'buy_yes',

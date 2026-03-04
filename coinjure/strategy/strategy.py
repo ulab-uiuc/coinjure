@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from coinjure.data.market_data_manager import MarketDataPoint
 from coinjure.events.events import Event
@@ -168,6 +169,24 @@ class StrategyContext:
 
 
 class Strategy(ABC):
+    """Base class for all trading strategies.
+
+    Provides:
+    - Metadata ClassVars: ``name``, ``version``, ``author``
+    - ``strategy_type`` and ``supports_auto_tune()`` for engine integration
+    - Pause/resume via ``set_paused`` / ``is_paused``
+    - Decision recording via ``record_decision`` (shared buffer + counters)
+    - Lifecycle hooks: ``on_start`` / ``on_stop``
+    - ``param_schema()`` classmethod for auto-tune integration
+    - ``StrategyContext`` binding via ``bind_context`` / ``require_context``
+
+    Subclasses MUST implement ``process_event``.
+    """
+
+    # -- Metadata (override in subclasses) -----------------------------------
+    name: ClassVar[str] = ''
+    version: ClassVar[str] = '0.1.0'
+    author: ClassVar[str] = ''
     strategy_type: ClassVar[str] = 'generic'
 
     @classmethod
@@ -179,13 +198,30 @@ class Strategy(ABC):
         """
         return False
 
+    def __init__(self) -> None:
+        self._paused: bool = False
+        self._decisions: deque[StrategyDecision] = deque(maxlen=200)
+        self._decision_stats_cache: dict[str, int] = {
+            'decisions': 0,
+            'executed': 0,
+            'buy_yes': 0,
+            'buy_no': 0,
+            'sells': 0,
+            'closes': 0,
+            'holds': 0,
+        }
+
+    # -- Pause / resume ------------------------------------------------------
+
     def set_paused(self, paused: bool) -> None:
         """Set control-plane pause state for this strategy."""
-        setattr(self, '_paused', paused)
+        self._paused = paused
 
     def is_paused(self) -> bool:
         """Return whether control-plane has paused decision-making."""
-        return bool(getattr(self, '_paused', False))
+        return getattr(self, '_paused', False)
+
+    # -- Abstract event handler ----------------------------------------------
 
     @abstractmethod
     async def process_event(self, event: Event, trader: Trader) -> None:
@@ -196,10 +232,20 @@ class Strategy(ABC):
         """
         pass
 
+    # -- Lifecycle hooks (optional overrides) --------------------------------
+
+    async def on_start(self) -> None:  # noqa: B027
+        """Called once when the engine starts, before the first event."""
+
+    async def on_stop(self) -> None:  # noqa: B027
+        """Called once when the engine shuts down, after the last event."""
+
+    # -- Context binding -----------------------------------------------------
+
     def bind_context(self, event: Event, trader: Trader) -> StrategyContext:
         """Bind the shared strategy context for this timestep."""
         context = StrategyContext(event=event, trader=trader)
-        setattr(self, '_runtime_context', context)
+        self._runtime_context = context
         return context
 
     def get_context(self) -> StrategyContext | None:
@@ -215,6 +261,8 @@ class Strategy(ABC):
             )
         return context
 
+    # -- Decision recording --------------------------------------------------
+
     def record_decision(
         self,
         *,
@@ -226,17 +274,15 @@ class Strategy(ABC):
         signal_values: dict[str, float] | None = None,
         timestamp: str | None = None,
     ) -> None:
-        """Record a strategy decision in a shared default buffer.
+        """Record a strategy decision in the shared buffer.
 
-        Strategies can override storage by implementing custom `get_decisions`
-        / `get_decision_stats`, but this helper keeps legacy strategies
-        functional and provides a common baseline for agent-authored code.
+        Updates both the decision deque and the running counters.
+        All built-in strategies should call this instead of maintaining
+        their own deque + counters.
         """
-        decisions = self._decision_buffer()
-        stats = self._decision_stats()
-
         signal_payload = signal_values or {}
-        decisions.append(
+        self._ensure_init()
+        self._decisions.append(
             StrategyDecision(
                 timestamp=timestamp or datetime.now().strftime('%H:%M:%S'),
                 ticker_name=ticker_name[:40],
@@ -248,6 +294,7 @@ class Strategy(ABC):
             )
         )
 
+        stats = self._decision_stats_cache
         stats['decisions'] += 1
         action_key = action.upper()
         if action_key == 'HOLD':
@@ -268,33 +315,59 @@ class Strategy(ABC):
             stats['closes'] += 1
 
     def get_decisions(self) -> list[StrategyDecision]:
-        """Return recent strategy decisions. Override in subclasses."""
-        return list(self._decision_buffer())
+        """Return recent strategy decisions."""
+        self._ensure_init()
+        return list(self._decisions)
 
     def get_decision_stats(self) -> dict[str, int | float]:
-        """Return running decision counters. Override in subclasses."""
-        return dict(self._decision_stats())
+        """Return running decision counters."""
+        self._ensure_init()
+        return dict(self._decision_stats_cache)
 
-    def _decision_buffer(self) -> deque[StrategyDecision]:
-        buf = getattr(self, '_decisions', None)
-        if isinstance(buf, deque):
-            return buf
-        fresh: deque[StrategyDecision] = deque(maxlen=200)
-        setattr(self, '_decisions', fresh)
-        return fresh
+    def _ensure_init(self) -> None:
+        """Lazily initialise buffers if __init__ was not called (backward compat)."""
+        if not hasattr(self, '_decisions'):
+            self._decisions = deque(maxlen=200)
+        if not hasattr(self, '_decision_stats_cache'):
+            self._decision_stats_cache = {
+                'decisions': 0,
+                'executed': 0,
+                'buy_yes': 0,
+                'buy_no': 0,
+                'sells': 0,
+                'closes': 0,
+                'holds': 0,
+            }
+        if not hasattr(self, '_paused'):
+            self._paused = False
 
-    def _decision_stats(self) -> dict[str, int]:
-        stats = getattr(self, '_decision_stats_cache', None)
-        if isinstance(stats, dict):
-            return stats
-        fresh = {
-            'decisions': 0,
-            'executed': 0,
-            'buy_yes': 0,
-            'buy_no': 0,
-            'sells': 0,
-            'closes': 0,
-            'holds': 0,
-        }
-        setattr(self, '_decision_stats_cache', fresh)
-        return fresh
+    # -- Param schema (for auto-tune) ----------------------------------------
+
+    @classmethod
+    def param_schema(cls) -> dict[str, dict[str, Any]]:
+        """Return the tunable parameters of this strategy.
+
+        Inspects ``__init__`` signature and returns a dict mapping parameter
+        names to metadata (type, default). Used by auto-tune to generate
+        parameter grids automatically.
+
+        Example return value::
+
+            {
+                'entry_threshold': {'type': 'float', 'default': 0.3},
+                'position_size': {'type': 'Decimal', 'default': Decimal('10')},
+            }
+        """
+        schema: dict[str, dict[str, Any]] = {}
+        sig = inspect.signature(cls.__init__)
+        for name, param in sig.parameters.items():
+            if name == 'self':
+                continue
+            info: dict[str, Any] = {}
+            if param.annotation is not inspect.Parameter.empty:
+                ann = param.annotation
+                info['type'] = ann.__name__ if hasattr(ann, '__name__') else str(ann)
+            if param.default is not inspect.Parameter.empty:
+                info['default'] = param.default
+            schema[name] = info
+        return schema

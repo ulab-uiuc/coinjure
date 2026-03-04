@@ -234,7 +234,7 @@ class ControlServer:
 
         # ── Portfolio ────────────────────────────────────────────────
         try:
-            pm = trader.position_manager
+            pm = trader.position_manager  # type: ignore[union-attr]
             pv = pm.get_portfolio_value(md)
             total = float(sum(pv.values(), D('0')))
             realized = float(pm.get_total_realized_pnl())
@@ -279,12 +279,12 @@ class ControlServer:
 
         # ── Positions ────────────────────────────────────────────────
         try:
-            pm = trader.position_manager
+            pm = trader.position_manager  # type: ignore[union-attr]
             pos_list = []
             for p in pm.get_non_cash_positions():
                 if p.quantity <= 0:
                     continue
-                bid = md.get_best_bid(p.ticker)
+                bid = md.get_best_bid(p.ticker)  # type: ignore[union-attr]
                 cur = float(bid.price) if bid else 0.0
                 pnl = (
                     (cur - float(p.average_cost)) * float(p.quantity)
@@ -327,7 +327,7 @@ class ControlServer:
             from coinjure.ticker.ticker import CashTicker
 
             books = []
-            for ticker, ob in list(md.order_books.items()):
+            for ticker, ob in list(md.order_books.items()):  # type: ignore[union-attr]
                 if isinstance(ticker, CashTicker):
                     continue
                 bid_lvl, ask_lvl = ob.best_bid, ob.best_ask

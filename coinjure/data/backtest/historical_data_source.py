@@ -113,7 +113,7 @@ class HistoricalDataSource(DataSource):
     def _timestamp_sort_key(value: Any) -> float:
         if isinstance(value, bool):
             return float('inf')
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             return float(value)
         if isinstance(value, str):
             raw = value.strip()

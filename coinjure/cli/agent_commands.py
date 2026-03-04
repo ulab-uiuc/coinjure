@@ -78,6 +78,7 @@ def _confirm_live_trading(*, as_json: bool) -> None:
 
 def _build_news_augmented_source(exchange: str):
     """Build market + Google/RSS news composite for paper trading."""
+    market_source: LivePolyMarketDataSource | LiveKalshiDataSource
     if exchange == 'polymarket':
         market_source = LivePolyMarketDataSource(
             event_cache_file='events_cache.jsonl',
@@ -156,7 +157,7 @@ def _build_mock_events(ticker: PolyMarketTicker, n_events: int) -> list[Event]:
                 PriceChangeEvent(
                     ticker=ticker,
                     price=base,
-                    timestamp=i + 1,
+                    timestamp=None,
                 )
             )
             continue
@@ -231,6 +232,10 @@ class {class_name}(QuantStrategy):
     Keep them JSON-serialisable numerics.
     \"\"\"
 
+    name = '{class_name}'
+    version = '0.1.0'
+    author = ''
+
     def __init__(
         self,
         trade_size: float = 10.0,
@@ -276,8 +281,13 @@ class {class_name}(AgentStrategy):
     NOT eligible for parameter grid search — evaluate via `paper run --monitor`.
     \"\"\"
 
-    def __init__(self) -> None:
-        self.trade_size = Decimal('10')
+    name = '{class_name}'
+    version = '0.1.0'
+    author = ''
+
+    def __init__(self, trade_size: float = 10.0) -> None:
+        super().__init__()
+        self.trade_size = Decimal(str(trade_size))
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused():
@@ -818,7 +828,7 @@ def live_run(
             )
         )
     else:
-        data_source = LiveKalshiDataSource(
+        kalshi_source = LiveKalshiDataSource(
             api_key_id=kalshi_api_key_id,
             private_key_path=kalshi_private_key_path,
             event_cache_file='kalshi_events_cache.jsonl',
@@ -827,7 +837,7 @@ def live_run(
         )
         asyncio.run(
             run_live_kalshi_trading(
-                data_source=data_source,
+                data_source=kalshi_source,
                 strategy=strategy_obj,
                 api_key_id=kalshi_api_key_id,
                 private_key_path=kalshi_private_key_path,
