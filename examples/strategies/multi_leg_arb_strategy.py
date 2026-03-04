@@ -37,10 +37,11 @@ import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
-from coinjure.events.events import Event, PriceChangeEvent
+from coinjure.events.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import Ticker
+from coinjure.ticker.ticker import PolyMarketTicker, Ticker
 from coinjure.trader.trader import Trader
+from coinjure.trader.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,8 @@ class ArbSnapshot:
     team_prices: dict[str, float]
     action: str  # 'SELL_OVERPRICED' | 'BUY_UNDERPRICED' | 'CROSS_PLATFORM'
     profit_per_set: float
+    orders_placed: int = 0
+    orders_filled: int = 0
 
 
 class MultiLegArbStrategy(Strategy):
@@ -69,7 +72,7 @@ class MultiLegArbStrategy(Strategy):
     """
 
     name = 'multi_leg_arb'
-    version = '1.0.0'
+    version = '2.0.0'
     author = 'coinjure'
 
     def __init__(
@@ -79,17 +82,25 @@ class MultiLegArbStrategy(Strategy):
         trade_size: Decimal = Decimal('10'),
         cooldown_events: int = 5,
         ticker_metadata: dict[str, tuple[str, str]] | None = None,
+        min_outcomes: int = 3,
     ) -> None:
         super().__init__()
         self.min_overpricing = min_overpricing
         self.min_cross_platform_edge = min_cross_platform_edge
-        self.trade_size = trade_size
+        self.trade_size = Decimal(str(trade_size))
         self.cooldown_events = cooldown_events
+        self.min_outcomes = min_outcomes
         # symbol -> (platform, team) — set externally by the data source
         self._ticker_metadata: dict[str, tuple[str, str]] = ticker_metadata or {}
 
-        # State
+        # State — prices grouped by event_id for live mode
         self._prices: dict[str, dict[str, Decimal]] = {}  # platform -> {team: price}
+        # event_id -> {outcome_name: Decimal price}
+        self._event_prices: dict[str, dict[str, Decimal]] = {}
+        # event_id -> number of price updates received (warmup tracking)
+        self._event_updates: dict[str, int] = {}
+        # event_id -> True if mutually exclusive (negRisk=True from Polymarket)
+        self._event_exclusive: dict[str, bool] = {}
         self._event_counter = 0
         self._last_arb_event: int = -999
         self._arb_snapshots: list[ArbSnapshot] = []
@@ -99,16 +110,44 @@ class MultiLegArbStrategy(Strategy):
     def arb_snapshots(self) -> list[ArbSnapshot]:
         return list(self._arb_snapshots)
 
+    def _extract_price(self, event: Event) -> tuple[Ticker, Decimal] | None:
+        """Extract ticker and YES price from a supported event type."""
+        if isinstance(event, PriceChangeEvent):
+            return event.ticker, event.price
+        if isinstance(event, OrderBookEvent) and event.side == 'bid':
+            ticker = event.ticker
+            # Only track YES-side tokens for sum(YES) calculation.
+            if isinstance(ticker, PolyMarketTicker) and not ticker.is_yes:
+                return None
+            return ticker, event.price
+        return None
+
+    def _update_event_prices(self, ticker: Ticker, team: str, price: Decimal) -> str:
+        """Track per-event prices in live mode.  Returns the event_id (or '')."""
+        if self._ticker_metadata or not isinstance(ticker, PolyMarketTicker):
+            return ''
+        event_id = ticker.event_id
+        if not event_id:
+            return ''
+        if event_id not in self._event_prices:
+            self._event_prices[event_id] = {}
+            self._event_updates[event_id] = 0
+        self._event_prices[event_id][team] = price
+        self._event_updates[event_id] += 1
+        # Track whether this event is mutually exclusive (negRisk=True)
+        if event_id not in self._event_exclusive:
+            self._event_exclusive[event_id] = ticker.neg_risk
+        return event_id
+
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused():
             return
 
-        if not isinstance(event, PriceChangeEvent):
+        extracted = self._extract_price(event)
+        if extracted is None:
             return
-
+        ticker, price = extracted
         self._event_counter += 1
-        ticker = event.ticker
-        price = event.price
 
         # Determine platform and team from external metadata
         meta = self._ticker_metadata.get(ticker.symbol)
@@ -123,25 +162,130 @@ class MultiLegArbStrategy(Strategy):
         self._prices[platform][team] = price
         self._team_tickers[team] = ticker
 
+        event_id = self._update_event_prices(ticker, team, price)
+
+        # Intra-platform arb check
+        if self._event_prices:
+            # Live mode: check each multi-outcome event separately.
+            # Require at least 2 full rounds of updates per outcome to
+            # avoid false signals during initial order book loading.
+            if event_id and event_id in self._event_prices:
+                # Only trade mutually exclusive events (negRisk=True)
+                if not self._event_exclusive.get(event_id, False):
+                    return
+                ep = self._event_prices[event_id]
+                n_outcomes = len(ep)
+                n_updates = self._event_updates.get(event_id, 0)
+                if n_outcomes >= self.min_outcomes and n_updates >= n_outcomes * 2:
+                    await self._check_intra_platform_arb(event, trader, ep)
+        else:
+            # Backtest mode: use flat polymarket price dict
+            poly_prices = self._prices.get('polymarket', {})
+            await self._check_intra_platform_arb(event, trader, poly_prices)
+
+        # Cross-platform arb
         poly_prices = self._prices.get('polymarket', {})
-        self._check_intra_platform_arb(event, trader, poly_prices)
         self._check_cross_platform_arb(team, poly_prices)
 
-    def _check_intra_platform_arb(
-        self, event: PriceChangeEvent, trader: Trader, poly_prices: dict[str, Decimal]
+    @staticmethod
+    def _get_no_ticker(ticker: Ticker) -> PolyMarketTicker | None:
+        """Get or synthesize the NO-side ticker."""
+        if isinstance(ticker, PolyMarketTicker):
+            no = ticker.get_no_ticker()
+            if no is not None:
+                return no
+            # Synthesize NO ticker for backtest tickers without no_token_id
+            return PolyMarketTicker(
+                symbol=f'{ticker.symbol}_NO',
+                name=ticker.name,
+                token_id=f'{ticker.token_id or ticker.symbol}_NO',
+                market_id=ticker.market_id,
+                event_id=ticker.event_id,
+                no_token_id=ticker.token_id or ticker.symbol,
+                is_yes=False,
+            )
+        return None
+
+    async def _execute_sell_overpriced(
+        self, trader: Trader, poly_prices: dict[str, Decimal]
+    ) -> tuple[int, int]:
+        """Buy NO on every outcome to lock in overpricing profit.
+
+        Returns (orders_placed, orders_filled).
+        """
+        placed = 0
+        filled = 0
+        for team, yes_price in poly_prices.items():
+            ticker = self._team_tickers.get(team)
+            if ticker is None:
+                continue
+            no_ticker = self._get_no_ticker(ticker)
+            if no_ticker is None:
+                continue
+            # NO price = 1 - YES price
+            no_price = Decimal('1') - yes_price
+            if no_price <= 0:
+                continue
+            result = await trader.place_order(
+                side=TradeSide.BUY,
+                ticker=no_ticker,
+                limit_price=no_price,
+                quantity=self.trade_size,
+            )
+            placed += 1
+            if result.executed:
+                filled += 1
+        return placed, filled
+
+    async def _execute_buy_underpriced(
+        self, trader: Trader, poly_prices: dict[str, Decimal]
+    ) -> tuple[int, int]:
+        """Buy YES on every outcome to lock in underpricing profit.
+
+        Returns (orders_placed, orders_filled).
+        """
+        placed = 0
+        filled = 0
+        for team, yes_price in poly_prices.items():
+            ticker = self._team_tickers.get(team)
+            if ticker is None or yes_price <= 0:
+                continue
+            result = await trader.place_order(
+                side=TradeSide.BUY,
+                ticker=ticker,
+                limit_price=yes_price,
+                quantity=self.trade_size,
+            )
+            placed += 1
+            if result.executed:
+                filled += 1
+        return placed, filled
+
+    async def _check_intra_platform_arb(
+        self, event: Event, trader: Trader, poly_prices: dict[str, Decimal]
     ) -> None:
         """Detect intra-platform multi-leg overpricing/underpricing."""
-        if len(poly_prices) < 20:
+        if len(poly_prices) < max(self.min_outcomes, 3):
             return
 
         sum_yes = sum(float(p) for p in poly_prices.values())
         overpricing = sum_yes - 1.0
         n_teams = len(poly_prices)
 
+        # Sanity checks for exclusive-event assumption:
+        # - sum_yes < 0.85: likely missing outcomes, skip to avoid false signals
+        # - sum_yes > 1.5: likely a non-exclusive event (e.g. "top 4 finish")
+        #   where multiple outcomes can win simultaneously
+        if sum_yes < 0.85 or sum_yes > 1.5:
+            return
+
         if overpricing >= self.min_overpricing:
             if not self._cooldown_ok():
                 return
             self._last_arb_event = self._event_counter
+
+            # Execute: buy NO on every outcome
+            placed, filled = await self._execute_sell_overpriced(trader, poly_prices)
 
             ts = getattr(event, 'timestamp', 0)
             if not isinstance(ts, int | float):
@@ -154,22 +298,33 @@ class MultiLegArbStrategy(Strategy):
                 team_prices={k: round(float(v), 4) for k, v in list(poly_prices.items())[:5]},
                 action='SELL_OVERPRICED',
                 profit_per_set=round(overpricing, 4),
+                orders_placed=placed,
+                orders_filled=filled,
             ))
 
             self.record_decision(
                 ticker_name=f'MULTI_LEG ({n_teams} teams)',
                 action='SELL_OVERPRICED',
-                executed=True,
-                reasoning=f'sum_yes={sum_yes:.4f} overpricing={overpricing:.4f}',
+                executed=filled > 0,
+                reasoning=(
+                    f'sum_yes={sum_yes:.4f} overpricing={overpricing:.4f} '
+                    f'orders={filled}/{placed}'
+                ),
                 signal_values={'sum_yes': sum_yes, 'overpricing': overpricing},
             )
 
-            logger.info('MULTI-LEG ARB: sum=%.4f overpricing=%.4f', sum_yes, overpricing)
+            logger.info(
+                'MULTI-LEG ARB: sum=%.4f overpricing=%.4f filled=%d/%d',
+                sum_yes, overpricing, filled, placed,
+            )
 
         elif overpricing < -self.min_overpricing:
             if not self._cooldown_ok():
                 return
             self._last_arb_event = self._event_counter
+
+            # Execute: buy YES on every outcome
+            placed, filled = await self._execute_buy_underpriced(trader, poly_prices)
 
             self._arb_snapshots.append(ArbSnapshot(
                 timestamp=self._event_counter,
@@ -178,13 +333,18 @@ class MultiLegArbStrategy(Strategy):
                 team_prices={k: round(float(v), 4) for k, v in list(poly_prices.items())[:5]},
                 action='BUY_UNDERPRICED',
                 profit_per_set=round(abs(overpricing), 4),
+                orders_placed=placed,
+                orders_filled=filled,
             ))
 
             self.record_decision(
                 ticker_name=f'MULTI_LEG ({n_teams} teams)',
                 action='BUY_UNDERPRICED',
-                executed=False,
-                reasoning=f'sum_yes={sum_yes:.4f} underpricing={abs(overpricing):.4f}',
+                executed=filled > 0,
+                reasoning=(
+                    f'sum_yes={sum_yes:.4f} underpricing={abs(overpricing):.4f} '
+                    f'orders={filled}/{placed}'
+                ),
                 signal_values={'sum_yes': sum_yes, 'overpricing': overpricing},
             )
         else:

@@ -27,6 +27,8 @@ class PolyMarketTicker(Ticker):
     market_id: str = ''
     event_id: str = ''
     no_token_id: str = ''  # Complement token (NO side)
+    is_yes: bool = True  # True for YES token, False for NO token
+    neg_risk: bool = False  # True = mutually exclusive event (exactly one outcome wins)
 
     @property
     def collateral(self) -> Ticker:
@@ -54,6 +56,8 @@ class PolyMarketTicker(Ticker):
             market_id=self.market_id,
             event_id=self.event_id,
             no_token_id=self.token_id,  # reverse: NO's complement is YES
+            is_yes=False,
+            neg_risk=self.neg_risk,
         )
 
 

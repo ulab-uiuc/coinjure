@@ -128,6 +128,8 @@ class LivePolyMarketDataSource(DataSource):
         market_id: str = '',
         event_id: str = '',
         no_token_id: str = '',
+        is_yes: bool = True,
+        neg_risk: bool = False,
     ) -> list[OrderBookEvent]:
         events = []
 
@@ -142,6 +144,8 @@ class LivePolyMarketDataSource(DataSource):
             market_id=market_id,
             event_id=event_id,
             no_token_id=no_token_id,
+            is_yes=is_yes,
+            neg_risk=neg_risk,
         )
 
         # Only track tickers that have actual liquidity for refresh
@@ -213,6 +217,8 @@ class LivePolyMarketDataSource(DataSource):
                         # data is always empty, so the HTTP requests are wasted.
                         enriched_event = event
 
+                        neg_risk = bool(event.get('negRisk'))
+
                         for market in enriched_event.get('markets', []):
                             market_title = market.get(
                                 'question', market.get('title', '')
@@ -242,6 +248,8 @@ class LivePolyMarketDataSource(DataSource):
                                             market_id=market_id,
                                             event_id=event_id,
                                             no_token_id=complement_id,
+                                            is_yes=(idx == 0),
+                                            neg_risk=neg_risk,
                                         )
                                     )
                                     for ob_event in order_book_events:
@@ -261,6 +269,8 @@ class LivePolyMarketDataSource(DataSource):
                                         market_id=market_id,
                                         event_id=event_id,
                                         no_token_id=complement_id,
+                                        is_yes=(idx == 0),
+                                        neg_risk=neg_risk,
                                     )
                                     self._known_tickers[token_id] = ticker
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import sys
 import uuid
 from pathlib import Path
 
@@ -35,6 +36,7 @@ def load_strategy_class(strategy_ref: str) -> type[Strategy]:
         if spec is None or spec.loader is None:
             raise ValueError(f'Could not load strategy file: {file_path}')
         module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     else:
         try:
