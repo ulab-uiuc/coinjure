@@ -234,10 +234,10 @@ class Strategy(ABC):
 
     # -- Lifecycle hooks (optional overrides) --------------------------------
 
-    async def on_start(self) -> None:
+    async def on_start(self) -> None:  # noqa: B027
         """Called once when the engine starts, before the first event."""
 
-    async def on_stop(self) -> None:
+    async def on_stop(self) -> None:  # noqa: B027
         """Called once when the engine shuts down, after the last event."""
 
     # -- Context binding -----------------------------------------------------
@@ -245,7 +245,7 @@ class Strategy(ABC):
     def bind_context(self, event: Event, trader: Trader) -> StrategyContext:
         """Bind the shared strategy context for this timestep."""
         context = StrategyContext(event=event, trader=trader)
-        setattr(self, '_runtime_context', context)
+        self._runtime_context = context
         return context
 
     def get_context(self) -> StrategyContext | None:

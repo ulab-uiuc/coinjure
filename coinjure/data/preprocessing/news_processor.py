@@ -310,7 +310,7 @@ class NewsDeduplicator:
 
     # -- public API -------------------------------------------------------
 
-    def deduplicate(self, articles: list[NewsArticle]) -> list[NewsArticle]:
+    def deduplicate(self, articles: list[NewsArticle]) -> list[NewsArticle]:  # noqa: C901
         """Remove duplicate articles, keeping the highest-credibility version.
 
         Algorithm:

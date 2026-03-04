@@ -46,7 +46,6 @@ from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager
 from coinjure.ticker.ticker import CashTicker
 from coinjure.trader.paper_trader import PaperTrader
-
 from examples.strategies.cross_platform_arb_strategy import (
     CompositeTrader,
     CrossPlatformArbStrategy,

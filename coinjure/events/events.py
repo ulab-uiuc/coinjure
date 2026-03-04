@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from coinjure.ticker.ticker import Ticker
 
 if TYPE_CHECKING:
-    from coinjure.order.order_book import OrderBook
+    pass
 
 
 class Event(ABC):

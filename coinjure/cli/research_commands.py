@@ -19,12 +19,10 @@ import click
 from coinjure.cli.utils import _emit
 from coinjure.core.trading_engine import TradingEngine
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.backtest.history_reader import iter_history_rows
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.live.live_trader import run_live_paper_trading
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
-from coinjure.strategy.loader import load_strategy_class
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
@@ -121,7 +119,7 @@ def _to_unix_ts(value: object) -> int | None:
     return None
 
 
-def _load_history_rows(path: Path) -> list[dict[str, Any]]:
+def _load_history_rows(path: Path) -> list[dict[str, Any]]:  # noqa: C901
     with path.open(encoding='utf-8') as f:
         content = f.read()
 
@@ -353,7 +351,7 @@ def _write_json(output_file: str, payload: dict[str, object]) -> None:
     out.write_text(json.dumps(payload, default=str), encoding='utf-8')
 
 
-def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:
+def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:  # noqa: C901
     path = Path(history_file).expanduser().resolve()
     if not path.exists():
         raise click.ClickException(f'History file not found: {path}')
@@ -833,7 +831,7 @@ def _build_param_combos(param_grid_json: str | None) -> list[dict[str, Any]]:
         return [{}]
     keys = list(param_grid.keys())
     value_lists = [param_grid[k] for k in keys]
-    return [dict(zip(keys, combo)) for combo in itertools.product(*value_lists)]
+    return [dict(zip(keys, combo, strict=False)) for combo in itertools.product(*value_lists)]
 
 
 @click.group()
@@ -890,7 +888,7 @@ def research() -> None:
 )
 @click.option('--output', default=None, type=click.Path(dir_okay=False))
 @click.option('--json', 'as_json', is_flag=True, default=False)
-def research_markets(
+def research_markets(  # noqa: C901
     history_file: str,
     sort_by: str,
     limit: int,
@@ -1030,7 +1028,7 @@ def research_slice(
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option('--output', required=True, type=click.Path(dir_okay=False))
 @click.option('--json', 'as_json', is_flag=True, default=False)
-def research_walk_forward(
+def research_walk_forward(  # noqa: C901
     history_file: str,
     market_id: str,
     event_id: str,
@@ -1458,7 +1456,7 @@ def research_strategy_gate(
     type=click.Path(file_okay=False),
 )
 @click.option('--json', 'as_json', is_flag=True, default=False)
-def research_alpha_pipeline(
+def research_alpha_pipeline(  # noqa: C901
     history_file: str,
     strategy_ref: str,
     strategy_kwargs_json: str,
@@ -1754,7 +1752,7 @@ def research_alpha_pipeline(
     type=click.Path(file_okay=False),
 )
 @click.option('--json', 'as_json', is_flag=True, default=False)
-def research_auto_tune(
+def research_auto_tune(  # noqa: C901
     history_file: str,
     strategy_ref: str,
     strategy_kwargs_json: str,
@@ -2245,7 +2243,7 @@ def research_batch_markets(
 )
 @click.option('--output', required=True, type=click.Path(dir_okay=False))
 @click.option('--json', 'as_json', is_flag=True, default=False)
-def research_grid(
+def research_grid(  # noqa: C901
     history_file: str,
     market_id: str,
     event_id: str,
@@ -2287,7 +2285,7 @@ def research_grid(
             keys = list(param_grid.keys())
             value_lists = [param_grid[k] for k in keys]
             combos.extend(
-                dict(zip(keys, combo)) for combo in itertools.product(*value_lists)
+                dict(zip(keys, combo, strict=False)) for combo in itertools.product(*value_lists)
             )
 
     # Append combos from JSONL

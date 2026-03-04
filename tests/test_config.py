@@ -13,7 +13,6 @@ from coinjure.config.config import (
     RiskConfig,
     StorageConfig,
     StrategyConfig,
-    TelegramConfig,
 )
 
 # ---------------------------------------------------------------------------

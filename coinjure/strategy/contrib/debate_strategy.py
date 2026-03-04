@@ -632,7 +632,7 @@ class DebateStrategy(Strategy):
     # Trade execution
     # ------------------------------------------------------------------
 
-    async def _execute_with_kelly(
+    async def _execute_with_kelly(  # noqa: C901
         self, signal: dict[str, Any], ticker: Any, trader: Trader
     ) -> None:
         """Execute a trade using Kelly-sized position.

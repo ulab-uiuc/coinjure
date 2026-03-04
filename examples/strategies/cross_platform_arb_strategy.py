@@ -18,8 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from decimal import Decimal
 from difflib import SequenceMatcher
 from typing import Any
@@ -195,21 +194,32 @@ class CrossPlatformArbStrategy(Strategy):
     """Detect and trade cross-platform arbitrage opportunities.
 
     On each PriceChangeEvent or OrderBookEvent, compare the YES price
-    on Polymarket vs Kalshi for matched markets.  If the sum of YES
-    prices on both platforms is < 1.0 (or > 1.0), there's an arb.
+    on Polymarket vs Kalshi for matched markets.  If one platform prices
+    YES significantly cheaper than the other, we can lock in a risk-free
+    profit by buying YES on the cheap side and buying NO on the expensive
+    side.
 
-    Example:
-        Poly YES = 0.45,  Kalshi YES = 0.50
-        Buy Poly YES @ 0.45 + Buy Kalshi NO @ 0.50 (= pay 0.50 for NO)
-        Total cost = 0.45 + 0.50 = 0.95
-        Guaranteed payout = 1.00 -> profit = 0.05 per share
+    Example (Poly cheaper):
+        Poly YES = 0.42,  Kalshi YES = 0.47
+        Buy Poly YES  @ 0.42  (costs 0.42)
+        Buy Kalshi NO @ 0.53  (costs 1 - 0.47 = 0.53)
+        Total cost = 0.42 + 0.53 = 0.95
+        Guaranteed payout = 1.00 (one of them wins)
+        Profit = 0.05 per share
+
+    Example (Kalshi cheaper):
+        Poly YES = 0.55,  Kalshi YES = 0.48
+        Buy Kalshi YES @ 0.48
+        Buy Poly NO    @ 0.45  (costs 1 - 0.55 = 0.45)
+        Total cost = 0.48 + 0.45 = 0.93
+        Profit = 0.07 per share
 
     Note: this is a simplified example. Real arb requires accounting for
     fees, order book depth, settlement differences, and collateral.
     """
 
     name = 'cross_platform_arb'
-    version = '0.1.0'
+    version = '0.2.0'
     author = 'coinjure'
 
     def __init__(
@@ -225,12 +235,12 @@ class CrossPlatformArbStrategy(Strategy):
         self.trade_size = trade_size
         self.cooldown_seconds = cooldown_seconds
 
-        # symbol -> last price
+        # symbol -> last YES price
         self._prices: dict[str, Decimal] = {}
         # symbol -> last arb attempt time
         self._last_arb_time: dict[str, float] = {}
 
-    async def process_event(self, event: Event, trader: Trader) -> None:
+    async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
         if self.is_paused():
             return
 
@@ -242,11 +252,14 @@ class CrossPlatformArbStrategy(Strategy):
             price = event.price
         elif isinstance(event, OrderBookEvent):
             ticker = event.ticker
-            # Use mid price from event
-            if event.bid_price > 0 and event.ask_price > 0:
-                price = (event.bid_price + event.ask_price) / Decimal('2')
-            elif event.ask_price > 0:
-                price = event.ask_price
+            # Use mid price from order book
+            if hasattr(event, 'bid_price') and hasattr(event, 'ask_price'):
+                bid = getattr(event, 'bid_price', Decimal('0'))
+                ask = getattr(event, 'ask_price', Decimal('0'))
+                if bid > 0 and ask > 0:
+                    price = (bid + ask) / Decimal('2')
+                elif ask > 0:
+                    price = ask
         else:
             return
 
@@ -263,7 +276,7 @@ class CrossPlatformArbStrategy(Strategy):
         if match is None:
             return
 
-        # Get other side price
+        # Get Kalshi YES price for the same event
         kalshi_price = self._prices.get(match.kalshi_ticker.symbol)
         if kalshi_price is None:
             return
@@ -271,15 +284,16 @@ class CrossPlatformArbStrategy(Strategy):
         poly_yes = float(price)
         kalshi_yes = float(kalshi_price)
 
-        # Arb condition: buy YES on cheaper platform + buy NO on expensive
-        # Total cost < 1.0 means profit
-        total_cost = poly_yes + kalshi_yes
+        # Cross-platform arb: same event priced differently.
+        # edge = |poly_yes - kalshi_yes|
+        # If poly_yes < kalshi_yes: buy Poly YES + buy Kalshi NO
+        #   cost = poly_yes + (1 - kalshi_yes), profit = kalshi_yes - poly_yes
+        # If kalshi_yes < poly_yes: buy Kalshi YES + buy Poly NO
+        #   cost = kalshi_yes + (1 - poly_yes), profit = poly_yes - kalshi_yes
+        spread = poly_yes - kalshi_yes
+        edge = abs(spread)
 
-        if total_cost < (1.0 - self.min_edge):
-            # Arb: both YES prices sum to < 1.0
-            # Buy YES on both platforms
-            edge = 1.0 - total_cost
-
+        if edge >= self.min_edge:
             # Cooldown check
             import time
 
@@ -289,93 +303,105 @@ class CrossPlatformArbStrategy(Strategy):
                 return
             self._last_arb_time[key] = now
 
-            logger.info(
-                'ARB DETECTED: %s | Poly YES=%.4f + Kalshi YES=%.4f = %.4f | edge=%.4f',
-                match.label[:40],
-                poly_yes,
-                kalshi_yes,
-                total_cost,
-                edge,
-            )
-
-            # Buy YES on Polymarket
-            await self._place_arb_leg(
-                trader,
-                match.poly_ticker,
-                TradeSide.BUY,
-                price,
-                f'Arb: buy Poly YES @ {poly_yes:.4f}',
-            )
-
-            # Buy NO on Kalshi (equivalent to selling YES)
-            kalshi_no = match.kalshi_ticker.get_no_ticker()
-            if kalshi_no is not None:
-                no_price = Decimal('1') - kalshi_price
-                await self._place_arb_leg(
-                    trader,
-                    kalshi_no,
-                    TradeSide.BUY,
-                    no_price,
-                    f'Arb: buy Kalshi NO @ {float(no_price):.4f}',
+            if spread < 0:
+                # Poly is cheaper: buy Poly YES + buy Kalshi NO
+                logger.info(
+                    'ARB (Poly cheap): %s | Poly YES=%.4f < Kalshi YES=%.4f | edge=%.4f',
+                    match.label[:40],
+                    poly_yes,
+                    kalshi_yes,
+                    edge,
                 )
 
-            self.record_decision(
-                ticker_name=match.label[:40],
-                action='ARB_BOTH_YES',
-                executed=True,
-                reasoning=f'edge={edge:.4f}, poly={poly_yes:.4f}, kalshi={kalshi_yes:.4f}',
-                signal_values={
-                    'poly_yes': poly_yes,
-                    'kalshi_yes': kalshi_yes,
-                    'edge': edge,
-                },
-            )
+                # Buy YES on Polymarket (cheap side)
+                await self._place_arb_leg(
+                    trader,
+                    match.poly_ticker,
+                    TradeSide.BUY,
+                    price,
+                    f'Arb: buy Poly YES @ {poly_yes:.4f}',
+                )
 
-        elif total_cost > (1.0 + self.min_edge):
-            # Reverse arb: both sides overpriced
-            # Sell YES on both (requires existing positions)
-            edge = total_cost - 1.0
+                # Buy NO on Kalshi (expensive side → sell YES equivalent)
+                kalshi_no = match.kalshi_ticker.get_no_ticker()
+                if kalshi_no is not None:
+                    no_price = Decimal('1') - kalshi_price
+                    await self._place_arb_leg(
+                        trader,
+                        kalshi_no,
+                        TradeSide.BUY,
+                        no_price,
+                        f'Arb: buy Kalshi NO @ {float(no_price):.4f}',
+                    )
 
-            import time
+                self.record_decision(
+                    ticker_name=match.label[:40],
+                    action='ARB_BUY_POLY',
+                    executed=True,
+                    reasoning=f'Poly cheap: edge={edge:.4f}, poly={poly_yes:.4f}, kalshi={kalshi_yes:.4f}',
+                    signal_values={
+                        'poly_yes': poly_yes,
+                        'kalshi_yes': kalshi_yes,
+                        'edge': edge,
+                        'direction': -1.0,  # poly < kalshi
+                    },
+                )
 
-            now = time.time()
-            key = ticker.symbol
-            if now - self._last_arb_time.get(key, 0) < self.cooldown_seconds:
-                return
-            self._last_arb_time[key] = now
+            else:
+                # Kalshi is cheaper: buy Kalshi YES + buy Poly NO
+                logger.info(
+                    'ARB (Kalshi cheap): %s | Kalshi YES=%.4f < Poly YES=%.4f | edge=%.4f',
+                    match.label[:40],
+                    kalshi_yes,
+                    poly_yes,
+                    edge,
+                )
 
-            logger.info(
-                'REVERSE ARB: %s | Poly YES=%.4f + Kalshi YES=%.4f = %.4f | edge=%.4f',
-                match.label[:40],
-                poly_yes,
-                kalshi_yes,
-                total_cost,
-                edge,
-            )
+                # Buy YES on Kalshi (cheap side)
+                await self._place_arb_leg(
+                    trader,
+                    match.kalshi_ticker,
+                    TradeSide.BUY,
+                    kalshi_price,
+                    f'Arb: buy Kalshi YES @ {kalshi_yes:.4f}',
+                )
 
-            self.record_decision(
-                ticker_name=match.label[:40],
-                action='ARB_REVERSE',
-                executed=False,
-                reasoning=f'reverse arb edge={edge:.4f} (requires existing positions)',
-                signal_values={
-                    'poly_yes': poly_yes,
-                    'kalshi_yes': kalshi_yes,
-                    'edge': -edge,
-                },
-            )
+                # Buy NO on Polymarket (expensive side → sell YES equivalent)
+                poly_no = match.poly_ticker.get_no_ticker()
+                if poly_no is not None:
+                    no_price = Decimal('1') - price
+                    await self._place_arb_leg(
+                        trader,
+                        poly_no,
+                        TradeSide.BUY,
+                        no_price,
+                        f'Arb: buy Poly NO @ {float(no_price):.4f}',
+                    )
+
+                self.record_decision(
+                    ticker_name=match.label[:40],
+                    action='ARB_BUY_KALSHI',
+                    executed=True,
+                    reasoning=f'Kalshi cheap: edge={edge:.4f}, poly={poly_yes:.4f}, kalshi={kalshi_yes:.4f}',
+                    signal_values={
+                        'poly_yes': poly_yes,
+                        'kalshi_yes': kalshi_yes,
+                        'edge': edge,
+                        'direction': 1.0,  # kalshi < poly
+                    },
+                )
 
         else:
-            # No arb
+            # No arb — spread too small
             self.record_decision(
                 ticker_name=match.label[:40],
                 action='HOLD',
                 executed=False,
-                reasoning=f'no arb: total_cost={total_cost:.4f}',
+                reasoning=f'no arb: spread={spread:.4f}, edge={edge:.4f} < min_edge={self.min_edge}',
                 signal_values={
                     'poly_yes': poly_yes,
                     'kalshi_yes': kalshi_yes,
-                    'edge': 1.0 - total_cost,
+                    'edge': edge,
                 },
             )
 

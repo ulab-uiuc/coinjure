@@ -51,7 +51,7 @@ class OrderBookImbalanceStrategy(QuantStrategy):
         self._entries: dict[str, datetime] = {}
         self._closing_in_progress: set[str] = set()
 
-    async def process_event(self, event: Event, trader: Trader) -> None:
+    async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
         if self.is_paused():
             return
         if not isinstance(event, OrderBookEvent):

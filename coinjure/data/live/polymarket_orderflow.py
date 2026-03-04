@@ -210,7 +210,7 @@ class PolymarketOrderFlowMonitor(BaseFetcher):
     # Signal detection
     # ------------------------------------------------------------------
 
-    async def detect_signals(self, ticker: PolyMarketTicker) -> list[OrderFlowSignal]:
+    async def detect_signals(self, ticker: PolyMarketTicker) -> list[OrderFlowSignal]:  # noqa: C901
         """Compare current snapshot with previous and detect anomalies."""
         token_id = ticker.token_id
         snapshot = await self.snapshot_market(ticker)

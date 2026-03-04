@@ -32,8 +32,6 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-import subprocess
-
 import httpx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -335,7 +333,7 @@ async def fetch_all_histories(client: httpx.AsyncClient, markets: list[MarketInf
     logger.info(f"Fetching price histories for {len(markets)} markets...")
     tasks = [fetch_price_history(client, m.token_id) for m in markets]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    for market, result in zip(markets, results):
+    for market, result in zip(markets, results, strict=False):
         if isinstance(result, Exception):
             market.price_history = []
         else:

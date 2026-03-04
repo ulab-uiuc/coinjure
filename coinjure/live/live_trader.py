@@ -363,6 +363,7 @@ async def run_live_kalshi_paper_trading(
     drawdown_alert_pct: Decimal | None = None,
     monitor: bool = False,
     exchange_name: str = '',
+    emit_text: bool = True,
 ) -> None:
     """
     Run live paper trading on Kalshi markets (simulated).
@@ -377,6 +378,7 @@ async def run_live_kalshi_paper_trading(
         alerter: Optional alerter for notifications.
         continuous: Keep engine running when the data source is temporarily idle.
         drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
+        emit_text: Whether to emit text output to stdout.
     """
     market_data = MarketDataManager()
     position_manager = PositionManager()
