@@ -232,7 +232,7 @@ def build_events_from_data(
             price = pt_data['p']
             dt = (
                 datetime.fromtimestamp(ts, tz=timezone.utc)
-                if isinstance(ts, (int, float))
+                if isinstance(ts, int | float)
                 else ts
             )
             events.append(
@@ -249,7 +249,7 @@ def build_events_from_data(
             price = kt_data_point['p']
             dt = (
                 datetime.fromtimestamp(ts, tz=timezone.utc)
-                if isinstance(ts, (int, float))
+                if isinstance(ts, int | float)
                 else ts
             )
             events.append(

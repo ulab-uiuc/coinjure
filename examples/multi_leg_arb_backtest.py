@@ -110,7 +110,7 @@ class CrossPlatformDataSource(DataSource):
                 self._events.append(ev)
 
         # Sort by timestamp
-        self._events.sort(key=lambda e: (e.timestamp if isinstance(e.timestamp, (int, float)) else 0))
+        self._events.sort(key=lambda e: (e.timestamp if isinstance(e.timestamp, int | float) else 0))
 
         print(f'  Loaded {len(self._events):,} events for "{self.event_name}"')
         print(f'  Polymarket: {len(poly_data)} teams, {sum(len(v) for v in poly_data.values()):,} data points')

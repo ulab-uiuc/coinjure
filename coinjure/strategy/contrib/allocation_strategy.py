@@ -21,7 +21,7 @@ def normalize_allocations(
 
     cleaned: dict[str, float] = {}
     for key, value in allocations.items():
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             weight = float(value)
             if weight < 0:
                 weight = 0.0

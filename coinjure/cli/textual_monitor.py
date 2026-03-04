@@ -697,7 +697,7 @@ class NewsLog(RichLog):
                 str(item.get('source', '')),
                 str(item.get('url', '')),
             )
-        if isinstance(item, (tuple, list)) and len(item) >= 2:
+        if isinstance(item, tuple | list) and len(item) >= 2:
             return (str(item[0]), str(item[1]), '', '')
         return ('', str(item), '', '')
 

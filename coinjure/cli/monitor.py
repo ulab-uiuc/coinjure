@@ -522,7 +522,7 @@ class TradingMonitor:
                 title = str(item.get('title', ''))
                 source = str(item.get('source', ''))
                 url = str(item.get('url', ''))
-            elif isinstance(item, (tuple, list)) and len(item) >= 2:
+            elif isinstance(item, tuple | list) and len(item) >= 2:
                 ts = str(item[0])
                 title = str(item[1])
                 source = ''

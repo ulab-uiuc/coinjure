@@ -144,7 +144,7 @@ class MultiLegArbStrategy(Strategy):
             self._last_arb_event = self._event_counter
 
             ts = getattr(event, 'timestamp', 0)
-            if not isinstance(ts, (int, float)):
+            if not isinstance(ts, int | float):
                 ts = 0
 
             self._arb_snapshots.append(ArbSnapshot(
