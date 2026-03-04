@@ -110,7 +110,7 @@ class MarketMakingStrategy(QuantStrategy):
                         side=TradeSide.SELL,
                         ticker=ticker,
                         limit_price=cur_price,
-                        quantity=position.quantity,
+                        quantity=position.quantity,  # type: ignore[union-attr]
                     )
                     executed = result.order is not None
                     if executed:

@@ -910,7 +910,7 @@ class TradingMonitorApp(App[None]):
         if focused is not None:
             focused.scroll_up()
 
-    def action_quit(self) -> None:
+    def action_quit(self) -> None:  # type: ignore[override]
         """q — exit the app (worker and engine stop automatically)."""
         self.exit()
 

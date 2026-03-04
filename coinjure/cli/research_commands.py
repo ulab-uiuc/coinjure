@@ -22,9 +22,9 @@ from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.live.live_trader import run_live_paper_trading
 from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.risk.risk_manager import NoRiskManager, RiskManager, StandardRiskManager
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
 from coinjure.trader.paper_trader import PaperTrader
 
 
@@ -136,9 +136,9 @@ def _load_history_rows(path: Path) -> list[dict[str, Any]]:  # noqa: C901
             if isinstance(parsed, list):
                 return [row for row in parsed if isinstance(row, dict)]
             if isinstance(parsed, dict):
-                rows = parsed.get('data')
-                if isinstance(rows, list):
-                    return [row for row in rows if isinstance(row, dict)]
+                data_rows = parsed.get('data')
+                if isinstance(data_rows, list):
+                    return [row for row in data_rows if isinstance(row, dict)]
                 return [parsed]
 
     rows: list[dict[str, Any]] = []
@@ -403,8 +403,8 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:  # 
                     '_prices': [],
                 },
             )
-            cur['rows'] = int(cur['rows']) + 1
-            cur['points'] = int(cur['points']) + len(parsed_ts)
+            cur['rows'] = int(cur['rows']) + 1  # type: ignore[call-overload]
+            cur['points'] = int(cur['points']) + len(parsed_ts)  # type: ignore[call-overload]
             if not cur.get('question'):
                 cur['question'] = row.get('question') or row.get('event_title') or ''
 
@@ -417,22 +417,22 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:  # 
                 hi = max(parsed_ts)
                 first_ts = cur.get('first_ts')
                 last_ts = cur.get('last_ts')
-                cur['first_ts'] = lo if first_ts is None else min(int(first_ts), lo)
-                cur['last_ts'] = hi if last_ts is None else max(int(last_ts), hi)
+                cur['first_ts'] = lo if first_ts is None else min(int(first_ts), lo)  # type: ignore[call-overload]
+                cur['last_ts'] = hi if last_ts is None else max(int(last_ts), hi)  # type: ignore[call-overload]
 
             if parsed_prices:
-                cur['_prices'] = list(cur['_prices']) + parsed_prices  # type: ignore[operator]
+                cur['_prices'] = list(cur['_prices']) + parsed_prices  # type: ignore[call-overload]
 
     rows: list[dict[str, object]] = []
     for rec in seen.values():
         first_ts = rec.get('first_ts')
         last_ts = rec.get('last_ts')
         span = (
-            (int(last_ts) - int(first_ts))
+            (int(last_ts) - int(first_ts))  # type: ignore[call-overload]
             if first_ts is not None and last_ts is not None
             else None
         )
-        prices: list[float] = list(rec.get('_prices') or [])  # type: ignore[arg-type]
+        prices: list[float] = list(rec.get('_prices') or [])  # type: ignore[call-overload]
         price_std = pstdev(prices) if len(prices) >= 2 else 0.0
         price_start = prices[0] if prices else None
         price_end = prices[-1] if prices else None
@@ -447,8 +447,8 @@ def _collect_market_summaries(history_file: str) -> list[dict[str, object]]:  # 
                 'event_id': rec['event_id'],
                 'question': rec.get('question') or '',
                 'volume': str(rec.get('volume') or Decimal('0')),
-                'rows': int(rec.get('rows') or 0),
-                'points': int(rec.get('points') or 0),
+                'rows': int(rec.get('rows') or 0),  # type: ignore[call-overload]
+                'points': int(rec.get('points') or 0),  # type: ignore[call-overload]
                 'first_ts': first_ts,
                 'last_ts': last_ts,
                 'span_seconds': span,
@@ -469,9 +469,9 @@ def _sort_market_summaries(
     if sort_by == 'file':
         return rows
     if sort_by == 'points':
-        return sorted(rows, key=lambda r: int(r.get('points') or 0), reverse=True)
+        return sorted(rows, key=lambda r: int(r.get('points') or 0), reverse=True)  # type: ignore[call-overload]
     if sort_by == 'span':
-        return sorted(rows, key=lambda r: int(r.get('span_seconds') or 0), reverse=True)
+        return sorted(rows, key=lambda r: int(r.get('span_seconds') or 0), reverse=True)  # type: ignore[call-overload]
     if sort_by == 'volume':
         return sorted(
             rows,
@@ -481,13 +481,13 @@ def _sort_market_summaries(
     if sort_by == 'volatility':
         return sorted(
             rows,
-            key=lambda r: float(r.get('price_std') or 0.0),
+            key=lambda r: float(r.get('price_std') or 0.0),  # type: ignore[arg-type]
             reverse=True,
         )
     if sort_by == 'trend':
         return sorted(
             rows,
-            key=lambda r: float(r.get('abs_trend') or 0.0),
+            key=lambda r: float(r.get('abs_trend') or 0.0),  # type: ignore[arg-type]
             reverse=True,
         )
     raise click.ClickException(f'Unsupported sort key: {sort_by}')
@@ -609,6 +609,7 @@ def _run_backtest_once(
                 realized_pnl=Decimal('0'),
             )
         )
+        risk_manager: RiskManager
         if risk_profile == 'standard':
             risk_manager = StandardRiskManager(
                 position_manager=position_manager,
@@ -627,7 +628,7 @@ def _run_backtest_once(
             commission_rate=commission_rate,
         )
         if not allow_cross_market_trading:
-            tradable_tickers = [ticker]
+            tradable_tickers: list[Ticker | str] = [ticker]
             no_ticker = ticker.get_no_ticker()
             if no_ticker is not None:
                 tradable_tickers.append(no_ticker)
@@ -723,7 +724,7 @@ def _to_float_metric(value: object) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        return float(value)  # type: ignore[arg-type]
     except Exception:  # noqa: BLE001
         return None
 
@@ -914,8 +915,8 @@ def research_markets(  # noqa: C901
     rows = [
         row
         for row in rows
-        if int(row.get('points') or 0) >= min_points
-        and int(row.get('span_seconds') or 0) >= min_span_seconds
+        if int(row.get('points') or 0) >= min_points  # type: ignore[call-overload]
+        and int(row.get('span_seconds') or 0) >= min_span_seconds  # type: ignore[call-overload]
         and (_to_decimal(row.get('volume')) or Decimal('0')) >= min_vol
     ]
 
@@ -924,7 +925,7 @@ def research_markets(  # noqa: C901
         rows = [
             row
             for row in rows
-            if float(row.get('price_std') or 0.0) >= float(min_std_val)
+            if float(row.get('price_std') or 0.0) >= float(min_std_val)  # type: ignore[arg-type]
         ]
 
     # Apply --trend-direction filter
@@ -935,7 +936,7 @@ def research_markets(  # noqa: C901
             end = row.get('price_end')
             if start is None or end is None:
                 continue
-            delta = float(end) - float(start)
+            delta = float(end) - float(start)  # type: ignore[arg-type]
             if trend_direction == 'up' and delta > 0.01:
                 filtered.append(row)
             elif trend_direction == 'down' and delta < -0.01:
@@ -1193,9 +1194,9 @@ def research_stress_test(
                 market_id=market_id,
                 event_id=event_id,
                 initial_capital=capital,
-                min_fill_rate=scenario['min_fill_rate'],
-                max_fill_rate=scenario['max_fill_rate'],
-                commission_rate=scenario['commission_rate'],
+                min_fill_rate=scenario['min_fill_rate'],  # type: ignore[arg-type]
+                max_fill_rate=scenario['max_fill_rate'],  # type: ignore[arg-type]
+                commission_rate=scenario['commission_rate'],  # type: ignore[arg-type]
             )
             rows.append(
                 {
@@ -1272,7 +1273,7 @@ def research_compare_runs(
         )
 
     reverse = sort_key != 'max_drawdown'
-    ranked.sort(key=lambda x: float(x['score']), reverse=reverse)
+    ranked.sort(key=lambda x: float(x['score']), reverse=reverse)  # type: ignore[arg-type]
     ranked = ranked[: max(top, 1)]
     if output:
         _write_jsonl(output, ranked)
@@ -1382,7 +1383,7 @@ def research_strategy_gate(
         initial_capital=capital,
     )
 
-    trades = int(metrics.get('total_trades', 0))
+    trades = int(metrics.get('total_trades', 0))  # type: ignore[call-overload]
     pnl = _to_decimal(metrics.get('total_pnl'))
     dd = _to_decimal(metrics.get('max_drawdown'))
     checks = {
@@ -1519,9 +1520,9 @@ def research_alpha_pipeline(  # noqa: C901
             'market_id': str(selected['market_id']),
             'event_id': str(selected['event_id']),
             'source': 'auto',
-            'rank': market_rank,
+            'rank': str(market_rank),
             'sort_by': market_sort_by,
-            'question': selected.get('question') or '',
+            'question': str(selected.get('question') or ''),
         }
     else:
         raise click.ClickException(
@@ -1565,7 +1566,7 @@ def research_alpha_pipeline(  # noqa: C901
     single_path = out_dir / 'backtest_single.json'
     _write_json(str(single_path), metrics)
 
-    primary_trades = int(metrics.get('total_trades', 0))
+    primary_trades = int(metrics.get('total_trades', 0))  # type: ignore[call-overload]
     skip_heavy = skip_batch_if_gate_fails and primary_trades == 0
 
     stress_rows: list[dict[str, object]] = []
@@ -1578,9 +1579,9 @@ def research_alpha_pipeline(  # noqa: C901
                 market_id=market_id,
                 event_id=event_id,
                 initial_capital=capital,
-                min_fill_rate=scenario['min_fill_rate'],
-                max_fill_rate=scenario['max_fill_rate'],
-                commission_rate=scenario['commission_rate'],
+                min_fill_rate=scenario['min_fill_rate'],  # type: ignore[arg-type]
+                max_fill_rate=scenario['max_fill_rate'],  # type: ignore[arg-type]
+                commission_rate=scenario['commission_rate'],  # type: ignore[arg-type]
                 spread=spread_decimal,
             )
             stress_rows.append(
@@ -1597,7 +1598,7 @@ def research_alpha_pipeline(  # noqa: C901
     stress_path = out_dir / 'stress.jsonl'
     _write_jsonl(str(stress_path), stress_rows)
 
-    trades = int(metrics.get('total_trades', 0))
+    trades = int(metrics.get('total_trades', 0))  # type: ignore[call-overload]
     pnl = _to_decimal(metrics.get('total_pnl'))
     dd = _to_decimal(metrics.get('max_drawdown'))
     gate_checks = {
@@ -1821,9 +1822,9 @@ def research_auto_tune(  # noqa: C901
             'market_id': str(selected['market_id']),
             'event_id': str(selected['event_id']),
             'source': 'auto',
-            'rank': market_rank,
+            'rank': str(market_rank),
             'sort_by': market_sort_by,
-            'question': selected.get('question') or '',
+            'question': str(selected.get('question') or ''),
         }
     else:
         raise click.ClickException(
@@ -1958,7 +1959,7 @@ def research_auto_tune(  # noqa: C901
         data_source = HistoricalDataSource(history_file, ticker)
         asyncio.run(
             run_live_paper_trading(
-                data_source=data_source,
+                data_source=data_source,  # type: ignore[arg-type]
                 strategy=strategy_obj,
                 initial_capital=capital,
                 duration=paper_duration,
@@ -2172,20 +2173,20 @@ def research_batch_markets(
 
     ok_results = [r for r in results if r.get('ok')]
     win_rates = [
-        _to_float_metric((r['metrics'] or {}).get('win_rate'))
+        _to_float_metric((r['metrics'] or {}).get('win_rate'))  # type: ignore[attr-defined]
         for r in ok_results
         if isinstance(r.get('metrics'), dict)
-    ]  # type: ignore[index]
+    ]
     sharpes = [
-        _to_float_metric((r['metrics'] or {}).get('sharpe_ratio'))
+        _to_float_metric((r['metrics'] or {}).get('sharpe_ratio'))  # type: ignore[attr-defined]
         for r in ok_results
         if isinstance(r.get('metrics'), dict)
-    ]  # type: ignore[index]
+    ]
     pnls = [
-        _to_float_metric((r['metrics'] or {}).get('total_pnl'))
+        _to_float_metric((r['metrics'] or {}).get('total_pnl'))  # type: ignore[attr-defined]
         for r in ok_results
         if isinstance(r.get('metrics'), dict)
-    ]  # type: ignore[index]
+    ]
     win_rates_f = [v for v in win_rates if v is not None]
     sharpes_f = [v for v in sharpes if v is not None]
     pnls_f = [v for v in pnls if v is not None]
@@ -2356,7 +2357,7 @@ def research_grid(  # noqa: C901
         best_run = (
             max(ok_results, key=_score) if reverse else min(ok_results, key=_score)
         )
-        best = {**best_run.get('strategy_kwargs', {}), **best_run.get('metrics', {})}  # type: ignore[arg-type]
+        best = {**best_run.get('strategy_kwargs', {}), **best_run.get('metrics', {})}  # type: ignore[dict-item]
 
     payload = {
         'ok': True,
