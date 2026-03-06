@@ -24,31 +24,33 @@ class TestStrategy(QuantStrategy):
 
             if ticker in self.last_prices:
                 last_price = self.last_prices[ticker]
+                best_ask = trader.market_data.get_best_ask(ticker)
+                best_bid = trader.market_data.get_best_bid(ticker)
 
-                # Buy if price went up
-                if current_price > last_price:
+                # Buy if price went up — use best_ask to actually cross the spread
+                if current_price > last_price and best_ask is not None:
                     print(
-                        f'{ticker} price increased from {last_price} to {current_price}. Buying {self.fixed_quantity}.'
+                        f'{ticker} price increased from {last_price} to {current_price}. Buying {self.fixed_quantity} @ ask {best_ask.price}.'
                     )
                     print(
                         await trader.place_order(
                             side=TradeSide.BUY,
                             ticker=ticker,
-                            limit_price=current_price + Decimal('0.01'),
+                            limit_price=best_ask.price,
                             quantity=self.fixed_quantity,
                         )
                     )
 
-                # Sell if price went down
-                elif current_price < last_price:
+                # Sell if price went down — use best_bid to actually hit the bid
+                elif current_price < last_price and best_bid is not None:
                     print(
-                        f'{ticker} price decreased from {last_price} to {current_price}. Selling {self.fixed_quantity}.'
+                        f'{ticker} price decreased from {last_price} to {current_price}. Selling {self.fixed_quantity} @ bid {best_bid.price}.'
                     )
                     print(
                         await trader.place_order(
                             side=TradeSide.SELL,
                             ticker=ticker,
-                            limit_price=current_price - Decimal('0.01'),
+                            limit_price=best_bid.price,
                             quantity=self.fixed_quantity,
                         )
                     )

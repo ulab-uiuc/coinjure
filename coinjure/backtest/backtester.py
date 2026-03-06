@@ -5,52 +5,14 @@ from decimal import Decimal
 
 from coinjure.core.trading_engine import TradingEngine
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.live.live_data_source import LiveNewsDataSource
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager
 from coinjure.strategy.strategy import Strategy
-from coinjure.strategy.test_strategy import TestStrategy
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
 
 logger = logging.getLogger(__name__)
-
-
-async def run_live_simulation(
-    live_data_source: LiveNewsDataSource,
-    ticker_symbol: PolyMarketTicker,
-    initial_capital: Decimal,
-    strategy: Strategy,
-) -> None:
-    market_data = MarketDataManager()
-    position_manager = PositionManager()
-    position_manager.update_position(
-        Position(
-            ticker=CashTicker.POLYMARKET_USDC,
-            quantity=initial_capital,
-            average_cost=Decimal('0'),
-            realized_pnl=Decimal('0'),
-        )
-    )
-    risk_manager = NoRiskManager()
-
-    trader = PaperTrader(
-        market_data=market_data,
-        risk_manager=risk_manager,
-        position_manager=position_manager,
-        min_fill_rate=Decimal('0.5'),
-        max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
-    )
-
-    engine = TradingEngine(
-        data_source=live_data_source, strategy=strategy, trader=trader
-    )
-
-    # Run the trading engine
-    await engine.start()
-    logger.info('Live simulation stopped.')
 
 
 async def run_backtest(
@@ -104,6 +66,48 @@ async def run_backtest(
     await engine.start()
     engine._perf.print_summary()
     logger.info('Backtest complete.')
+
+
+async def run_backtest_parquet(
+    parquet_path: str,
+    initial_capital: Decimal,
+    strategy: Strategy,
+    market_id: str | None = None,
+) -> None:
+    from coinjure.data.backtest.parquet_data_source import ParquetDataSource
+
+    data_source = ParquetDataSource(parquet_path, market_id=market_id)
+    market_data = MarketDataManager(
+        spread=Decimal('0'),
+        max_history_per_ticker=None,
+        max_timeline_events=None,
+        synthetic_book=False,
+    )
+    position_manager = PositionManager()
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.POLYMARKET_USDC,
+            quantity=initial_capital,
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+    risk_manager = NoRiskManager()
+
+    trader = PaperTrader(
+        market_data=market_data,
+        risk_manager=risk_manager,
+        position_manager=position_manager,
+        min_fill_rate=Decimal('0.5'),
+        max_fill_rate=Decimal('1.0'),
+        commission_rate=Decimal('0.0'),
+    )
+
+    engine = TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
+
+    await engine.start()
+    engine._perf.print_summary()
+    logger.info('Parquet backtest complete.')
 
 
 if __name__ == '__main__':
