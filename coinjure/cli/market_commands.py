@@ -446,6 +446,199 @@ def market_info(
 
 
 # ---------------------------------------------------------------------------
+# market discover (LLM-powered spread pair discovery)
+# ---------------------------------------------------------------------------
+
+_DISCOVER_SYSTEM = """\
+You are a quantitative analyst specializing in prediction markets.
+You will receive a list of active markets from Polymarket and/or Kalshi.
+Your job: find PAIRS of markets that have a **spread trading** opportunity.
+
+Spread types to look for:
+1. **Same-event cross-platform**: identical question on Poly and Kalshi with price gap.
+2. **Semantic overlap**: different wording but same underlying outcome (e.g. "Trump wins" vs "Republican wins").
+3. **Conditional/causal**: one outcome logically implies the other (e.g. "Fed raises rates" → "USD strengthens").
+4. **Temporal**: same event at different time horizons.
+5. **Complementary**: outcomes that should sum to ~1.0 but don't.
+
+For each pair, explain WHY the spread exists and whether it is likely to converge.
+
+Return ONLY a JSON array. Each element:
+{
+  "market_a": {"id": "...", "platform": "polymarket|kalshi", "question": "..."},
+  "market_b": {"id": "...", "platform": "polymarket|kalshi", "question": "..."},
+  "spread_type": "same_event|semantic|conditional|temporal|complementary",
+  "confidence": 0.0-1.0,
+  "reasoning": "why this pair has a tradeable spread"
+}
+"""
+
+
+@market.command('discover')
+@click.option(
+    '--exchange',
+    type=click.Choice(['polymarket', 'kalshi', 'both']),
+    default='both',
+    show_default=True,
+)
+@click.option(
+    '--limit',
+    default=100,
+    show_default=True,
+    type=int,
+    help='Markets to fetch per exchange.',
+)
+@click.option(
+    '--min-confidence',
+    default=0.6,
+    show_default=True,
+    type=float,
+    help='Min LLM confidence to include.',
+)
+@click.option(
+    '--model', default=None, help='LLM model (default: deepseek/deepseek-chat).'
+)
+@click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
+@click.option(
+    '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
+def market_discover(
+    exchange: str,
+    limit: int,
+    min_confidence: float,
+    model: str | None,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+    as_json: bool,
+) -> None:
+    """Use LLM to discover spread/arbitrage pairs across prediction markets."""
+    import re
+
+    try:
+        import litellm
+    except ImportError as exc:
+        raise click.ClickException(
+            'litellm is required: poetry install -E llm'
+        ) from exc
+
+    llm_model = model or os.environ.get('COINJURE_LLM_MODEL', 'deepseek/deepseek-chat')
+
+    async def _fetch_markets() -> list[dict]:
+        poly_markets: list[dict] = []
+        kalshi_markets: list[dict] = []
+        if exchange in ('polymarket', 'both'):
+            poly_markets = await _polymarket_list_markets(limit)
+        if exchange in ('kalshi', 'both'):
+            kalshi_markets = await _kalshi_list_markets(
+                limit, kalshi_api_key_id, kalshi_private_key_path
+            )
+        return poly_markets, kalshi_markets
+
+    try:
+        poly_markets, kalshi_markets = asyncio.run(_fetch_markets())
+    except Exception as exc:
+        raise click.ClickException(f'Failed to fetch markets: {exc}') from exc
+
+    # Build market list for LLM
+    market_lines: list[str] = []
+    for m in poly_markets:
+        price = m.get('best_ask') or m.get('best_bid') or '?'
+        market_lines.append(
+            f'[polymarket] id={m["id"]} question="{m["question"]}" price={price}'
+        )
+    for m in kalshi_markets:
+        price = m.get('yes_ask') or m.get('yes_bid') or '?'
+        market_lines.append(
+            f'[kalshi] id={m["ticker"]} question="{m["title"]}" price={price}'
+        )
+
+    if not market_lines:
+        raise click.ClickException('No markets fetched. Check API keys.')
+
+    if not as_json:
+        click.echo(
+            f'Fetched {len(poly_markets)} Polymarket + {len(kalshi_markets)} Kalshi markets. '
+            f'Asking LLM to find spread pairs...'
+        )
+
+    user_prompt = (
+        'Here are the active prediction markets:\n\n'
+        + '\n'.join(market_lines)
+        + '\n\nFind all tradeable spread pairs. Return JSON array only.'
+    )
+
+    async def _call_llm() -> str:
+        resp = await litellm.acompletion(
+            model=llm_model,
+            messages=[
+                {'role': 'system', 'content': _DISCOVER_SYSTEM},
+                {'role': 'user', 'content': user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=4096,
+        )
+        return resp.choices[0].message.content
+
+    try:
+        raw_response = asyncio.run(_call_llm())
+    except Exception as exc:
+        raise click.ClickException(f'LLM call failed: {exc}') from exc
+
+    # Parse JSON array from LLM response
+    pairs: list[dict] = []
+    try:
+        # Strip think tags and markdown fences
+        cleaned = re.sub(r'<think>.*?</think>', '', raw_response, flags=re.DOTALL)
+        if '```json' in cleaned:
+            cleaned = cleaned.split('```json')[1].split('```')[0].strip()
+        elif '```' in cleaned:
+            cleaned = cleaned.split('```')[1].split('```')[0].strip()
+        else:
+            start = cleaned.find('[')
+            end = cleaned.rfind(']') + 1
+            if start >= 0 and end > start:
+                cleaned = cleaned[start:end]
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            pairs = parsed
+        elif isinstance(parsed, dict) and 'pairs' in parsed:
+            pairs = parsed['pairs']
+    except (json.JSONDecodeError, IndexError):
+        raise click.ClickException(
+            f'Failed to parse LLM response as JSON.\nRaw response:\n{raw_response[:500]}'
+        )
+
+    # Filter by confidence
+    pairs = [p for p in pairs if float(p.get('confidence', 0)) >= min_confidence]
+    pairs.sort(key=lambda p: float(p.get('confidence', 0)), reverse=True)
+
+    if as_json:
+        click.echo(
+            json.dumps({'ok': True, 'pairs': pairs, 'model': llm_model}, default=str)
+        )
+        return
+
+    if not pairs:
+        click.echo('No spread pairs found above confidence threshold.')
+        return
+
+    click.echo(
+        f'\nDiscovered {len(pairs)} spread pairs (confidence >= {min_confidence}):\n'
+    )
+    for i, p in enumerate(pairs, 1):
+        ma = p.get('market_a', {})
+        mb = p.get('market_b', {})
+        click.echo(
+            f'  {i}. [{p.get("spread_type", "?")}] confidence={p.get("confidence", "?")}'
+        )
+        click.echo(f'     A: [{ma.get("platform", "?")}] {ma.get("question", "?")}')
+        click.echo(f'     B: [{mb.get("platform", "?")}] {mb.get("question", "?")}')
+        click.echo(f'     {p.get("reasoning", "")}')
+        click.echo()
+
+
+# ---------------------------------------------------------------------------
 # market match (fuzzy-match across platforms)
 # ---------------------------------------------------------------------------
 
