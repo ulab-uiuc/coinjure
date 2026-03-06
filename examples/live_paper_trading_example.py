@@ -13,13 +13,13 @@ the Coinjure framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import ConservativeRiskManager
 from coinjure.engine.live_trader import run_live_paper_trading
 from coinjure.market.live.live_data_source import LiveRSSNewsDataSource
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.test_strategy import TestStrategy
 from coinjure.ticker import CashTicker
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import ConservativeRiskManager
 
 
 async def run_rss_paper_trading():

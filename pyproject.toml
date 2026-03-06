@@ -106,8 +106,8 @@ module = [
     "coinjure.market.live.live_data_source",
     "coinjure.market.live.google_news_data_source",
     "coinjure.market.live.kalshi_data_source",
-    "coinjure.trading.kalshi_trader",
-    "coinjure.trading.paper_trader",
+    "coinjure.engine.execution.kalshi_trader",
+    "coinjure.engine.execution.paper_trader",
     "coinjure.engine.trading_engine",
     "coinjure.engine.backtester",
 ]

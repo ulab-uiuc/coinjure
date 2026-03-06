@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from coinjure.alerts.alerter import Alerter, CompositeAlerter, LogAlerter
-from coinjure.alerts.telegram_alerter import TelegramAlerter
+from coinjure.engine.execution.alerter import Alerter, CompositeAlerter, LogAlerter
+from coinjure.engine.execution.telegram_alerter import TelegramAlerter
+from coinjure.engine.execution.types import OrderFailureReason, Trade, TradeSide
 from coinjure.ticker import PolyMarketTicker
-from coinjure.trading.types import OrderFailureReason, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -125,7 +125,9 @@ async def test_composite_on_trade_fans_out(sample_trade):
 async def test_telegram_alerter_swallows_network_error():
     alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
 
-    with patch('coinjure.alerts.telegram_alerter.httpx.AsyncClient') as mock_client_cls:
+    with patch(
+        'coinjure.engine.execution.telegram_alerter.httpx.AsyncClient'
+    ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -148,7 +150,9 @@ async def test_telegram_alerter_sends_correct_url():
         resp.status_code = 200
         return resp
 
-    with patch('coinjure.alerts.telegram_alerter.httpx.AsyncClient') as mock_client_cls:
+    with patch(
+        'coinjure.engine.execution.telegram_alerter.httpx.AsyncClient'
+    ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -167,7 +171,9 @@ async def test_telegram_alerter_sends_correct_url():
 async def test_telegram_alerter_swallows_http_error_response():
     alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
 
-    with patch('coinjure.alerts.telegram_alerter.httpx.AsyncClient') as mock_client_cls:
+    with patch(
+        'coinjure.engine.execution.telegram_alerter.httpx.AsyncClient'
+    ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)

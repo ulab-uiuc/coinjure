@@ -14,6 +14,7 @@ from typing import Any
 
 import click
 
+from coinjure.engine.execution.trader import Trader
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.market.composite_data_source import CompositeDataSource
 from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
@@ -21,7 +22,6 @@ from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 from coinjure.strategy.loader import load_strategy_class as _shared_load_strategy_class
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import PolyMarketTicker
-from coinjure.trading.trader import Trader
 
 
 class _IdleStrategy(Strategy):

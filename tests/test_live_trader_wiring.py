@@ -7,9 +7,9 @@ from decimal import Decimal
 import pytest
 
 from coinjure.engine import live_trader
+from coinjure.engine.execution.position_manager import Position
+from coinjure.engine.execution.risk_manager import NoRiskManager
 from coinjure.ticker import CashTicker, PolyMarketTicker
-from coinjure.trading.position_manager import Position
-from coinjure.trading.risk_manager import NoRiskManager
 
 
 @pytest.mark.asyncio

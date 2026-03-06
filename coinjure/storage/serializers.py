@@ -10,14 +10,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+from coinjure.engine.execution.position_manager import Position
+from coinjure.engine.execution.types import Order, OrderStatus, Trade, TradeSide
 from coinjure.ticker import (
     CashTicker,
     KalshiTicker,
     PolyMarketTicker,
     Ticker,
 )
-from coinjure.trading.position_manager import Position
-from coinjure.trading.types import Order, OrderStatus, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Ticker

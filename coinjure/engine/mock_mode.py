@@ -3,12 +3,12 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import TradeSide
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.market.data_source import DataSource
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import PolyMarketTicker
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 
 class MockMode(Enum):

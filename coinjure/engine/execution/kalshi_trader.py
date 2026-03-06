@@ -7,12 +7,10 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.ticker import KalshiTicker, Ticker
-from coinjure.trading.position_manager import PositionManager
-from coinjure.trading.risk_manager import RiskManager
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import (
+from coinjure.engine.execution.position_manager import PositionManager
+from coinjure.engine.execution.risk_manager import RiskManager
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
@@ -20,9 +18,11 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.ticker import KalshiTicker, Ticker
 
 if TYPE_CHECKING:
-    from coinjure.alerts.alerter import Alerter
+    from coinjure.engine.execution.alerter import Alerter
 
 logger = logging.getLogger(__name__)
 

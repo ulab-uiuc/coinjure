@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
 
+from coinjure.engine.execution.trader import Trader
 from coinjure.events import Event
 from coinjure.market.market_data_manager import MarketDataPoint
 from coinjure.ticker import CashTicker, Ticker
-from coinjure.trading.trader import Trader
 
 
 @dataclass

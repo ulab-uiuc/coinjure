@@ -10,17 +10,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from coinjure.engine.execution.risk_manager import StandardRiskManager
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import OrderStatus
 from coinjure.engine.performance import PerformanceAnalyzer
 from coinjure.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.market.data_source import DataSource
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker
-from coinjure.trading.risk_manager import StandardRiskManager
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import OrderStatus
 
 if TYPE_CHECKING:
-    from coinjure.alerts.alerter import Alerter
+    from coinjure.engine.execution.alerter import Alerter
     from coinjure.storage.state_store import StateStore
 
 logger = logging.getLogger(__name__)
