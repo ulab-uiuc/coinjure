@@ -20,7 +20,7 @@ Use this skill for deterministic backtest execution and evidence generation.
 
 Run one command to execute preflight + backtest + stress + gate (+ optional batch):
 
-- `coinjure research alpha-pipeline --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --market-id <M> --event-id <E> --artifacts-dir <dir> --json`
+- `coinjure strategy alpha-pipeline --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --market-id <M> --event-id <E> --artifacts-dir <dir> --json`
 
 Results are auto-recorded to the experiment ledger (`~/.coinjure/experiment_ledger.jsonl`).
 
@@ -32,11 +32,11 @@ Results are auto-recorded to the experiment ledger (`~/.coinjure/experiment_ledg
 
 2. Single backtest:
 
-- `coinjure backtest run --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --json`
+- `coinjure strategy backtest --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --json`
 
 3. Parameter sweep:
 
-- `coinjure research backtest-batch --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --params-jsonl <params.jsonl> --output <runs.jsonl> --json`
+- `coinjure strategy batch --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --params-jsonl <params.jsonl> --output <runs.jsonl> --json`
 - `coinjure research grid --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --param-grid-json '<grid_json>' --output <grid_runs.jsonl> --json`
 - `coinjure research compare-runs --input-file <runs_or_grid.jsonl> --sort-key sharpe_ratio --top 20 --output <top_runs.jsonl> --json`
 
@@ -47,7 +47,7 @@ Results are auto-recorded to the experiment ledger (`~/.coinjure/experiment_ledg
 
 5. Gate before paper/live:
 
-- `coinjure research strategy-gate --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --json`
+- Strategy gating is now internal to `coinjure strategy alpha-pipeline` (no separate command needed).
 
 ## Hard Rules
 
