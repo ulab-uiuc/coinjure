@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.agent_strategy import AgentStrategy
 from coinjure.ticker import Ticker
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 
 class RelatedMarketAgentStrategy(AgentStrategy):

@@ -1025,8 +1025,8 @@ def market_snapshot(
     """One-shot market intelligence: movers, arb edges, portfolio & memory overlap."""
     from datetime import datetime, timezone
 
-    from coinjure.portfolio.registry import StrategyRegistry
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.engine.registry import StrategyRegistry
+    from coinjure.memory import ExperimentLedger
 
     snapshot: dict[str, Any] = {
         'ok': True,

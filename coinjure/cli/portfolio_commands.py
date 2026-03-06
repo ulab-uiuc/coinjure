@@ -25,8 +25,8 @@ from typing import Any
 import click
 
 from coinjure.cli.control import SOCKET_DIR, run_command
-from coinjure.market.hub.hub import HUB_SOCKET_PATH
-from coinjure.portfolio.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
+from coinjure.engine.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
+from coinjure.hub.hub import HUB_SOCKET_PATH
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -366,7 +366,7 @@ def portfolio_retire(strategy_id: str, reason: str, as_json: bool) -> None:
         try:
             status_resp = run_command('status', socket_path=Path(entry.socket_path))
             if status_resp.get('ok'):
-                from coinjure.research.ledger import FeedbackEntry, FeedbackLedger
+                from coinjure.memory import FeedbackEntry, FeedbackLedger
 
                 fb = FeedbackEntry(
                     strategy_id=strategy_id,
@@ -594,7 +594,7 @@ def portfolio_snapshot(
     as_json: bool,
 ) -> None:
     """One-shot market intelligence: movers, arb edges, portfolio & memory overlap."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     snapshot: dict[str, Any] = {
         'ok': True,

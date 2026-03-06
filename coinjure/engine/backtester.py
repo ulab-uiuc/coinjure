@@ -3,14 +3,14 @@ import logging
 import os
 from decimal import Decimal
 
+from coinjure.engine.execution.paper_trader import PaperTrader
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import NoRiskManager
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.market.backtest.historical_data_source import HistoricalDataSource
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
-from coinjure.trading.paper_trader import PaperTrader
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import NoRiskManager
 
 logger = logging.getLogger(__name__)
 

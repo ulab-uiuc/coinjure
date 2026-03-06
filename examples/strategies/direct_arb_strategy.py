@@ -27,11 +27,11 @@ import logging
 import time
 from decimal import Decimal
 
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import TradeSide
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 

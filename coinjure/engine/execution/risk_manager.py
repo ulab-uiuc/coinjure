@@ -2,10 +2,10 @@ import logging
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
+from coinjure.engine.execution.position_manager import PositionManager
+from coinjure.engine.execution.types import TradeSide
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.ticker import CashTicker, Ticker
-from coinjure.trading.position_manager import PositionManager
-from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 

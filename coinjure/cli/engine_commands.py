@@ -29,8 +29,8 @@ from coinjure.cli.agent_commands import (
 )
 from coinjure.cli.control import SOCKET_DIR, SOCKET_PATH, run_command
 from coinjure.cli.utils import _emit
-from coinjure.market.hub.hub import HUB_SOCKET_PATH
-from coinjure.portfolio.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
+from coinjure.engine.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
+from coinjure.hub.hub import HUB_SOCKET_PATH
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -315,7 +315,7 @@ def engine_run(  # noqa: C901
     )
 
     if hub_socket:
-        from coinjure.market.hub.subscriber import HubDataSource
+        from coinjure.hub.subscriber import HubDataSource
 
         data_source = HubDataSource(Path(hub_socket).expanduser())
     else:
@@ -632,7 +632,7 @@ def engine_retire(strategy_id: str, reason: str, as_json: bool) -> None:
         try:
             status_resp = run_command('status', socket_path=Path(entry.socket_path))
             if status_resp.get('ok'):
-                from coinjure.research.ledger import FeedbackEntry, FeedbackLedger
+                from coinjure.memory import FeedbackEntry, FeedbackLedger
 
                 fb = FeedbackEntry(
                     strategy_id=strategy_id,
@@ -1118,7 +1118,7 @@ def engine_health(update: bool, as_json: bool) -> None:
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def engine_feedback(strategy_id: str, socket_path: str | None, as_json: bool) -> None:
     """Harvest paper performance and compare against backtest predictions."""
-    from coinjure.research.ledger import (
+    from coinjure.memory import (
         ExperimentLedger,
         FeedbackEntry,
         FeedbackLedger,

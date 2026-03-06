@@ -5,6 +5,8 @@ from decimal import Decimal
 
 import pytest
 
+from coinjure.engine.execution.position_manager import Position
+from coinjure.engine.execution.types import Order, OrderStatus, Trade, TradeSide
 from coinjure.storage.serializers import (
     deserialize_equity_point,
     deserialize_order,
@@ -17,8 +19,6 @@ from coinjure.storage.serializers import (
 )
 from coinjure.storage.state_store import StateStore
 from coinjure.ticker import CashTicker, KalshiTicker, PolyMarketTicker
-from coinjure.trading.position_manager import Position
-from coinjure.trading.types import Order, OrderStatus, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -154,7 +154,7 @@ def test_trade_without_timestamp(sample_trade):
 
 
 def test_save_load_positions_roundtrip(tmp_store, sample_position):
-    from coinjure.trading.position_manager import PositionManager
+    from coinjure.engine.execution.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -215,7 +215,7 @@ def test_load_trades_missing_file_returns_empty(tmp_store):
 
 
 def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
-    from coinjure.trading.position_manager import PositionManager
+    from coinjure.engine.execution.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)

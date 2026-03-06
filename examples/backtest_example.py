@@ -14,14 +14,14 @@ import asyncio
 import os
 from decimal import Decimal
 
+from coinjure.engine.execution.paper_trader import PaperTrader
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import NoRiskManager, StandardRiskManager
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.market.backtest.historical_data_source import HistoricalDataSource
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.test_strategy import TestStrategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
-from coinjure.trading.paper_trader import PaperTrader
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import NoRiskManager, StandardRiskManager
 
 
 async def run_basic_backtest():

@@ -4,10 +4,10 @@ import random
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from coinjure.engine.execution.position_manager import PositionManager
+from coinjure.engine.execution.risk_manager import RiskManager
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.ticker import Ticker
-from coinjure.trading.position_manager import PositionManager
-from coinjure.trading.risk_manager import RiskManager
 
 from .trader import Trader
 from .types import (
@@ -20,7 +20,7 @@ from .types import (
 )
 
 if TYPE_CHECKING:
-    from coinjure.alerts.alerter import Alerter
+    from coinjure.engine.execution.alerter import Alerter
 
 
 class PaperTrader(Trader):

@@ -7,19 +7,19 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.ticker import Ticker
-from coinjure.trading.position_manager import PositionManager
-from coinjure.trading.risk_manager import RiskManager
-from coinjure.trading.types import (
+from coinjure.engine.execution.position_manager import PositionManager
+from coinjure.engine.execution.risk_manager import RiskManager
+from coinjure.engine.execution.types import (
     Order,
     OrderFailureReason,
     PlaceOrderResult,
     TradeSide,
 )
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.ticker import Ticker
 
 if TYPE_CHECKING:
-    from coinjure.alerts.alerter import Alerter
+    from coinjure.engine.execution.alerter import Alerter
 
 
 class Trader(ABC):

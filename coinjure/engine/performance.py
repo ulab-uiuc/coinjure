@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from decimal import Decimal
 
-from coinjure.trading.types import Trade, TradeSide
+from coinjure.engine.execution.types import Trade, TradeSide
 
 
 @dataclass

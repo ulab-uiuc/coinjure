@@ -10,7 +10,7 @@ import logging
 
 import httpx
 
-from coinjure.alerts.alerter import Alerter
+from coinjure.engine.execution.alerter import Alerter
 
 logger = logging.getLogger(__name__)
 

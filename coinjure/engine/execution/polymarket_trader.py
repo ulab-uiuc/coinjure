@@ -17,12 +17,10 @@ from py_clob_client.exceptions import PolyApiException
 from py_clob_client.order_builder.constants import BUY, SELL
 from py_order_utils.model import EOA
 
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import RiskManager
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import (
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import RiskManager
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
@@ -30,9 +28,11 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
 
 if TYPE_CHECKING:
-    from coinjure.alerts.alerter import Alerter
+    from coinjure.engine.execution.alerter import Alerter
 
 logger = logging.getLogger(__name__)
 
@@ -314,9 +314,9 @@ if __name__ == '__main__':
     from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
     from py_order_utils.model import POLY_GNOSIS_SAFE
 
+    from coinjure.engine.execution.position_manager import Position
+    from coinjure.engine.execution.risk_manager import NoRiskManager
     from coinjure.ticker import CashTicker
-    from coinjure.trading.position_manager import Position
-    from coinjure.trading.risk_manager import NoRiskManager
 
     async def test_polymarket_trader():
         trader = PolymarketTrader(
