@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from coinjure.ticker import PolyMarketTicker
-from coinjure.trading.types import (
+from coinjure.engine.execution.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
@@ -11,6 +10,7 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
+from coinjure.ticker import PolyMarketTicker
 
 
 def _ticker() -> PolyMarketTicker:

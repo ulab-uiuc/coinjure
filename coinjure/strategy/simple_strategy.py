@@ -10,10 +10,10 @@ from typing import Literal, TypedDict
 
 import httpx
 
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import TradeSide
 from coinjure.events import Event, NewsEvent, OrderBookEvent
 from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 from .agent_strategy import AgentStrategy
 

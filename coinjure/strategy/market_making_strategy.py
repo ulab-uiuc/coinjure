@@ -17,10 +17,10 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import TradeSide
 from coinjure.events import Event, OrderBookEvent
 from coinjure.ticker import Ticker
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 from .quant_strategy import QuantStrategy
 

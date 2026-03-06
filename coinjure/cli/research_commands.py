@@ -20,19 +20,19 @@ import click
 logger = logging.getLogger(__name__)
 
 from coinjure.cli.utils import _emit
+from coinjure.engine.execution.paper_trader import PaperTrader
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import (
+    NoRiskManager,
+    RiskManager,
+    StandardRiskManager,
+)
 from coinjure.engine.live_trader import run_live_paper_trading
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.market.backtest.historical_data_source import HistoricalDataSource
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
-from coinjure.trading.paper_trader import PaperTrader
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import (
-    NoRiskManager,
-    RiskManager,
-    StandardRiskManager,
-)
 
 
 def _parse_json_object(raw: str, *, option_name: str) -> dict[str, Any]:
@@ -1246,7 +1246,7 @@ def research_alpha_pipeline(  # noqa: C901
 
     # Auto-record to experiment ledger
     try:
-        from coinjure.research.ledger import ExperimentLedger, LedgerEntry
+        from coinjure.memory import ExperimentLedger, LedgerEntry
 
         entry = LedgerEntry(
             run_id=run_id,
@@ -1440,7 +1440,7 @@ def memory_add(
     as_json: bool,
 ) -> None:
     """Append an experiment result to the ledger."""
-    from coinjure.research.ledger import ExperimentLedger, LedgerEntry
+    from coinjure.memory import ExperimentLedger, LedgerEntry
 
     strategy_kwargs = _parse_json_object(
         strategy_kwargs_json, option_name='--strategy-kwargs-json'
@@ -1480,7 +1480,7 @@ def memory_list(
     as_json: bool,
 ) -> None:
     """List experiments from the ledger with optional filters."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     entries = ExperimentLedger().query(
         tag=tag,
@@ -1502,7 +1502,7 @@ def memory_list(
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def memory_best(metric: str, top: int, as_json: bool) -> None:
     """Return top-N experiments by a metric."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     entries = ExperimentLedger().best(metric_key=metric, top_n=top)
     _emit(
@@ -1520,7 +1520,7 @@ def memory_best(metric: str, top: int, as_json: bool) -> None:
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def memory_summary(as_json: bool) -> None:
     """Aggregate statistics across all experiments."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     summary = ExperimentLedger().summary()
     _emit({'ok': True, **summary}, as_json=as_json)
@@ -1542,7 +1542,7 @@ def memory_summary(as_json: bool) -> None:
 def research_harvest(strategy_id: str, socket_path: str | None, as_json: bool) -> None:
     """Harvest current paper/live performance and save to feedback ledger."""
     from coinjure.cli.control import run_command
-    from coinjure.research.ledger import FeedbackEntry, FeedbackLedger
+    from coinjure.memory import FeedbackEntry, FeedbackLedger
 
     sock = socket_path or str(Path.home() / '.coinjure' / f'{strategy_id}.sock')
     if not Path(sock).exists():
@@ -1593,7 +1593,7 @@ def research_harvest(strategy_id: str, socket_path: str | None, as_json: bool) -
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def research_feedback_report(strategy_id: str, as_json: bool) -> None:
     """Compare latest paper performance against backtest predictions."""
-    from coinjure.research.ledger import ExperimentLedger, FeedbackLedger
+    from coinjure.memory import ExperimentLedger, FeedbackLedger
 
     feedback = FeedbackLedger().latest(strategy_id)
     if feedback is None:
@@ -1665,8 +1665,8 @@ def research_market_snapshot(
     as_json: bool,
 ) -> None:
     """One-shot market intelligence: movers, arb edges, portfolio & memory overlap."""
-    from coinjure.portfolio.registry import StrategyRegistry
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.engine.registry import StrategyRegistry
+    from coinjure.memory import ExperimentLedger
 
     snapshot: dict[str, Any] = {
         'ok': True,

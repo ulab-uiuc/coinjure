@@ -83,7 +83,7 @@ def test_strategy_validate_with_kwargs_json(tmp_path):
             """
             from coinjure.events import Event
             from coinjure.strategy.strategy import Strategy
-            from coinjure.trading.trader import Trader
+            from coinjure.engine.execution.trader import Trader
 
             class NeedsKwargs(Strategy):
                 def __init__(self, threshold: float):
@@ -121,7 +121,7 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
             """
             from coinjure.events import Event
             from coinjure.strategy.strategy import Strategy
-            from coinjure.trading.trader import Trader
+            from coinjure.engine.execution.trader import Trader
 
             class DryRunStrategy(Strategy):
                 def __init__(self, multiplier: int):

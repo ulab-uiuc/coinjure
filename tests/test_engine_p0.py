@@ -4,6 +4,10 @@ from decimal import Decimal
 
 import pytest
 
+from coinjure.engine.execution.paper_trader import PaperTrader
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.engine.execution.trader import Trader
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.events import Event, NewsEvent
 from coinjure.market.data_source import DataSource
@@ -11,10 +15,6 @@ from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.market.order_book import Level, OrderBook
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
-from coinjure.trading.paper_trader import PaperTrader
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import NoRiskManager, StandardRiskManager
-from coinjure.trading.trader import Trader
 
 
 class MockDataSource(DataSource):

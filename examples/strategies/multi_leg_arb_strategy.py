@@ -37,10 +37,10 @@ import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
+from coinjure.engine.execution.trader import Trader
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import Ticker
-from coinjure.trading.trader import Trader
 
 logger = logging.getLogger(__name__)
 

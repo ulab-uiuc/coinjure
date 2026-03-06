@@ -51,7 +51,7 @@ def memory_add(
     as_json: bool,
 ) -> None:
     """Append an experiment result to the ledger."""
-    from coinjure.research.ledger import ExperimentLedger, LedgerEntry
+    from coinjure.memory import ExperimentLedger, LedgerEntry
 
     strategy_kwargs = _parse_json_object(
         strategy_kwargs_json, option_name='--strategy-kwargs-json'
@@ -91,7 +91,7 @@ def memory_list(
     as_json: bool,
 ) -> None:
     """List experiments from the ledger with optional filters."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     entries = ExperimentLedger().query(
         tag=tag,
@@ -113,7 +113,7 @@ def memory_list(
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def memory_best(metric: str, top: int, as_json: bool) -> None:
     """Return top-N experiments by a metric."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     entries = ExperimentLedger().best(metric_key=metric, top_n=top)
     _emit(
@@ -131,7 +131,7 @@ def memory_best(metric: str, top: int, as_json: bool) -> None:
 @click.option('--json', 'as_json', is_flag=True, default=False)
 def memory_summary(as_json: bool) -> None:
     """Aggregate statistics across all experiments."""
-    from coinjure.research.ledger import ExperimentLedger
+    from coinjure.memory import ExperimentLedger
 
     summary = ExperimentLedger().summary()
     _emit({'ok': True, **summary}, as_json=as_json)

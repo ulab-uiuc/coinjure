@@ -86,11 +86,11 @@ def strategy_validate(
     }
 
     if do_dry_run:
+        from coinjure.engine.execution.paper_trader import PaperTrader
+        from coinjure.engine.execution.position_manager import Position, PositionManager
+        from coinjure.engine.execution.risk_manager import NoRiskManager
         from coinjure.market.market_data_manager import MarketDataManager
         from coinjure.ticker import CashTicker
-        from coinjure.trading.paper_trader import PaperTrader
-        from coinjure.trading.position_manager import Position, PositionManager
-        from coinjure.trading.risk_manager import NoRiskManager
 
         ticker = PolyMarketTicker(
             symbol='DRYRUN_YES',
@@ -821,7 +821,7 @@ def strategy_pipeline(  # noqa: C901
 
     # Auto-record to experiment ledger
     try:
-        from coinjure.research.ledger import ExperimentLedger, LedgerEntry
+        from coinjure.memory import ExperimentLedger, LedgerEntry
 
         run_id = hashlib.sha256(
             f'{strategy_ref}:{strategy_kwargs}:{market_id}:{event_id}:{datetime.now(timezone.utc).isoformat()}'.encode()

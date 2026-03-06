@@ -37,15 +37,15 @@ import asyncio
 import logging
 from decimal import Decimal
 
+from coinjure.engine.execution.paper_trader import PaperTrader
+from coinjure.engine.execution.position_manager import Position, PositionManager
+from coinjure.engine.execution.risk_manager import NoRiskManager
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.market.composite_data_source import CompositeDataSource
 from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
 from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.ticker import CashTicker
-from coinjure.trading.paper_trader import PaperTrader
-from coinjure.trading.position_manager import Position, PositionManager
-from coinjure.trading.risk_manager import NoRiskManager
 from examples.strategies.cross_platform_arb_strategy import (
     CompositeTrader,
     CrossPlatformArbStrategy,

@@ -11,11 +11,11 @@ from typing import Any
 
 import litellm
 
+from coinjure.engine.execution.trader import Trader
+from coinjure.engine.execution.types import TradeSide
 from coinjure.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.contrib.allocation_strategy import parse_llm_response_to_json
 from coinjure.strategy.strategy import Strategy
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
