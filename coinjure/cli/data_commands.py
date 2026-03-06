@@ -136,10 +136,10 @@ def data() -> None:
 @data.command('record')
 @click.option(
     '--exchange',
-    type=click.Choice(['polymarket', 'kalshi', 'rss']),
-    default='rss',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default='polymarket',
     show_default=True,
-    help='Exchange / data source to record from.',
+    help='Exchange to record from.',
 )
 @click.option(
     '--output',
@@ -198,19 +198,15 @@ def data_record(
 
     \b
     Example workflow:
-      coinjure data record --exchange rss --output events.jsonl --duration 60
+      coinjure data record --exchange polymarket --output events.jsonl --duration 300
       coinjure backtest run --history-file events.jsonl --market-id X --event-id Y ...
     """
     from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-    from coinjure.data.live.live_data_source import (
-        LivePolyMarketDataSource,
-        LiveRSSNewsDataSource,
-    )
+    from coinjure.data.live.live_data_source import LivePolyMarketDataSource
 
     output_path = Path(output).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    data_source: LivePolyMarketDataSource | LiveKalshiDataSource | LiveRSSNewsDataSource
     if exchange == 'polymarket':
         data_source = LivePolyMarketDataSource(
             event_cache_file='record_events_cache.jsonl',
@@ -218,18 +214,13 @@ def data_record(
             orderbook_refresh_interval=min(polling_interval, 10.0),
             reprocess_on_start=True,
         )
-    elif exchange == 'kalshi':
+    else:
         data_source = LiveKalshiDataSource(
             api_key_id=kalshi_api_key_id,
             private_key_path=kalshi_private_key_path,
             event_cache_file='record_kalshi_cache.jsonl',
             polling_interval=polling_interval,
             reprocess_on_start=True,
-        )
-    else:
-        data_source = LiveRSSNewsDataSource(
-            polling_interval=polling_interval,
-            max_articles_per_poll=20,
         )
 
     dur_msg = f'{duration}s' if duration else 'until Ctrl-C'

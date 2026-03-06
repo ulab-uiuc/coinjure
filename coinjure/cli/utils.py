@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 
 import click
 
-from coinjure.cli.control import ControlServer
+from coinjure.cli.control import SOCKET_PATH, ControlServer
 from coinjure.cli.monitor import TradingMonitor
 from coinjure.core.trading_engine import TradingEngine
 
@@ -49,13 +50,16 @@ class MonitoredTradingEngine:
         refresh_rate: float = 2.0,  # kept for API compatibility
         enabled: bool = True,
         exchange_name: str = '',
+        socket_path: Path | None = None,
     ) -> None:
         self.engine = engine
         self.refresh_rate = refresh_rate
         self.enabled = enabled
         self.exchange_name = exchange_name
         self.monitor: TradingMonitor | None = None  # used by display_snapshot()
-        self.control_server: ControlServer = ControlServer(engine)
+        self.control_server: ControlServer = ControlServer(
+            engine, socket_path=socket_path or SOCKET_PATH
+        )
 
     async def start(self) -> None:
         """Start the engine (and monitor if enabled), plus the control server."""
@@ -100,6 +104,7 @@ def add_monitoring_to_engine(
     watch: bool = False,
     refresh_rate: float = 2.0,
     exchange_name: str = '',
+    socket_path: Path | None = None,
 ) -> MonitoredTradingEngine:
     """Wrap a TradingEngine with optional Textual live monitoring.
 
@@ -108,6 +113,7 @@ def add_monitoring_to_engine(
         watch: Enable the interactive Textual monitor.
         refresh_rate: UI refresh interval hint (seconds).
         exchange_name: Exchange name shown in the monitor header.
+        socket_path: Unix socket path for the control server (default: ~/.coinjure/engine.sock).
 
     Returns:
         A :class:`MonitoredTradingEngine` wrapping the original engine.
@@ -117,4 +123,5 @@ def add_monitoring_to_engine(
         refresh_rate=refresh_rate,
         enabled=watch,
         exchange_name=exchange_name,
+        socket_path=socket_path,
     )
