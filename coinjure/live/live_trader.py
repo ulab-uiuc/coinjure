@@ -3,15 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from coinjure.core.trading_engine import TradingEngine
+from coinjure.data.data_source import DataSource
 from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-from coinjure.data.live.live_data_source import (
-    LiveNewsDataSource,
-    LivePolyMarketDataSource,
-    LiveRSSNewsDataSource,
-)
+from coinjure.data.live.live_data_source import LivePolyMarketDataSource
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import (
@@ -39,10 +37,7 @@ def _emit_stdout(message: str, *, emit_text: bool) -> None:
 
 
 async def run_live_trading(
-    data_source: LivePolyMarketDataSource
-    | LiveNewsDataSource
-    | LiveRSSNewsDataSource
-    | LiveKalshiDataSource,
+    data_source: DataSource,
     strategy: Strategy,
     trader: Trader,
     duration: float | None = None,
@@ -53,6 +48,7 @@ async def run_live_trading(
     monitor: bool = False,
     exchange_name: str = '',
     emit_text: bool = True,
+    socket_path: Path | None = None,
 ) -> None:
     """
     Run live trading with the given data source, strategy, and trader.
@@ -89,6 +85,7 @@ async def run_live_trading(
             engine,
             watch=True,
             exchange_name=exchange_name,
+            socket_path=socket_path,
         )
         if duration:
             try:
@@ -110,6 +107,7 @@ async def run_live_trading(
             engine,
             watch=False,
             exchange_name=exchange_name,
+            socket_path=socket_path,
         )
         if duration:
             try:
@@ -127,7 +125,7 @@ async def run_live_trading(
 
 
 async def run_live_paper_trading(
-    data_source: LivePolyMarketDataSource | LiveNewsDataSource | LiveRSSNewsDataSource,
+    data_source: DataSource,
     strategy: Strategy,
     initial_capital: Decimal,
     risk_manager: RiskManager | None = None,
@@ -139,6 +137,7 @@ async def run_live_paper_trading(
     monitor: bool = False,
     exchange_name: str = '',
     emit_text: bool = True,
+    socket_path: Path | None = None,
 ) -> None:
     """
     Run live paper trading (simulated) with the given configuration.
@@ -198,6 +197,7 @@ async def run_live_paper_trading(
         monitor=monitor,
         exchange_name=exchange_name,
         emit_text=emit_text,
+        socket_path=socket_path,
     )
 
     # Print final portfolio status
@@ -352,7 +352,7 @@ async def run_live_polymarket_trading(
 
 
 async def run_live_kalshi_paper_trading(
-    data_source: LiveKalshiDataSource,
+    data_source: DataSource,
     strategy: Strategy,
     initial_capital: Decimal,
     risk_manager: RiskManager | None = None,
@@ -364,6 +364,7 @@ async def run_live_kalshi_paper_trading(
     monitor: bool = False,
     exchange_name: str = '',
     emit_text: bool = True,
+    socket_path: Path | None = None,
 ) -> None:
     """
     Run live paper trading on Kalshi markets (simulated).
@@ -423,6 +424,7 @@ async def run_live_kalshi_paper_trading(
         monitor=monitor,
         exchange_name=exchange_name,
         emit_text=emit_text,
+        socket_path=socket_path,
     )
 
     _emit_stdout('\n--- Final Portfolio Status ---', emit_text=emit_text)
@@ -565,23 +567,3 @@ async def run_live_kalshi_trading(
     logger.info('Cash positions: %s', position_manager.get_cash_positions())
     logger.info('Non-cash positions: %s', position_manager.get_non_cash_positions())
     logger.info('Total realized PnL: %s', position_manager.get_total_realized_pnl())
-
-
-if __name__ == '__main__':
-    from coinjure.strategy.test_strategy import TestStrategy
-
-    async def main():
-        # Example: Run paper trading with RSS news data
-        data_source = LiveRSSNewsDataSource(
-            polling_interval=60.0,
-            max_articles_per_poll=5,
-        )
-
-        await run_live_paper_trading(
-            data_source=data_source,
-            strategy=TestStrategy(),
-            initial_capital=Decimal('10000'),
-            duration=300,  # Run for 5 minutes
-        )
-
-    asyncio.run(main())

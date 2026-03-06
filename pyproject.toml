@@ -50,9 +50,11 @@ textual = ">=0.50.0"
 kalshi-python = "*"
 cryptography = "*"
 litellm = {version = ">=1.0.0", optional = true}
+pyarrow = {version = ">=14.0.0", optional = true}
 
 [tool.poetry.extras]
 llm = ["litellm"]
+parquet = ["pyarrow"]
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.6.0"
@@ -170,6 +172,7 @@ max-complexity = 10
 "tests/*" = ["S101"]
 "coinjure/strategy/simple_strategy.py" = ["C901"]
 "coinjure/data/live/live_data_source.py" = ["C901"]
+"coinjure/cli/agent_commands.py" = ["C901"]
 "coinjure/cli/monitor.py" = ["C901"]
 "scripts/*" = ["C901"]
 

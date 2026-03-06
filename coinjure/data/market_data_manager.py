@@ -35,10 +35,12 @@ class MarketDataManager:
         synthetic_size: Decimal = Decimal('1000'),
         max_history_per_ticker: int | None = 5000,
         max_timeline_events: int | None = 20000,
+        synthetic_book: bool = True,
     ) -> None:
         self.order_books: dict[Ticker, OrderBook] = {}
         self.spread = spread
         self.synthetic_size = synthetic_size
+        self.synthetic_book = synthetic_book
         self.max_history_per_ticker = max_history_per_ticker
         self.max_timeline_events = max_timeline_events
         self._market_history: dict[Ticker, deque[MarketDataPoint]] = {}
@@ -91,38 +93,52 @@ class MarketDataManager:
             levels.sort(key=lambda lv: lv.price, reverse=descending)
 
     def process_price_change_event(self, event: PriceChangeEvent) -> None:
-        """Update order book based on probability change event"""
+        """Update order book based on probability change event.
+
+        When ``synthetic_book`` is False (real orderbook data from parquet),
+        only record the price history — do NOT overwrite the real orderbook
+        with synthetic levels.
+        """
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
 
-        half_spread = self.spread / Decimal('2')
-        bid_price = max(Decimal('0'), event.price - half_spread)
-        ask_price = min(Decimal('1'), event.price + half_spread)
+        if self.synthetic_book:
+            half_spread = self.spread / Decimal('2')
+            bid_price = max(Decimal('0'), event.price - half_spread)
+            ask_price = min(Decimal('1'), event.price + half_spread)
 
-        size = self.synthetic_size
+            size = self.synthetic_size
 
-        bids = [Level(price=bid_price, size=size)] if bid_price > Decimal('0') else []
-        asks = [Level(price=ask_price, size=size)] if ask_price < Decimal('1') else []
+            bids = (
+                [Level(price=bid_price, size=size)] if bid_price > Decimal('0') else []
+            )
+            asks = (
+                [Level(price=ask_price, size=size)] if ask_price < Decimal('1') else []
+            )
 
-        order_book = self.order_books[event.ticker]
-        order_book.update(asks=asks, bids=bids)
+            order_book = self.order_books[event.ticker]
+            order_book.update(asks=asks, bids=bids)
 
-        # Bootstrap No-side order book on first encounter so PaperTrader
-        # can fill No orders before the first No PriceChangeEvent arrives.
-        # Subsequent updates come from the No events emitted by the data source.
-        no_ticker = getattr(event.ticker, 'get_no_ticker', lambda: None)()
-        if no_ticker is not None and no_ticker not in self.order_books:
-            self.order_books[no_ticker] = OrderBook()
+            # Bootstrap No-side order book on first encounter so PaperTrader
+            # can fill No orders before the first No PriceChangeEvent arrives.
+            # Subsequent updates come from the No events emitted by the data source.
+            no_ticker = getattr(event.ticker, 'get_no_ticker', lambda: None)()
+            if no_ticker is not None and no_ticker not in self.order_books:
+                self.order_books[no_ticker] = OrderBook()
 
-            no_price = Decimal('1') - event.price
-            no_bid = max(Decimal('0'), no_price - half_spread)
-            no_ask = min(Decimal('1'), no_price + half_spread)
+                no_price = Decimal('1') - event.price
+                no_bid = max(Decimal('0'), no_price - half_spread)
+                no_ask = min(Decimal('1'), no_price + half_spread)
 
-            no_bids = [Level(price=no_bid, size=size)] if no_bid > Decimal('0') else []
-            no_asks = [Level(price=no_ask, size=size)] if no_ask < Decimal('1') else []
+                no_bids = (
+                    [Level(price=no_bid, size=size)] if no_bid > Decimal('0') else []
+                )
+                no_asks = (
+                    [Level(price=no_ask, size=size)] if no_ask < Decimal('1') else []
+                )
 
-            no_ob = self.order_books[no_ticker]
-            no_ob.update(asks=no_asks, bids=no_bids)
+                no_ob = self.order_books[no_ticker]
+                no_ob.update(asks=no_asks, bids=no_bids)
 
         self._record_market_point(
             ticker=event.ticker,

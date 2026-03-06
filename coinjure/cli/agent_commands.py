@@ -11,15 +11,11 @@ from typing import Any
 
 import click
 
-from coinjure.backtest.backtester import run_backtest
+from coinjure.backtest.backtester import run_backtest, run_backtest_parquet
 from coinjure.cli.utils import _emit
 from coinjure.data.composite_data_source import CompositeDataSource
-from coinjure.data.live.google_news_data_source import GoogleNewsDataSource
 from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-from coinjure.data.live.live_data_source import (
-    LivePolyMarketDataSource,
-    LiveRSSNewsDataSource,
-)
+from coinjure.data.live.live_data_source import LivePolyMarketDataSource
 from coinjure.events.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.live.live_trader import (
     run_live_kalshi_paper_trading,
@@ -76,49 +72,42 @@ def _confirm_live_trading(*, as_json: bool) -> None:
         raise click.ClickException('Live trading cancelled by user.')
 
 
-def _build_news_augmented_source(exchange: str):
-    """Build market + Google/RSS news composite for paper trading."""
-    market_source: LivePolyMarketDataSource | LiveKalshiDataSource
+def _build_market_source(
+    exchange: str,
+) -> CompositeDataSource | LivePolyMarketDataSource | LiveKalshiDataSource:
+    """Build a market data source for the given exchange.
+
+    - polymarket      → LivePolyMarketDataSource
+    - kalshi          → LiveKalshiDataSource
+    - cross_platform  → CompositeDataSource([poly, kalshi]) — required for cross-platform arb
+    """
     if exchange == 'polymarket':
-        market_source = LivePolyMarketDataSource(
+        return LivePolyMarketDataSource(
             event_cache_file='events_cache.jsonl',
             polling_interval=60.0,
             orderbook_refresh_interval=10.0,
             reprocess_on_start=False,
         )
-    elif exchange == 'kalshi':
-        market_source = LiveKalshiDataSource(
+    if exchange == 'kalshi':
+        return LiveKalshiDataSource(
             event_cache_file='kalshi_events_cache.jsonl',
             polling_interval=60.0,
             reprocess_on_start=False,
         )
-    else:
-        raise click.ClickException(f'Unsupported exchange for market feed: {exchange}')
-
-    # Keep Google polling conservative to reduce block/rate-limit risk.
-    google_source = GoogleNewsDataSource(
-        queries=[
-            'polymarket prediction market',
-            'kalshi prediction market',
-            'US politics elections 2026',
-            'federal reserve inflation jobs report',
-            'geopolitics world events',
-            'crypto regulation SEC CFTC',
-        ],
-        cache_file='google_news_cache.jsonl',
-        polling_interval=600.0,
-        max_articles_per_poll=8,
-        max_pages=1,
-        min_delay=3.0,
-        max_delay=8.0,
-    )
-    rss_source = LiveRSSNewsDataSource(
-        cache_file='rss_news_cache.jsonl',
-        polling_interval=600.0,
-        max_articles_per_poll=8,
-        categories=['world', 'business', 'finance', 'politics', 'economy', 'sports'],
-    )
-    return CompositeDataSource([market_source, google_source, rss_source])
+    if exchange == 'cross_platform':
+        poly = LivePolyMarketDataSource(
+            event_cache_file='events_cache.jsonl',
+            polling_interval=60.0,
+            orderbook_refresh_interval=10.0,
+            reprocess_on_start=False,
+        )
+        kalshi = LiveKalshiDataSource(
+            event_cache_file='kalshi_events_cache.jsonl',
+            polling_interval=60.0,
+            reprocess_on_start=False,
+        )
+        return CompositeDataSource([poly, kalshi])
+    raise click.ClickException(f'Unsupported exchange: {exchange!r}')
 
 
 def _load_strategy_class(strategy_ref: str) -> type[Strategy]:
@@ -180,138 +169,6 @@ def _build_mock_events(ticker: PolyMarketTicker, n_events: int) -> list[Event]:
 @click.group()
 def strategy() -> None:
     """Strategy development commands."""
-
-
-@strategy.command('create')
-@click.option('--output', 'output_path', required=True, type=click.Path(path_type=Path))
-@click.option(
-    '--class-name',
-    default=None,
-    help='Class name (defaults: MyQuantStrategy / MyAgentStrategy)',
-)
-@click.option(
-    '--force', is_flag=True, default=False, help='Overwrite output file if it exists.'
-)
-@click.option(
-    '--type',
-    'strategy_type',
-    default='quant',
-    show_default=True,
-    type=click.Choice(['quant', 'agent']),
-    help="'quant' → QuantStrategy (auto-tunable); 'agent' → AgentStrategy (LLM/tools).",
-)
-def strategy_create(
-    output_path: Path, class_name: str | None, force: bool, strategy_type: str
-) -> None:
-    """Create a strategy template that agents can edit."""
-    if output_path.exists() and not force:
-        raise click.ClickException(
-            f'File already exists: {output_path}. Pass --force to overwrite.'
-        )
-
-    if class_name is None:
-        class_name = (
-            'MyQuantStrategy' if strategy_type == 'quant' else 'MyAgentStrategy'
-        )
-
-    if strategy_type == 'quant':
-        template = f"""from __future__ import annotations
-
-from decimal import Decimal
-
-from coinjure.events.events import Event, OrderBookEvent, PriceChangeEvent
-from coinjure.strategy.quant_strategy import QuantStrategy
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
-
-
-class {class_name}(QuantStrategy):
-    \"\"\"Deterministic, numerically-parameterised strategy.
-
-    Constructor kwargs are auto-tunable via `research discover-alpha --param-grid-json`.
-    Keep them JSON-serialisable numerics.
-    \"\"\"
-
-    name = '{class_name}'
-    version = '0.1.0'
-    author = ''
-
-    def __init__(
-        self,
-        trade_size: float = 10.0,
-        threshold: float = 0.05,
-    ) -> None:
-        self.trade_size = Decimal(str(trade_size))
-        self.threshold = threshold
-
-    async def process_event(self, event: Event, trader: Trader) -> None:
-        if self.is_paused():
-            return
-        context = self.require_context()
-        if isinstance(event, PriceChangeEvent):
-            # Use prepare_data()/context helpers to load all visible state.
-            data = self.prepare_data(context)
-            self.record_decision(
-                ticker_name=str(event.ticker),
-                action='HOLD',
-                executed=False,
-                reasoning=f'skeleton — replace with your signal logic using {{len(data["price_history"])}} prices',
-                signal_values={{}},
-            )
-            return
-        if isinstance(event, OrderBookEvent):
-            # Use bid/ask updates for microstructure-aware execution.
-            return
-"""
-    else:
-        template = f"""from __future__ import annotations
-
-from decimal import Decimal
-
-from coinjure.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
-from coinjure.strategy.agent_strategy import AgentStrategy
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
-
-
-class {class_name}(AgentStrategy):
-    \"\"\"LLM-driven or tool-using strategy.
-
-    May call external APIs (LLMs, web search, MCP tools).
-    NOT eligible for parameter grid search — evaluate via `paper run --monitor`.
-    \"\"\"
-
-    name = '{class_name}'
-    version = '0.1.0'
-    author = ''
-
-    def __init__(self, trade_size: float = 10.0) -> None:
-        super().__init__()
-        self.trade_size = Decimal(str(trade_size))
-
-    async def process_event(self, event: Event, trader: Trader) -> None:
-        if self.is_paused():
-            return
-        context = self.require_context()
-        if isinstance(event, NewsEvent):
-            # build_prompt_context() explains the visible data/tools.
-            prompt = self.build_prompt_context(context)
-            self.record_decision(
-                ticker_name=str(event.ticker) if hasattr(event, 'ticker') else 'unknown',
-                action='HOLD',
-                executed=False,
-                reasoning=f'skeleton — replace with your LLM/tool call\\n{{prompt[:200]}}',
-                signal_values={{}},
-            )
-            return
-        if isinstance(event, PriceChangeEvent):
-            return
-        if isinstance(event, OrderBookEvent):
-            return
-"""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(template)
-    click.echo(f'Created {strategy_type} strategy template: {output_path}')
 
 
 @strategy.command('validate')
@@ -454,12 +311,22 @@ def backtest() -> None:
 
 @backtest.command('run')
 @click.option(
-    '--history-file', required=True, type=click.Path(exists=True, dir_okay=False)
+    '--history-file',
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help='JSONL history file (mutually exclusive with --parquet).',
+)
+@click.option(
+    '--parquet',
+    'parquet_path',
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help='Parquet orderbook snapshot file from pmxt archive.',
 )
 @click.option('--symbol', default='BACKTEST_TOKEN', show_default=True)
 @click.option('--name', default='Backtest Market', show_default=True)
-@click.option('--market-id', required=True)
-@click.option('--event-id', required=True)
+@click.option('--market-id', default=None)
+@click.option('--event-id', default=None)
 @click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
     '--spread',
@@ -500,11 +367,12 @@ def backtest() -> None:
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
 def backtest_run(
-    history_file: str,
+    history_file: str | None,
+    parquet_path: str | None,
     symbol: str,
     name: str,
-    market_id: str,
-    event_id: str,
+    market_id: str | None,
+    event_id: str | None,
     initial_capital: str,
     spread: str,
     strategy_ref: str,
@@ -518,6 +386,47 @@ def backtest_run(
     as_json: bool,
 ) -> None:
     """Run backtest mode with historical data + paper execution."""
+    if not history_file and not parquet_path:
+        raise click.ClickException('Provide either --history-file or --parquet.')
+    if history_file and parquet_path:
+        raise click.ClickException(
+            '--history-file and --parquet are mutually exclusive.'
+        )
+
+    # Parquet mode — simpler path, real orderbook data
+    if parquet_path:
+        strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+        strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
+        capital = Decimal(initial_capital)
+        _emit(
+            {
+                'mode': 'backtest_parquet',
+                'message': f'Starting parquet backtest: {strategy_ref}',
+                'parquet_path': parquet_path,
+                'market_id': market_id,
+                'strategy_kwargs': strategy_kwargs,
+            },
+            as_json=as_json,
+        )
+        asyncio.run(
+            run_backtest_parquet(
+                parquet_path=parquet_path,
+                initial_capital=capital,
+                strategy=strategy_obj,
+                market_id=market_id,
+            )
+        )
+        _emit(
+            {'mode': 'backtest_parquet', 'message': 'Parquet backtest completed'},
+            as_json=as_json,
+        )
+        return
+
+    if not market_id:
+        raise click.ClickException('--market-id is required for history-file backtest.')
+    if not event_id:
+        raise click.ClickException('--event-id is required for history-file backtest.')
+
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     capital = Decimal(initial_capital)
     try:
@@ -612,8 +521,9 @@ def paper() -> None:
 @paper.command('run')
 @click.option(
     '--exchange',
-    type=click.Choice(['polymarket', 'kalshi', 'rss']),
+    type=click.Choice(['polymarket', 'kalshi', 'cross_platform']),
     default='polymarket',
+    show_default=True,
 )
 @click.option(
     '--duration', type=float, default=None, help='Seconds to run (default: forever)'
@@ -633,6 +543,18 @@ def paper() -> None:
 @click.option(
     '--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard'
 )
+@click.option(
+    '--socket-path',
+    default=None,
+    type=click.Path(),
+    help='Unix socket path for the control server (default: ~/.coinjure/engine.sock).',
+)
+@click.option(
+    '--hub-socket',
+    default=None,
+    type=click.Path(),
+    help='Connect to a running Market Data Hub instead of polling exchanges directly.',
+)
 def paper_run(
     exchange: str,
     duration: float | None,
@@ -641,6 +563,8 @@ def paper_run(
     strategy_kwargs_json: str | None,
     as_json: bool,
     monitor: bool,
+    socket_path: str | None,
+    hub_socket: str | None,
 ) -> None:
     """Run paper trading against a live exchange feed."""
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
@@ -662,6 +586,7 @@ def paper_run(
             'strategy_ref': strategy_ref,
             'strategy_kwargs': strategy_kwargs,
             'strategy_mode': strategy_mode,
+            'hub_socket': hub_socket,
             'message': (
                 f'Starting paper mode ({exchange})'
                 if strategy_ref
@@ -671,22 +596,20 @@ def paper_run(
         as_json=as_json,
     )
 
-    if exchange == 'polymarket':
-        data_source = _build_news_augmented_source('polymarket')
-        asyncio.run(
-            run_live_paper_trading(
-                data_source=data_source,
-                strategy=strategy_obj,
-                initial_capital=capital,
-                duration=duration,
-                continuous=True,
-                monitor=monitor,
-                exchange_name='Polymarket',
-                emit_text=not as_json,
-            )
-        )
-    elif exchange == 'kalshi':
-        data_source = _build_news_augmented_source('kalshi')
+    _socket_path = Path(socket_path) if socket_path else None
+    if hub_socket:
+        from coinjure.data.hub.subscriber import HubDataSource
+
+        data_source = HubDataSource(Path(hub_socket).expanduser())
+    else:
+        data_source = _build_market_source(exchange)
+    exchange_label = {
+        'polymarket': 'Polymarket',
+        'kalshi': 'Kalshi',
+        'cross_platform': 'Cross-Platform',
+    }.get(exchange, exchange)
+
+    if exchange == 'kalshi':
         asyncio.run(
             run_live_kalshi_paper_trading(
                 data_source=data_source,
@@ -695,15 +618,13 @@ def paper_run(
                 duration=duration,
                 continuous=True,
                 monitor=monitor,
-                exchange_name='Kalshi',
+                exchange_name=exchange_label,
                 emit_text=not as_json,
+                socket_path=_socket_path,
             )
         )
     else:
-        data_source = LiveRSSNewsDataSource(
-            polling_interval=60.0,
-            max_articles_per_poll=5,
-        )
+        # polymarket and cross_platform both use PaperTrader + POLYMARKET_USDC
         asyncio.run(
             run_live_paper_trading(
                 data_source=data_source,
@@ -712,8 +633,9 @@ def paper_run(
                 duration=duration,
                 continuous=True,
                 monitor=monitor,
-                exchange_name='RSS',
+                exchange_name=exchange_label,
                 emit_text=not as_json,
+                socket_path=_socket_path,
             )
         )
 
