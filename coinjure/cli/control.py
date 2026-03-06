@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from coinjure.core.trading_engine import TradingEngine
+    from coinjure.engine.trading_engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 
@@ -324,7 +324,7 @@ class ControlServer:
 
         # ── Order books ──────────────────────────────────────────────
         try:
-            from coinjure.ticker.ticker import CashTicker
+            from coinjure.ticker import CashTicker
 
             books = []
             for ticker, ob in list(md.order_books.items()):  # type: ignore[union-attr]

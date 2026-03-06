@@ -37,10 +37,10 @@ import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
-from coinjure.events.events import Event, PriceChangeEvent
+from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import Ticker
-from coinjure.trader.trader import Trader
+from coinjure.ticker import Ticker
+from coinjure.trading.trader import Trader
 
 logger = logging.getLogger(__name__)
 
@@ -147,14 +147,18 @@ class MultiLegArbStrategy(Strategy):
             if not isinstance(ts, int | float):
                 ts = 0
 
-            self._arb_snapshots.append(ArbSnapshot(
-                timestamp=int(ts) if ts else self._event_counter,
-                sum_yes=round(sum_yes, 4),
-                overpricing=round(overpricing, 4),
-                team_prices={k: round(float(v), 4) for k, v in list(poly_prices.items())[:5]},
-                action='SELL_OVERPRICED',
-                profit_per_set=round(overpricing, 4),
-            ))
+            self._arb_snapshots.append(
+                ArbSnapshot(
+                    timestamp=int(ts) if ts else self._event_counter,
+                    sum_yes=round(sum_yes, 4),
+                    overpricing=round(overpricing, 4),
+                    team_prices={
+                        k: round(float(v), 4) for k, v in list(poly_prices.items())[:5]
+                    },
+                    action='SELL_OVERPRICED',
+                    profit_per_set=round(overpricing, 4),
+                )
+            )
 
             self.record_decision(
                 ticker_name=f'MULTI_LEG ({n_teams} teams)',
@@ -164,21 +168,27 @@ class MultiLegArbStrategy(Strategy):
                 signal_values={'sum_yes': sum_yes, 'overpricing': overpricing},
             )
 
-            logger.info('MULTI-LEG ARB: sum=%.4f overpricing=%.4f', sum_yes, overpricing)
+            logger.info(
+                'MULTI-LEG ARB: sum=%.4f overpricing=%.4f', sum_yes, overpricing
+            )
 
         elif overpricing < -self.min_overpricing:
             if not self._cooldown_ok():
                 return
             self._last_arb_event = self._event_counter
 
-            self._arb_snapshots.append(ArbSnapshot(
-                timestamp=self._event_counter,
-                sum_yes=round(sum_yes, 4),
-                overpricing=round(overpricing, 4),
-                team_prices={k: round(float(v), 4) for k, v in list(poly_prices.items())[:5]},
-                action='BUY_UNDERPRICED',
-                profit_per_set=round(abs(overpricing), 4),
-            ))
+            self._arb_snapshots.append(
+                ArbSnapshot(
+                    timestamp=self._event_counter,
+                    sum_yes=round(sum_yes, 4),
+                    overpricing=round(overpricing, 4),
+                    team_prices={
+                        k: round(float(v), 4) for k, v in list(poly_prices.items())[:5]
+                    },
+                    action='BUY_UNDERPRICED',
+                    profit_per_set=round(abs(overpricing), 4),
+                )
+            )
 
             self.record_decision(
                 ticker_name=f'MULTI_LEG ({n_teams} teams)',
@@ -196,7 +206,9 @@ class MultiLegArbStrategy(Strategy):
                 signal_values={'sum_yes': sum_yes, 'overpricing': overpricing},
             )
 
-    def _check_cross_platform_arb(self, team: str, poly_prices: dict[str, Decimal]) -> None:
+    def _check_cross_platform_arb(
+        self, team: str, poly_prices: dict[str, Decimal]
+    ) -> None:
         """Detect cross-platform price discrepancies."""
         kalshi_prices = self._prices.get('kalshi', {})
         if team not in poly_prices or team not in kalshi_prices:
@@ -214,14 +226,16 @@ class MultiLegArbStrategy(Strategy):
 
         direction = 'BUY_POLY_SELL_KALSHI' if p_yes < k_yes else 'BUY_KALSHI_SELL_POLY'
 
-        self._arb_snapshots.append(ArbSnapshot(
-            timestamp=self._event_counter,
-            sum_yes=0,
-            overpricing=edge,
-            team_prices={'poly': p_yes, 'kalshi': k_yes},
-            action='CROSS_PLATFORM',
-            profit_per_set=round(edge, 4),
-        ))
+        self._arb_snapshots.append(
+            ArbSnapshot(
+                timestamp=self._event_counter,
+                sum_yes=0,
+                overpricing=edge,
+                team_prices={'poly': p_yes, 'kalshi': k_yes},
+                action='CROSS_PLATFORM',
+                profit_per_set=round(edge, 4),
+            )
+        )
 
         self.record_decision(
             ticker_name=f'XPLAT {team[:30]}',

@@ -51,7 +51,7 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
     async def fake_run_backtest(**kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr('coinjure.backtest.backtester.run_backtest', fake_run_backtest)
+    monkeypatch.setattr('coinjure.engine.backtester.run_backtest', fake_run_backtest)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -81,9 +81,9 @@ def test_strategy_validate_with_kwargs_json(tmp_path):
     strategy_file.write_text(
         textwrap.dedent(
             """
-            from coinjure.events.events import Event
+            from coinjure.events import Event
             from coinjure.strategy.strategy import Strategy
-            from coinjure.trader.trader import Trader
+            from coinjure.trading.trader import Trader
 
             class NeedsKwargs(Strategy):
                 def __init__(self, threshold: float):
@@ -119,9 +119,9 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
     strategy_file.write_text(
         textwrap.dedent(
             """
-            from coinjure.events.events import Event
+            from coinjure.events import Event
             from coinjure.strategy.strategy import Strategy
-            from coinjure.trader.trader import Trader
+            from coinjure.trading.trader import Trader
 
             class DryRunStrategy(Strategy):
                 def __init__(self, multiplier: int):
@@ -202,9 +202,11 @@ def test_paper_and_live_commands_invokable(monkeypatch):
     monkeypatch.setattr(
         'coinjure.cli.agent_commands.LivePolyMarketDataSource', DummySource
     )
-    monkeypatch.setattr('coinjure.live.live_trader.run_live_paper_trading', fake_paper)
     monkeypatch.setattr(
-        'coinjure.live.live_trader.run_live_polymarket_trading', fake_live
+        'coinjure.engine.live_trader.run_live_paper_trading', fake_paper
+    )
+    monkeypatch.setattr(
+        'coinjure.engine.live_trader.run_live_polymarket_trading', fake_live
     )
 
     runner = CliRunner()

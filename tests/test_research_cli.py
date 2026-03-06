@@ -289,9 +289,9 @@ def test_research_auto_tune_runs_end_to_end(monkeypatch, tmp_path: Path) -> None
     strategy_file.write_text(
         '\n'.join(
             [
-                'from coinjure.events.events import Event',
+                'from coinjure.events import Event',
                 'from coinjure.strategy.strategy import Strategy',
-                'from coinjure.trader.trader import Trader',
+                'from coinjure.trading.trader import Trader',
                 '',
                 'class DiscoverStrategy(Strategy):',
                 '    def __init__(self, momentum_entry: float = 0.01):',

@@ -4,23 +4,23 @@ from pathlib import Path
 
 import pytest
 
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.data_source import DataSource
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.events.events import (
+from coinjure.engine.trading_engine import TradingEngine
+from coinjure.events import (
     Event,
     NewsEvent,
     OrderBookEvent,
     PriceChangeEvent,
 )
-from coinjure.order.order_book import Level, OrderBook
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.market.backtest.historical_data_source import HistoricalDataSource
+from coinjure.market.data_source import DataSource
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.market.order_book import Level, OrderBook
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.paper_trader import PaperTrader
-from coinjure.trader.trader import Trader
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import NoRiskManager
+from coinjure.trading.trader import Trader
 
 
 @pytest.fixture

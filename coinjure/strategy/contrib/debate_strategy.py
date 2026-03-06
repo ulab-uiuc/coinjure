@@ -11,11 +11,11 @@ from typing import Any
 
 import litellm
 
-from coinjure.events.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
+from coinjure.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.contrib.allocation_strategy import parse_llm_response_to_json
 from coinjure.strategy.strategy import Strategy
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -326,7 +326,9 @@ class DebateStrategy(Strategy):
             'price_pct_change': price_pct_change,
             'trend': trend,
             'num_price_points': len(prices),
-            'position_quantity': position.quantity if position is not None and has_position else Decimal('0'),
+            'position_quantity': position.quantity
+            if position is not None and has_position
+            else Decimal('0'),
             'position_avg_cost': position.average_cost
             if position is not None and has_position
             else Decimal('0'),

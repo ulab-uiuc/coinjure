@@ -27,8 +27,8 @@ from coinjure.cli.agent_commands import (
     _parse_strategy_kwargs_json,
 )
 from coinjure.cli.utils import _emit
-from coinjure.events.events import OrderBookEvent, PriceChangeEvent
-from coinjure.ticker.ticker import PolyMarketTicker
+from coinjure.events import OrderBookEvent, PriceChangeEvent
+from coinjure.ticker import PolyMarketTicker
 
 
 @click.group()
@@ -86,11 +86,11 @@ def strategy_validate(
     }
 
     if do_dry_run:
-        from coinjure.data.market_data_manager import MarketDataManager
-        from coinjure.position.position_manager import Position, PositionManager
-        from coinjure.risk.risk_manager import NoRiskManager
-        from coinjure.ticker.ticker import CashTicker
-        from coinjure.trader.paper_trader import PaperTrader
+        from coinjure.market.market_data_manager import MarketDataManager
+        from coinjure.ticker import CashTicker
+        from coinjure.trading.paper_trader import PaperTrader
+        from coinjure.trading.position_manager import Position, PositionManager
+        from coinjure.trading.risk_manager import NoRiskManager
 
         ticker = PolyMarketTicker(
             symbol='DRYRUN_YES',
@@ -252,7 +252,7 @@ def strategy_backtest(
     as_json: bool,
 ) -> None:
     """Run backtest mode with historical data + paper execution."""
-    from coinjure.backtest.backtester import run_backtest, run_backtest_parquet
+    from coinjure.engine.backtester import run_backtest, run_backtest_parquet
 
     if not history_file and not parquet_path:
         raise click.ClickException('Provide either --history-file or --parquet.')

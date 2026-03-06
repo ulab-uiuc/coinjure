@@ -99,17 +99,17 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-    "coinjure.events.events",
-    "coinjure.analytics.performance_analyzer",
-    "coinjure.data.market_data_manager",
-    "coinjure.data.backtest.historical_data_source",
-    "coinjure.data.live.live_data_source",
-    "coinjure.data.live.google_news_data_source",
-    "coinjure.data.live.kalshi_data_source",
-    "coinjure.trader.kalshi_trader",
-    "coinjure.trader.paper_trader",
-    "coinjure.core.trading_engine",
-    "coinjure.backtest.backtester",
+    "coinjure.events",
+    "coinjure.engine.performance",
+    "coinjure.market.market_data_manager",
+    "coinjure.market.backtest.historical_data_source",
+    "coinjure.market.live.live_data_source",
+    "coinjure.market.live.google_news_data_source",
+    "coinjure.market.live.kalshi_data_source",
+    "coinjure.trading.kalshi_trader",
+    "coinjure.trading.paper_trader",
+    "coinjure.engine.trading_engine",
+    "coinjure.engine.backtester",
 ]
 disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value", "import-untyped", "misc"]
 
@@ -171,7 +171,7 @@ max-complexity = 10
 "__init__.py" = ["F401"]
 "tests/*" = ["S101"]
 "coinjure/strategy/simple_strategy.py" = ["C901"]
-"coinjure/data/live/live_data_source.py" = ["C901"]
+"coinjure/market/live/live_data_source.py" = ["C901"]
 "coinjure/cli/agent_commands.py" = ["C901"]
 "coinjure/cli/monitor.py" = ["C901"]
 "scripts/*" = ["C901"]

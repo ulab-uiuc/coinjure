@@ -12,9 +12,9 @@ and analyze trading performance. It shows how to:
 
 from decimal import Decimal
 
-from coinjure.analytics.performance_analyzer import PerformanceAnalyzer
-from coinjure.ticker.ticker import PolyMarketTicker
-from coinjure.trader.types import Trade, TradeSide
+from coinjure.engine.performance import PerformanceAnalyzer
+from coinjure.ticker import PolyMarketTicker
+from coinjure.trading.types import Trade, TradeSide
 
 
 def create_test_ticker() -> PolyMarketTicker:

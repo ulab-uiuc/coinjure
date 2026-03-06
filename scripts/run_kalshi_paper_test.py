@@ -12,14 +12,14 @@ from decimal import Decimal
 
 from dotenv import load_dotenv
 
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import StandardRiskManager
+from coinjure.engine.trading_engine import TradingEngine
+from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
+from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.simple_strategy import SimpleStrategy
-from coinjure.ticker.ticker import CashTicker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.ticker import CashTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import StandardRiskManager
 
 load_dotenv()
 

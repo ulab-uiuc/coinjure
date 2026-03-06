@@ -469,7 +469,7 @@ def market_match(
 ) -> None:
     """Fuzzy-match markets across Polymarket and Kalshi by keyword."""
     from coinjure.cli.arb_helpers import _pair_ids_in_portfolio
-    from coinjure.portfolio.matching import MarketPair, match_markets
+    from coinjure.market.matching import MarketPair, match_markets
 
     try:
         min_sim = float(min_similarity)
@@ -581,7 +581,7 @@ def market_scan(
     from decimal import Decimal, InvalidOperation
 
     from coinjure.cli.arb_helpers import _compute_edge, _pair_ids_in_portfolio
-    from coinjure.portfolio.matching import match_markets
+    from coinjure.market.matching import match_markets
 
     try:
         min_edge_dec = Decimal(min_edge)
@@ -952,8 +952,8 @@ def market_record(
     from pathlib import Path
 
     from coinjure.cli.data_commands import _record_loop
-    from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-    from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+    from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
+    from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 
     output_path = Path(output).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1037,7 +1037,7 @@ def market_snapshot(
     markets: list[dict[str, Any]] = []
     try:
         if exchange == 'polymarket':
-            from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+            from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 
             ds = LivePolyMarketDataSource(polling_interval=0)
             raw_markets = (

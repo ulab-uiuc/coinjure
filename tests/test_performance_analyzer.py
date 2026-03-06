@@ -2,13 +2,13 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.analytics.performance_analyzer import (
+from coinjure.engine.performance import (
     EquityPoint,
     PerformanceAnalyzer,
     TradeStats,
 )
-from coinjure.ticker.ticker import PolyMarketTicker
-from coinjure.trader.types import Trade, TradeSide
+from coinjure.ticker import PolyMarketTicker
+from coinjure.trading.types import Trade, TradeSide
 
 
 @pytest.fixture
