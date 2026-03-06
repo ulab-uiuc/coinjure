@@ -25,7 +25,7 @@ from textual.widgets import Button, DataTable, Footer, Header, Label, RichLog, S
 
 if TYPE_CHECKING:
     from coinjure.cli.control import ControlServer
-    from coinjure.core.trading_engine import TradingEngine
+    from coinjure.engine.trading_engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 
@@ -625,7 +625,7 @@ class OrderBooksTable(DataTable):
             pass
 
     def refresh_data(self, trader) -> None:
-        from coinjure.ticker.ticker import CashTicker
+        from coinjure.ticker import CashTicker
 
         try:
             ob_items = list(trader.market_data.order_books.items())
@@ -1010,7 +1010,9 @@ class SocketTradingMonitorApp(App[None]):
                 'Start one with: coinjure paper run --exchange polymarket'
             )
             try:
-                self.query_one('#ctrl-bar', ControlBar).update_state(False, connected=False)
+                self.query_one('#ctrl-bar', ControlBar).update_state(
+                    False, connected=False
+                )
             except Exception:
                 pass
             return

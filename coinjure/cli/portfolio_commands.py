@@ -25,7 +25,7 @@ from typing import Any
 import click
 
 from coinjure.cli.control import SOCKET_DIR, run_command
-from coinjure.data.hub.hub import HUB_SOCKET_PATH
+from coinjure.market.hub.hub import HUB_SOCKET_PATH
 from coinjure.portfolio.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -606,7 +606,7 @@ def portfolio_snapshot(
     markets: list[dict[str, Any]] = []
     try:
         if exchange == 'polymarket':
-            from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+            from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 
             ds = LivePolyMarketDataSource(polling_interval=0)
             raw_markets = (
@@ -760,7 +760,7 @@ def portfolio_arb_deploy(
         _kalshi_search_markets,
         _polymarket_search_markets,
     )
-    from coinjure.portfolio.matching import match_markets
+    from coinjure.market.matching import match_markets
 
     actual_ref = strategy_ref or _DIRECT_ARB_REF
 

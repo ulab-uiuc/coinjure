@@ -10,14 +10,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from coinjure.position.position_manager import Position
-from coinjure.ticker.ticker import (
+from coinjure.ticker import (
     CashTicker,
     KalshiTicker,
     PolyMarketTicker,
     Ticker,
 )
-from coinjure.trader.types import Order, OrderStatus, Trade, TradeSide
+from coinjure.trading.position_manager import Position
+from coinjure.trading.types import Order, OrderStatus, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Ticker
@@ -193,7 +193,7 @@ def serialize_equity_point(pt: object) -> dict:
 
 def deserialize_equity_point(d: dict) -> object:
     """Reconstruct an EquityPoint from a dict."""
-    from coinjure.analytics.performance_analyzer import EquityPoint
+    from coinjure.engine.performance import EquityPoint
 
     return EquityPoint(
         timestamp=d['timestamp'],

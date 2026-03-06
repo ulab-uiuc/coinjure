@@ -2,11 +2,11 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.order.order_book import Level, OrderBook
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.types import Trade, TradeSide
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.market.order_book import Level, OrderBook
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.types import Trade, TradeSide
 
 
 @pytest.fixture

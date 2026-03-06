@@ -15,11 +15,11 @@ from __future__ import annotations
 from collections import defaultdict
 from decimal import Decimal
 
-from coinjure.events.events import Event, PriceChangeEvent
+from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import Ticker
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
+from coinjure.ticker import Ticker
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 
 class SpreadArbStrategy(Strategy):

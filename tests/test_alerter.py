@@ -8,8 +8,8 @@ import pytest
 
 from coinjure.alerts.alerter import Alerter, CompositeAlerter, LogAlerter
 from coinjure.alerts.telegram_alerter import TelegramAlerter
-from coinjure.ticker.ticker import PolyMarketTicker
-from coinjure.trader.types import OrderFailureReason, Trade, TradeSide
+from coinjure.ticker import PolyMarketTicker
+from coinjure.trading.types import OrderFailureReason, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures

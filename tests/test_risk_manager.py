@@ -2,17 +2,17 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.order.order_book import Level, OrderBook
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import (
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.market.order_book import Level, OrderBook
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import (
     AggressiveRiskManager,
     ConservativeRiskManager,
     NoRiskManager,
     StandardRiskManager,
 )
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.types import TradeSide
+from coinjure.trading.types import TradeSide
 
 
 @pytest.fixture

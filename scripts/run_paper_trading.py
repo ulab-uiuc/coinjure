@@ -20,20 +20,20 @@ import click
 from dotenv import load_dotenv
 
 from coinjure.cli.utils import add_monitoring_to_engine
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.composite_data_source import CompositeDataSource
-from coinjure.data.live.google_news_data_source import GoogleNewsDataSource
-from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-from coinjure.data.live.live_data_source import (
+from coinjure.engine.trading_engine import TradingEngine
+from coinjure.market.composite_data_source import CompositeDataSource
+from coinjure.market.live.google_news_data_source import GoogleNewsDataSource
+from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
+from coinjure.market.live.live_data_source import (
     LivePolyMarketDataSource,
     LiveRSSNewsDataSource,
 )
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import StandardRiskManager
+from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.simple_strategy import SimpleStrategy
-from coinjure.ticker.ticker import CashTicker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.ticker import CashTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import StandardRiskManager
 
 load_dotenv()
 

@@ -12,7 +12,7 @@ from pathlib import Path
 import click
 
 from coinjure.cli.utils import _emit
-from coinjure.data.hub.hub import HUB_PID_PATH, HUB_SOCKET_PATH
+from coinjure.market.hub.hub import HUB_PID_PATH, HUB_SOCKET_PATH
 
 _DEFAULT_SOCKET = str(HUB_SOCKET_PATH)
 
@@ -101,10 +101,10 @@ def hub_start(
         return
 
     # Foreground mode — build composite source and run hub
-    from coinjure.data.composite_data_source import CompositeDataSource
-    from coinjure.data.hub.hub import MarketDataHub
-    from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-    from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+    from coinjure.market.composite_data_source import CompositeDataSource
+    from coinjure.market.hub.hub import MarketDataHub
+    from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
+    from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 
     poly = LivePolyMarketDataSource(
         event_cache_file='events_cache.jsonl',
