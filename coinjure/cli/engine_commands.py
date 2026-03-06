@@ -29,7 +29,7 @@ from coinjure.cli.agent_commands import (
 )
 from coinjure.cli.control import SOCKET_DIR, SOCKET_PATH, run_command
 from coinjure.cli.utils import _emit
-from coinjure.data.hub.hub import HUB_SOCKET_PATH
+from coinjure.market.hub.hub import HUB_SOCKET_PATH
 from coinjure.portfolio.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -200,14 +200,14 @@ def engine_run(  # noqa: C901
     kalshi_private_key_path: str | None,
 ) -> None:
     """Run a trading engine instance in paper or live mode."""
-    from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-    from coinjure.data.live.live_data_source import LivePolyMarketDataSource
-    from coinjure.live.live_trader import (
+    from coinjure.engine.live_trader import (
         run_live_kalshi_paper_trading,
         run_live_kalshi_trading,
         run_live_paper_trading,
         run_live_polymarket_trading,
     )
+    from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
+    from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     if strategy_kwargs and not strategy_ref:
@@ -315,7 +315,7 @@ def engine_run(  # noqa: C901
     )
 
     if hub_socket:
-        from coinjure.data.hub.subscriber import HubDataSource
+        from coinjure.market.hub.subscriber import HubDataSource
 
         data_source = HubDataSource(Path(hub_socket).expanduser())
     else:
@@ -731,7 +731,7 @@ def engine_deploy(
         _kalshi_search_markets,
         _polymarket_search_markets,
     )
-    from coinjure.portfolio.matching import match_markets
+    from coinjure.market.matching import match_markets
 
     actual_ref = strategy_ref or _DIRECT_ARB_REF
 

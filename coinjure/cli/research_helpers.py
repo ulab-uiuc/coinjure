@@ -15,14 +15,18 @@ from typing import Any
 import click
 
 from coinjure.cli.utils import _emit
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager, RiskManager, StandardRiskManager
+from coinjure.engine.trading_engine import TradingEngine
+from coinjure.market.backtest.historical_data_source import HistoricalDataSource
+from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker, Ticker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import (
+    NoRiskManager,
+    RiskManager,
+    StandardRiskManager,
+)
 
 logger = logging.getLogger(__name__)
 

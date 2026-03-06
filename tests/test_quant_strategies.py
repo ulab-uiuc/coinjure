@@ -5,11 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.events.events import OrderBookEvent, PriceChangeEvent
-from coinjure.order.order_book import Level, OrderBook
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.events import OrderBookEvent, PriceChangeEvent
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.market.order_book import Level, OrderBook
 from coinjure.strategy.agent_strategy import AgentStrategy
 from coinjure.strategy.market_making_strategy import MarketMakingStrategy
 from coinjure.strategy.orderbook_imbalance_strategy import (
@@ -18,8 +16,10 @@ from coinjure.strategy.orderbook_imbalance_strategy import (
 from coinjure.strategy.quant_strategy import QuantStrategy
 from coinjure.strategy.simple_strategy import SimpleStrategy
 from coinjure.strategy.strategy import Strategy, StrategyDecision
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import NoRiskManager
 
 
 class DummyStrategy(Strategy):

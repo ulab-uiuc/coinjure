@@ -6,10 +6,10 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.live import live_trader
-from coinjure.position.position_manager import Position
-from coinjure.risk.risk_manager import NoRiskManager
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
+from coinjure.engine import live_trader
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.position_manager import Position
+from coinjure.trading.risk_manager import NoRiskManager
 
 
 @pytest.mark.asyncio

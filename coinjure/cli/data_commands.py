@@ -10,7 +10,7 @@ from pathlib import Path
 
 import click
 
-from coinjure.events.events import (
+from coinjure.events import (
     Event,
     NewsEvent,
     OrderBookEvent,
@@ -201,8 +201,8 @@ def data_record(
       coinjure data record --exchange polymarket --output events.jsonl --duration 300
       coinjure backtest run --history-file events.jsonl --market-id X --event-id Y ...
     """
-    from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-    from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+    from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
+    from coinjure.market.live.live_data_source import LivePolyMarketDataSource
 
     output_path = Path(output).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)

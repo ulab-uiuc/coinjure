@@ -29,14 +29,14 @@ from pathlib import Path
 # Ensure project root is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.data_source import DataSource
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.events.events import Event, PriceChangeEvent
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager
-from coinjure.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.engine.trading_engine import TradingEngine
+from coinjure.events import Event, PriceChangeEvent
+from coinjure.market.data_source import DataSource
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.ticker import CashTicker, KalshiTicker, PolyMarketTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import NoRiskManager
 from examples.strategies.cross_platform_arb_strategy import (
     CompositeTrader,
     CrossPlatformArbStrategy,

@@ -29,14 +29,14 @@ import json
 import os
 from decimal import Decimal
 
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.data_source import DataSource
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.events.events import Event, PriceChangeEvent
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.engine.trading_engine import TradingEngine
+from coinjure.events import Event, PriceChangeEvent
+from coinjure.market.data_source import DataSource
+from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import NoRiskManager
 from examples.strategies.multi_leg_arb_strategy import MultiLegArbStrategy
 
 
@@ -110,11 +110,17 @@ class CrossPlatformDataSource(DataSource):
                 self._events.append(ev)
 
         # Sort by timestamp
-        self._events.sort(key=lambda e: (e.timestamp if isinstance(e.timestamp, int | float) else 0))
+        self._events.sort(
+            key=lambda e: (e.timestamp if isinstance(e.timestamp, int | float) else 0)
+        )
 
         print(f'  Loaded {len(self._events):,} events for "{self.event_name}"')
-        print(f'  Polymarket: {len(poly_data)} teams, {sum(len(v) for v in poly_data.values()):,} data points')
-        print(f'  Kalshi:     {len(kalshi_data)} teams, {sum(len(v) for v in kalshi_data.values()):,} data points')
+        print(
+            f'  Polymarket: {len(poly_data)} teams, {sum(len(v) for v in poly_data.values()):,} data points'
+        )
+        print(
+            f'  Kalshi:     {len(kalshi_data)} teams, {sum(len(v) for v in kalshi_data.values()):,} data points'
+        )
 
     async def get_next_event(self) -> Event | None:
         if self._index < len(self._events):
@@ -141,7 +147,9 @@ def _analyze_intra_platform(poly_data: dict) -> None:  # noqa: C901
                 total += ts_prices[ts_str]
                 count += 1
             else:
-                closest = min(ts_prices.keys(), key=lambda t: abs(int(t) - ts), default=None)
+                closest = min(
+                    ts_prices.keys(), key=lambda t: abs(int(t) - ts), default=None
+                )
                 if closest and abs(int(closest) - ts) < 7200:
                     total += ts_prices[closest]
                     count += 1
@@ -178,7 +186,9 @@ def _analyze_cross_platform(poly_data: dict, kalshi_data: dict) -> None:
         kalshi_ts = kalshi_data[team]
         for ts_str, p_price in poly_ts.items():
             ts = int(ts_str)
-            closest_k = min(kalshi_ts.keys(), key=lambda t: abs(int(t) - ts), default=None)
+            closest_k = min(
+                kalshi_ts.keys(), key=lambda t: abs(int(t) - ts), default=None
+            )
             if closest_k and abs(int(closest_k) - ts) < 3600:
                 k_price = kalshi_ts[closest_k]
                 edge = abs(p_price - k_price)
@@ -342,7 +352,9 @@ async def run_backtest() -> None:
         print('\n  Combined Strategy Performance:')
         print(f'    Total arb signals:     {len(all_arb):,}')
         print(f'    Combined edge:         {combined_edge:.4f}')
-        print(f'    Est. gross profit:     ${est_gross:,.2f} (at ${trade_size_val:.0f}/trade)')
+        print(
+            f'    Est. gross profit:     ${est_gross:,.2f} (at ${trade_size_val:.0f}/trade)'
+        )
         print(f'    Est. return on capital: {est_return:.2f}%')
         print('    Data period:           ~30 days (Feb-Mar 2026)')
         if est_return > 0:
@@ -352,7 +364,9 @@ async def run_backtest() -> None:
     # Show sample arb snapshots
     if arb_snaps:
         # Filter out initialization artifacts
-        real_snaps = [s for s in arb_snaps if s.action in ('SELL_OVERPRICED', 'CROSS_PLATFORM')]
+        real_snaps = [
+            s for s in arb_snaps if s.action in ('SELL_OVERPRICED', 'CROSS_PLATFORM')
+        ]
         print('\n  Sample Arb Snapshots (first 15):')
         print(f'  {"#":>3s}  {"Action":20s}  {"Edge":>10s}  {"Profit/Set":>12s}')
         print('  ' + '-' * 50)

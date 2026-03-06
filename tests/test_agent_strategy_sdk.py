@@ -4,14 +4,14 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.events.events import Event, PriceChangeEvent
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.events import Event, PriceChangeEvent
+from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.agent_strategy import AgentStrategy
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.paper_trader import PaperTrader
-from coinjure.trader.trader import Trader
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.position_manager import Position, PositionManager
+from coinjure.trading.risk_manager import NoRiskManager
+from coinjure.trading.trader import Trader
 
 
 class DummyOpenAIAgentStrategy(AgentStrategy):

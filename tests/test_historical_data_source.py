@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.ticker.ticker import PolyMarketTicker
+from coinjure.market.backtest.historical_data_source import HistoricalDataSource
+from coinjure.ticker import PolyMarketTicker
 
 
 def _ticker() -> PolyMarketTicker:

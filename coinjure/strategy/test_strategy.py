@@ -1,8 +1,8 @@
 from decimal import Decimal
 
-from coinjure.events.events import Event, PriceChangeEvent
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
+from coinjure.events import Event, PriceChangeEvent
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 from .quant_strategy import QuantStrategy
 

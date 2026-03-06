@@ -5,7 +5,6 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.position.position_manager import Position
 from coinjure.storage.serializers import (
     deserialize_equity_point,
     deserialize_order,
@@ -17,8 +16,9 @@ from coinjure.storage.serializers import (
     serialize_trade,
 )
 from coinjure.storage.state_store import StateStore
-from coinjure.ticker.ticker import CashTicker, KalshiTicker, PolyMarketTicker
-from coinjure.trader.types import Order, OrderStatus, Trade, TradeSide
+from coinjure.ticker import CashTicker, KalshiTicker, PolyMarketTicker
+from coinjure.trading.position_manager import Position
+from coinjure.trading.types import Order, OrderStatus, Trade, TradeSide
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -95,8 +95,12 @@ def test_roundtrip_kalshi_ticker(kalshi_ticker):
 
 def test_roundtrip_kalshi_ticker_no_side():
     no_ticker = KalshiTicker(
-        symbol='MKT_NO', name='Market', market_ticker='MKT-T1',
-        event_ticker='EVT-T1', series_ticker='SER-T1', is_no_side=True,
+        symbol='MKT_NO',
+        name='Market',
+        market_ticker='MKT-T1',
+        event_ticker='EVT-T1',
+        series_ticker='SER-T1',
+        is_no_side=True,
     )
     d = serialize_ticker(no_ticker)
     assert d['is_no_side'] is True
@@ -150,7 +154,7 @@ def test_trade_without_timestamp(sample_trade):
 
 
 def test_save_load_positions_roundtrip(tmp_store, sample_position):
-    from coinjure.position.position_manager import PositionManager
+    from coinjure.trading.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -211,7 +215,7 @@ def test_load_trades_missing_file_returns_empty(tmp_store):
 
 
 def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
-    from coinjure.position.position_manager import PositionManager
+    from coinjure.trading.position_manager import PositionManager
 
     pm = PositionManager()
     pm.update_position(sample_position)
@@ -233,7 +237,7 @@ def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
 
 
 def test_roundtrip_equity_point():
-    from coinjure.analytics.performance_analyzer import EquityPoint
+    from coinjure.engine.performance import EquityPoint
 
     pt = EquityPoint(timestamp=5, equity=Decimal('10500.75'), trade_index=4)
     d = serialize_equity_point(pt)

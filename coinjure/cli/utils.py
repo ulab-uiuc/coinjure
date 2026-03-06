@@ -11,7 +11,7 @@ import click
 
 from coinjure.cli.control import SOCKET_PATH, ControlServer
 from coinjure.cli.monitor import TradingMonitor
-from coinjure.core.trading_engine import TradingEngine
+from coinjure.engine.trading_engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 

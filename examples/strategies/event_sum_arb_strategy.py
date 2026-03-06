@@ -37,11 +37,11 @@ import logging
 import time
 from decimal import Decimal
 
-from coinjure.events.events import Event, OrderBookEvent, PriceChangeEvent
+from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import PolyMarketTicker
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
+from coinjure.ticker import PolyMarketTicker
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 

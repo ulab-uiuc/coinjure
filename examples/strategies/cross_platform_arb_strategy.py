@@ -23,11 +23,11 @@ from decimal import Decimal
 from difflib import SequenceMatcher
 from typing import Any
 
-from coinjure.events.events import Event, OrderBookEvent, PriceChangeEvent
+from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker.ticker import KalshiTicker, PolyMarketTicker, Ticker
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
+from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 

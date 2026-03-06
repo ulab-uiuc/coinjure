@@ -14,10 +14,10 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from coinjure.position.position_manager import PositionManager
-from coinjure.ticker.ticker import CashTicker
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import OrderStatus
+from coinjure.ticker import CashTicker
+from coinjure.trading.position_manager import PositionManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import OrderStatus
 
 
 class TradingMonitor:

@@ -4,10 +4,10 @@ from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
-from coinjure.events.events import Event, OrderBookEvent
+from coinjure.events import Event, OrderBookEvent
 from coinjure.strategy.strategy import Strategy, StrategyDecision
-from coinjure.trader.trader import Trader
-from coinjure.trader.types import TradeSide
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 
 class OrderBookPressureStrategy(Strategy):

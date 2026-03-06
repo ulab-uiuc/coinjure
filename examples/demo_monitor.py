@@ -16,9 +16,9 @@ from decimal import Decimal
 import click
 
 from coinjure.cli.monitor import TradingMonitor
-from coinjure.ticker.ticker import CashTicker, Ticker
-from coinjure.trader.paper_trader import PaperTrader
-from coinjure.trader.types import TradeSide
+from coinjure.ticker import CashTicker, Ticker
+from coinjure.trading.paper_trader import PaperTrader
+from coinjure.trading.types import TradeSide
 
 
 async def simulate_trading_session(trader: PaperTrader, num_trades: int = 10) -> None:

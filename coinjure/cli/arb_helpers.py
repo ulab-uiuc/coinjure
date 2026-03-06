@@ -14,7 +14,7 @@ from typing import Any
 
 import click
 
-from coinjure.portfolio.matching import MarketPair, match_markets
+from coinjure.market.matching import MarketPair, match_markets
 from coinjure.portfolio.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
 
 _DIRECT_ARB_REF = 'examples/strategies/direct_arb_strategy.py:DirectArbStrategy'
