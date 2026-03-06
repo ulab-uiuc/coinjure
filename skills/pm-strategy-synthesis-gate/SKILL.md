@@ -29,7 +29,7 @@ Use this skill after hypotheses or parameter studies identify a candidate approa
 
 - `coinjure research walk-forward-auto --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --output <wf.jsonl> --json`
 - `coinjure research stress-test --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --output <stress.jsonl> --json`
-- `coinjure research strategy-gate --history-file <history.jsonl> --market-id <M> --event-id <E> --strategy-ref ./strategies/<name>.py:<ClassName> --strategy-kwargs-json '<json>' --json`
+- Strategy gating is now internal to `coinjure strategy alpha-pipeline` (no separate command needed).
 
 4. Promotion path:
 
@@ -39,4 +39,4 @@ Use this skill after hypotheses or parameter studies identify a candidate approa
 ## Hard Rules
 
 - No paper/live before validate + dry-run + gate.
-- Keep rollback commands ready (`trade pause`, `trade stop`, `trade killswitch --on`).
+- Keep rollback commands ready (`engine pause`, `engine stop`, `engine killswitch --on`).

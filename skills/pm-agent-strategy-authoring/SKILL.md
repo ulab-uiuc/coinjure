@@ -1,27 +1,27 @@
 ---
 name: pm-agent-strategy-authoring
-description: 用于把 LLM/工具驱动的想法实现为 AgentStrategy 代码，并通过 paper trading 评估效果。
+description: Use this skill to implement LLM/tool-driven ideas as AgentStrategy code and evaluate effectiveness through paper trading.
 ---
 
 # PM Agent Strategy Authoring
 
-当用户要求"写一个用 LLM / MCP 工具 / 外部 API 做决策的策略"时，使用这个技能。
+Use this skill when the user asks to write a strategy that uses LLM / MCP tools / external APIs for decision-making.
 
-## 目标
+## Goal
 
-- 产出可运行的策略类（`AgentStrategy` 子类）
-- 保证 `strategy validate` 与 `paper run` 可执行
-- **不**做参数网格搜索（agent 策略不可 batch-tune）
+- Produce a runnable strategy class (`AgentStrategy` subclass)
+- Ensure `strategy validate` and `engine run --mode paper` can execute
+- **Do not** perform parameter grid search (agent strategies cannot be batch-tuned)
 
-## 代码入口
+## Code Entry Points
 
-- 基类契约：`coinjure/strategy/agent_strategy.py` (`AgentStrategy`)
-- LLM 策略参考：`coinjure/strategy/simple_strategy.py`
-- 新策略目录：`strategies/`
+- Base class contract: `coinjure/strategy/agent_strategy.py` (`AgentStrategy`)
+- LLM strategy reference: `coinjure/strategy/simple_strategy.py`
+- New strategy directory: `strategies/`
 
-## 实施流程
+## Implementation Workflow
 
-1. 实现策略（直接新建文件，无需骨架生成命令）
+1. Implement strategy (create file directly, no scaffold command needed)
 
 ```python
 from coinjure.strategy.agent_strategy import AgentStrategy
@@ -34,11 +34,11 @@ class MyAgentStrategy(AgentStrategy):
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused():
             return
-        # 调用 LLM / 外部 API ...
+        # Call LLM / external API ...
         self.record_decision(reasoning=llm_output)
 ```
 
-2. 快速验证
+2. Quick validation
 
 ```bash
 coinjure strategy validate \
@@ -46,29 +46,29 @@ coinjure strategy validate \
   --dry-run --events 10 --json
 ```
 
-3. Paper trading 评估（agent 策略的正确评估方式）
+3. Paper trading evaluation (the correct way to evaluate agent strategies)
 
 ```bash
-coinjure paper run \
+coinjure engine run --mode paper \
   --exchange polymarket \
   --strategy-ref strategies/<name>.py:<ClassName> \
   --strategy-kwargs-json '<json>' \
   --monitor
 ```
 
-4. 观察运行状态
+4. Observe running status
 
 ```bash
-coinjure trade status --json       # 基本状态
-coinjure trade state --json        # 完整快照（持仓、决策、订单）
+coinjure engine status --json       # basic status
+coinjure engine state --json        # full snapshot (positions, decisions, orders)
 ```
 
-5. 干预与调整
+5. Intervention and adjustment
 
 ```bash
-coinjure trade pause --json
-coinjure trade resume --json
-coinjure trade swap \
+coinjure engine pause --json
+coinjure engine resume --json
+coinjure engine swap \
   --strategy-ref strategies/<new>.py:<NewClass> \
   --strategy-kwargs-json '<json>' \
   --json
@@ -76,8 +76,8 @@ coinjure trade swap \
 
 ## Hard Rules
 
-- `AgentStrategy` 子类不可用于 `research batch-markets`（非确定性，结果无意义）。
-- 外部 API 调用必须做好超时与错误处理，避免阻塞 asyncio 事件循环。
-- 必须通过 `self.is_paused()` 检查再决策，尊重控制平面暂停信号。
-- 不使用未来信息（禁止 look-ahead）。
-- 必须可复现路径：策略文件路径、类名、命令都要明确记录。
+- `AgentStrategy` subclasses must not be used with `strategy batch` (non-deterministic, results are meaningless).
+- External API calls must handle timeouts and errors properly to avoid blocking the asyncio event loop.
+- Must check `self.is_paused()` before making decisions to respect control plane pause signals.
+- Do not use future information (no look-ahead).
+- Must be reproducible: strategy file path, class name, and commands must all be explicitly recorded.

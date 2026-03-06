@@ -572,3 +572,418 @@ def portfolio_health_check(update: bool, as_json: bool) -> None:
         f'{summary["healthy"]} healthy, '
         f'{summary["issues"]} issues\n'
     )
+
+
+# ── snapshot ──────────────────────────────────────────────────────────────────
+
+
+@portfolio.command('snapshot')
+@click.option(
+    '--exchange',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default='polymarket',
+    show_default=True,
+)
+@click.option('--query', 'search_query', default=None, help='Optional search filter.')
+@click.option('--limit', default=20, show_default=True, type=int)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def portfolio_snapshot(
+    exchange: str,
+    search_query: str | None,
+    limit: int,
+    as_json: bool,
+) -> None:
+    """One-shot market intelligence: movers, arb edges, portfolio & memory overlap."""
+    from coinjure.research.ledger import ExperimentLedger
+
+    snapshot: dict[str, Any] = {
+        'ok': True,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'exchange': exchange,
+    }
+
+    # 1. Fetch markets (best-effort)
+    markets: list[dict[str, Any]] = []
+    try:
+        if exchange == 'polymarket':
+            from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+
+            ds = LivePolyMarketDataSource(polling_interval=0)
+            raw_markets = (
+                asyncio.get_event_loop().run_until_complete(ds._fetch_markets())
+                if hasattr(ds, '_fetch_markets')
+                else []
+            )
+            for m in raw_markets[:limit]:
+                markets.append(
+                    {
+                        'market_id': getattr(m, 'market_id', str(m)),
+                        'title': getattr(m, 'question', getattr(m, 'title', '')),
+                    }
+                )
+    except Exception:  # noqa: BLE001
+        snapshot['markets_error'] = 'Failed to fetch live markets'
+
+    snapshot['markets_count'] = len(markets)
+
+    # 2. Portfolio overlap
+    try:
+        registry = StrategyRegistry()
+        active = [
+            e.to_dict()
+            for e in registry.list()
+            if e.lifecycle in ('paper_trading', 'live_trading')
+        ]
+        snapshot['active_portfolio'] = active
+        snapshot['active_count'] = len(active)
+    except Exception:  # noqa: BLE001
+        snapshot['active_portfolio'] = []
+        snapshot['active_count'] = 0
+
+    # 3. Memory overlap
+    try:
+        ledger = ExperimentLedger()
+        summary = ledger.summary()
+        recent_best = ledger.best(metric_key='total_pnl', top_n=5)
+        snapshot['memory_summary'] = summary
+        snapshot['memory_top5'] = [
+            {
+                'run_id': e.run_id,
+                'strategy_ref': e.strategy_ref,
+                'market_id': e.market_id,
+                'gate_passed': e.gate_passed,
+                'pnl': e.metrics.get('total_pnl'),
+            }
+            for e in recent_best
+        ]
+    except Exception:  # noqa: BLE001
+        snapshot['memory_summary'] = {'total_experiments': 0}
+        snapshot['memory_top5'] = []
+
+    _emit_json(snapshot) if as_json else click.echo(
+        json.dumps(snapshot, indent=2, default=str)
+    )
+
+
+# ── arb-deploy ────────────────────────────────────────────────────────────────
+
+
+@portfolio.command('arb-deploy')
+@click.option(
+    '--query', required=True, help='Keyword to search markets on both platforms.'
+)
+@click.option(
+    '--min-edge', default='0.02', show_default=True, help='Minimum gross edge (0-1).'
+)
+@click.option('--min-similarity', default='0.6', show_default=True)
+@click.option('--limit', default=50, show_default=True, type=int)
+@click.option(
+    '--strategy-ref',
+    default=None,
+    show_default=True,
+    help='Strategy class ref to deploy.',
+)
+@click.option('--initial-capital', default='10000', show_default=True)
+@click.option(
+    '--trade-size',
+    default=10.0,
+    show_default=True,
+    type=float,
+    help='Dollar size per arb leg.',
+)
+@click.option('--cooldown-seconds', default=60, show_default=True, type=int)
+@click.option(
+    '--max-deploy',
+    default=10,
+    show_default=True,
+    type=int,
+    help='Maximum number of new strategies to deploy in this run.',
+)
+@click.option(
+    '--hub-socket',
+    default=None,
+    type=click.Path(),
+    help='Connect deployed strategies to a running Market Data Hub.',
+)
+@click.option(
+    '--dry-run',
+    is_flag=True,
+    default=False,
+    help='Scan and validate but do not actually register or launch processes.',
+)
+@click.option(
+    '--skip-already-in-portfolio',
+    is_flag=True,
+    default=True,
+    help='Skip opportunities already tracked in the portfolio.',
+)
+@click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
+@click.option(
+    '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def portfolio_arb_deploy(
+    query: str,
+    min_edge: str,
+    min_similarity: str,
+    limit: int,
+    strategy_ref: str | None,
+    initial_capital: str,
+    trade_size: float,
+    cooldown_seconds: int,
+    max_deploy: int,
+    hub_socket: str | None,
+    dry_run: bool,
+    skip_already_in_portfolio: bool,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+    as_json: bool,
+) -> None:
+    """Scan for arb opportunities and batch-deploy paper trading strategies.
+
+    Combines arb scan + strategy validate + portfolio add + portfolio promote
+    into a single command.
+
+    Example:
+
+        coinjure portfolio arb-deploy --query "NBA" --min-edge 0.02 --max-deploy 5 --json
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from coinjure.cli.arb_helpers import (
+        _DIRECT_ARB_REF,
+        _compute_edge,
+        _deploy_one,
+        _pair_ids_in_portfolio,
+    )
+    from coinjure.cli.market_commands import (
+        _kalshi_search_markets,
+        _polymarket_search_markets,
+    )
+    from coinjure.portfolio.matching import match_markets
+
+    actual_ref = strategy_ref or _DIRECT_ARB_REF
+
+    try:
+        min_edge_dec = Decimal(min_edge)
+        min_sim = float(min_similarity)
+    except (InvalidOperation, ValueError) as exc:
+        raise click.ClickException(f'Invalid numeric argument: {exc}') from exc
+
+    async def _scan() -> list[dict]:
+        poly_markets, kalshi_markets = await asyncio.gather(
+            _polymarket_search_markets(query, limit),
+            _kalshi_search_markets(
+                query, limit, kalshi_api_key_id, kalshi_private_key_path
+            ),
+        )
+        pairs = match_markets(poly_markets, kalshi_markets, min_similarity=min_sim)
+
+        in_portfolio = _pair_ids_in_portfolio(pairs)
+        for pair in pairs:
+            key = f'{pair.poly.get("id", "")}::{pair.kalshi.get("ticker", "")}'
+            pair.already_in_portfolio = key in in_portfolio
+
+        opportunities: list[dict] = []
+        for pair in pairs:
+            edge_info = _compute_edge(pair)
+            if edge_info is None:
+                continue
+            if Decimal(edge_info['edge']) >= min_edge_dec:
+                opportunities.append(edge_info)
+
+        opportunities.sort(key=lambda x: Decimal(x['edge']), reverse=True)
+        return opportunities
+
+    try:
+        opportunities = asyncio.run(_scan())
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Scan failed: {exc}') from exc
+
+    to_deploy = [
+        o
+        for o in opportunities
+        if not (skip_already_in_portfolio and o['already_in_portfolio'])
+    ][:max_deploy]
+
+    if not as_json:
+        click.echo(
+            f'Arb deploy: query={query!r}  found={len(opportunities)}  '
+            f'to_deploy={len(to_deploy)}  dry_run={dry_run}'
+        )
+
+    results: list[dict] = []
+    for opp in to_deploy:
+        result = _deploy_one(
+            opp=opp,
+            strategy_ref=actual_ref,
+            initial_capital=initial_capital,
+            min_edge=float(min_edge_dec),
+            trade_size=trade_size,
+            cooldown_seconds=cooldown_seconds,
+            hub_socket=hub_socket,
+            dry_run=dry_run,
+        )
+        result['opportunity'] = {
+            'poly_question': opp.get('poly_question', ''),
+            'edge': opp['edge'],
+            'edge_net': opp['edge_net'],
+            'direction': opp['direction'],
+        }
+        results.append(result)
+        if not as_json:
+            status = (
+                'DRY-RUN'
+                if result.get('dry_run')
+                else ('OK' if result['ok'] else 'FAIL')
+            )
+            click.echo(
+                f'  [{status}] {result["strategy_id"]}  '
+                f'edge={opp["edge"]}  {opp.get("poly_question", "")[:50]}'
+            )
+            if not result['ok']:
+                click.echo(f'         error: {result.get("error")}')
+
+    summary_data = {
+        'ok': True,
+        'query': query,
+        'scanned': len(opportunities),
+        'deployed': sum(
+            1
+            for r in results
+            if r['ok'] and not r.get('skipped') and not r.get('dry_run')
+        ),
+        'skipped': sum(1 for r in results if r.get('skipped')),
+        'failed': sum(1 for r in results if not r['ok']),
+        'dry_run': dry_run,
+        'results': results,
+    }
+    if as_json:
+        _emit_json(summary_data)
+
+
+# ── arb-deploy-events ─────────────────────────────────────────────────────────
+
+
+@portfolio.command('arb-deploy-events')
+@click.option(
+    '--query', default='', help='Keyword to filter event titles (empty = all).'
+)
+@click.option('--min-edge', default='0.01', show_default=True)
+@click.option('--min-markets', default=2, show_default=True, type=int)
+@click.option(
+    '--limit', default=20, show_default=True, type=int, help='Max events to scan.'
+)
+@click.option('--strategy-ref', default=None, show_default=True)
+@click.option('--initial-capital', default='10000', show_default=True)
+@click.option('--trade-size', default=10.0, show_default=True, type=float)
+@click.option('--cooldown-seconds', default=120, show_default=True, type=int)
+@click.option('--max-deploy', default=10, show_default=True, type=int)
+@click.option('--hub-socket', default=None, type=click.Path())
+@click.option('--dry-run', is_flag=True, default=False)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def portfolio_arb_deploy_events(
+    query: str,
+    min_edge: str,
+    min_markets: int,
+    limit: int,
+    strategy_ref: str | None,
+    initial_capital: str,
+    trade_size: float,
+    cooldown_seconds: int,
+    max_deploy: int,
+    hub_socket: str | None,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Scan Polymarket event-sum arb + batch-deploy EventSumArbStrategy.
+
+    Example:
+
+        coinjure portfolio arb-deploy-events --query "NBA" --min-edge 0.01 --max-deploy 5 --json
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from coinjure.cli.arb_helpers import (
+        _EVENT_SUM_ARB_REF,
+        _deploy_event_sum_one,
+        _fetch_event_sum_opportunities,
+    )
+
+    actual_ref = strategy_ref or _EVENT_SUM_ARB_REF
+
+    try:
+        min_edge_dec = Decimal(min_edge)
+    except InvalidOperation as exc:
+        raise click.ClickException(f'Invalid --min-edge: {exc}') from exc
+
+    try:
+        opportunities = asyncio.run(
+            _fetch_event_sum_opportunities(query, limit, min_edge_dec, min_markets)
+        )
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Scan failed: {exc}') from exc
+
+    to_deploy = opportunities[:max_deploy]
+
+    if not as_json:
+        click.echo(
+            f'deploy-events: query={query!r}  found={len(opportunities)}  '
+            f'to_deploy={len(to_deploy)}  dry_run={dry_run}'
+        )
+
+    results: list[dict] = []
+    for opp in to_deploy:
+        result = _deploy_event_sum_one(
+            opp=opp,
+            strategy_ref=actual_ref,
+            initial_capital=initial_capital,
+            min_edge=float(min_edge_dec),
+            trade_size=trade_size,
+            cooldown_seconds=cooldown_seconds,
+            min_markets=min_markets,
+            hub_socket=hub_socket,
+            dry_run=dry_run,
+        )
+        result['opportunity'] = {
+            'event_title': opp.get('event_title', ''),
+            'event_id': opp['event_id'],
+            'best_edge': opp['best_edge'],
+            'action': opp['action'],
+            'n_markets': opp['n_markets'],
+            'sum_yes': opp['sum_yes'],
+        }
+        results.append(result)
+        if not as_json:
+            status = (
+                'DRY-RUN'
+                if result.get('dry_run')
+                else ('OK' if result['ok'] else 'FAIL')
+            )
+            click.echo(
+                f'  [{status}] {result["strategy_id"]}'
+                f'  edge={opp["best_edge"]}  {opp.get("event_title", "")[:50]}'
+            )
+            if not result['ok']:
+                click.echo(f'         error: {result.get("error")}')
+
+    summary_data = {
+        'ok': True,
+        'query': query,
+        'scanned': len(opportunities),
+        'deployed': sum(
+            1
+            for r in results
+            if r['ok'] and not r.get('skipped') and not r.get('dry_run')
+        ),
+        'skipped': sum(1 for r in results if r.get('skipped')),
+        'failed': sum(1 for r in results if not r['ok']),
+        'dry_run': dry_run,
+        'results': results,
+    }
+    if as_json:
+        _emit_json(summary_data)

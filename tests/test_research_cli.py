@@ -5,9 +5,15 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from coinjure.cli.cli import cli
+
+# Commands removed in a prior refactor (before 5-group CLI restructure).
+_SKIP_REMOVED = pytest.mark.skip(
+    reason='research sub-command removed in prior refactor'
+)
 
 
 def _write_history(path: Path) -> None:
@@ -77,24 +83,16 @@ def test_research_group_help_lists_tools() -> None:
     result = runner.invoke(cli, ['research', '--help'])
     assert result.exit_code == 0
     assert 'strategy-discovery tooling' in result.output
-    assert 'slice' in result.output
-    assert 'walk-forward' in result.output
-    assert 'stress-test' in result.output
-    assert 'compare-runs' in result.output
     assert 'strategy-gate' in result.output
-    assert 'markets' in result.output
     assert 'alpha-pipeline' in result.output
-    assert 'auto-tune' in result.output
+    assert 'batch-markets' in result.output
     assert 'memory' in result.output
-    assert 'grid' in result.output
-    # Removed commands should NOT appear
-    assert 'features' not in result.output
-    assert 'labels' not in result.output
-    assert 'backtest-batch' not in result.output
-    assert 'walk-forward-auto' not in result.output
-    assert 'scan-markets' not in result.output
+    assert 'harvest' in result.output
+    assert 'feedback-report' in result.output
+    assert 'market-snapshot' in result.output
 
 
+@_SKIP_REMOVED
 def test_research_slice(tmp_path: Path) -> None:
     history = tmp_path / 'history.jsonl'
     _write_history(history)
@@ -125,6 +123,7 @@ def test_research_slice(tmp_path: Path) -> None:
     assert '"points": 3' in slice_result.output
 
 
+@_SKIP_REMOVED
 def test_research_slice_supports_iso_timestamps(tmp_path: Path) -> None:
     history = tmp_path / 'history_iso.jsonl'
     rows = [
@@ -171,6 +170,7 @@ def test_research_slice_supports_iso_timestamps(tmp_path: Path) -> None:
     assert '"points": 2' in result.output
 
 
+@_SKIP_REMOVED
 def test_research_grid_with_params_jsonl(monkeypatch, tmp_path: Path) -> None:
     """grid --params-jsonl replaces the old backtest-batch command."""
     history = tmp_path / 'history.jsonl'
@@ -228,6 +228,7 @@ def test_research_grid_with_params_jsonl(monkeypatch, tmp_path: Path) -> None:
     assert out_rows[1]['metrics']['received_kwargs'] == {'entry_z': 1.2}
 
 
+@_SKIP_REMOVED
 def test_research_slice_supports_iso_timestamps_in_json_array(tmp_path: Path) -> None:
     history = tmp_path / 'history.json'
     rows = [
@@ -279,6 +280,7 @@ def test_research_scan_markets_removed() -> None:
     assert 'No such command' in result.output
 
 
+@_SKIP_REMOVED
 def test_research_auto_tune_runs_end_to_end(monkeypatch, tmp_path: Path) -> None:
     history = tmp_path / 'history_iso.jsonl'
     _write_iso_history(history)
@@ -362,6 +364,7 @@ def test_research_auto_tune_runs_end_to_end(monkeypatch, tmp_path: Path) -> None
     assert (artifacts / 'paper.json').exists()
 
 
+@_SKIP_REMOVED
 def test_research_auto_tune_supports_single_strategy_gate(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -426,6 +429,7 @@ def test_research_auto_tune_supports_single_strategy_gate(
     assert (artifacts / 'gate.json').exists()
 
 
+@_SKIP_REMOVED
 def test_research_auto_tune_requires_strategy_ref(tmp_path: Path) -> None:
     history = tmp_path / 'history_iso.jsonl'
     _write_iso_history(history)
@@ -443,6 +447,7 @@ def test_research_auto_tune_requires_strategy_ref(tmp_path: Path) -> None:
     assert '--strategy-ref' in result.output
 
 
+@_SKIP_REMOVED
 def test_research_compare_runs_and_memory(tmp_path: Path) -> None:
     runs_file = tmp_path / 'runs.jsonl'
     runs_rows = [
@@ -517,6 +522,7 @@ def test_research_compare_runs_and_memory(tmp_path: Path) -> None:
     assert payload['count'] == 1
 
 
+@_SKIP_REMOVED
 def test_research_markets_and_walk_forward_target_runs(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -595,6 +601,7 @@ def test_research_markets_and_walk_forward_target_runs(
     assert len(rows) == wf_payload['runs']
 
 
+@_SKIP_REMOVED
 def test_research_walk_forward_auto_resizes(monkeypatch, tmp_path: Path) -> None:
     history = tmp_path / 'history_iso.jsonl'
     _write_iso_history(history)
@@ -645,6 +652,7 @@ def test_research_walk_forward_auto_resizes(monkeypatch, tmp_path: Path) -> None
     assert output.exists()
 
 
+@_SKIP_REMOVED
 def test_research_markets_filters_and_alpha_score(tmp_path: Path) -> None:
     history = tmp_path / 'history_iso.jsonl'
     _write_iso_history(history)
@@ -722,6 +730,7 @@ def test_research_markets_filters_and_alpha_score(tmp_path: Path) -> None:
     assert ranked_payload['top'][0]['name'] == 'balanced'
 
 
+@_SKIP_REMOVED
 def test_research_grid_supports_alpha_score_sort(monkeypatch, tmp_path: Path) -> None:
     history = tmp_path / 'history.jsonl'
     _write_history(history)
@@ -802,18 +811,18 @@ def test_research_alpha_pipeline(monkeypatch, tmp_path: Path) -> None:
         }
 
     monkeypatch.setattr(
-        'coinjure.cli.research_commands._run_strategy_dry_run', fake_dry_run
+        'coinjure.cli.research_helpers._run_strategy_dry_run', fake_dry_run
     )
     monkeypatch.setattr(
-        'coinjure.cli.research_commands._run_backtest_once', fake_run_backtest_once
+        'coinjure.cli.research_helpers._run_backtest_once', fake_run_backtest_once
     )
 
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
-            'research',
-            'alpha-pipeline',
+            'strategy',
+            'pipeline',
             '--history-file',
             str(history),
             '--strategy-ref',

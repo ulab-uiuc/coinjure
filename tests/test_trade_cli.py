@@ -5,19 +5,19 @@ from click.testing import CliRunner
 from coinjure.cli.cli import cli
 
 
-def test_trade_pause_resume_stop(monkeypatch):
+def test_engine_pause_resume_stop(monkeypatch):
     calls: list[str] = []
 
     def fake_run_command(cmd, socket_path=None, **kwargs):
         calls.append(cmd)
         return {'ok': True, 'status': 'paused' if cmd == 'pause' else 'stopping'}
 
-    monkeypatch.setattr('coinjure.cli.trade_commands.run_command', fake_run_command)
+    monkeypatch.setattr('coinjure.cli.engine_commands.run_command', fake_run_command)
     runner = CliRunner()
 
-    pause = runner.invoke(cli, ['trade', 'pause'])
-    resume = runner.invoke(cli, ['trade', 'resume'])
-    stop = runner.invoke(cli, ['trade', 'stop'])
+    pause = runner.invoke(cli, ['engine', 'pause'])
+    resume = runner.invoke(cli, ['engine', 'resume'])
+    stop = runner.invoke(cli, ['engine', 'stop'])
 
     assert pause.exit_code == 0
     assert resume.exit_code == 0
@@ -25,7 +25,7 @@ def test_trade_pause_resume_stop(monkeypatch):
     assert calls == ['pause', 'resume', 'stop']
 
 
-def test_trade_status_human_and_json(monkeypatch):
+def test_engine_status_human_and_json(monkeypatch):
     def fake_run_command(cmd, socket_path=None, **kwargs):
         assert cmd == 'status'
         return {
@@ -38,11 +38,11 @@ def test_trade_status_human_and_json(monkeypatch):
             'orders': 3,
         }
 
-    monkeypatch.setattr('coinjure.cli.trade_commands.run_command', fake_run_command)
+    monkeypatch.setattr('coinjure.cli.engine_commands.run_command', fake_run_command)
     runner = CliRunner()
 
-    human = runner.invoke(cli, ['trade', 'status'])
-    js = runner.invoke(cli, ['trade', 'status', '--json'])
+    human = runner.invoke(cli, ['engine', 'status'])
+    js = runner.invoke(cli, ['engine', 'status', '--json'])
 
     assert human.exit_code == 0
     assert 'events=12' in human.output
@@ -50,35 +50,35 @@ def test_trade_status_human_and_json(monkeypatch):
     assert '"event_count": 12' in js.output
 
 
-def test_trade_error_returns_nonzero(monkeypatch):
+def test_engine_error_returns_nonzero(monkeypatch):
     def fake_run_command(cmd, socket_path=None, **kwargs):
         return {'ok': False, 'error': 'no socket'}
 
-    monkeypatch.setattr('coinjure.cli.trade_commands.run_command', fake_run_command)
+    monkeypatch.setattr('coinjure.cli.engine_commands.run_command', fake_run_command)
     runner = CliRunner()
-    result = runner.invoke(cli, ['trade', 'pause'])
+    result = runner.invoke(cli, ['engine', 'pause'])
     assert result.exit_code == 1
     assert 'error: no socket' in result.output
 
 
-def test_trade_killswitch_toggle(tmp_path):
+def test_engine_killswitch_toggle(tmp_path):
     runner = CliRunner()
     kill_file = tmp_path / 'kill.switch'
 
     enable = runner.invoke(
-        cli, ['trade', 'killswitch', '--on', '--path', str(kill_file)]
+        cli, ['engine', 'killswitch', '--on', '--path', str(kill_file)]
     )
     assert enable.exit_code == 0
     assert kill_file.exists()
 
     status = runner.invoke(
-        cli, ['trade', 'killswitch', '--path', str(kill_file), '--json']
+        cli, ['engine', 'killswitch', '--path', str(kill_file), '--json']
     )
     assert status.exit_code == 0
     assert '"status": "enabled"' in status.output
 
     disable = runner.invoke(
-        cli, ['trade', 'killswitch', '--off', '--path', str(kill_file)]
+        cli, ['engine', 'killswitch', '--off', '--path', str(kill_file)]
     )
     assert disable.exit_code == 0
     assert not kill_file.exists()

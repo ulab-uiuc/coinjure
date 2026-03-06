@@ -19,8 +19,8 @@ Use this skill to execute the full process: discovery -> validation -> backtest 
 
 1. Check past experiments first:
 
-- `coinjure research memory best --metric total_pnl --top 10 --json`
-- `coinjure research memory list --tag <relevant_tag> --json`
+- `coinjure memory best --metric total_pnl --top 10 --json`
+- `coinjure memory list --tag <relevant_tag> --json`
 
 2. Discover candidate markets:
 
@@ -28,17 +28,17 @@ Use this skill to execute the full process: discovery -> validation -> backtest 
 
 3. Run one-shot pipeline:
 
-- `coinjure research alpha-pipeline --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --market-id <M> --event-id <E> --artifacts-dir <dir> --json`
+- `coinjure strategy alpha-pipeline --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --market-id <M> --event-id <E> --artifacts-dir <dir> --json`
 - if market IDs are unknown, omit them and use `--market-rank <n>` with `--market-sort-by <key>`.
 - Results are auto-recorded to the experiment ledger.
 
 4. Expand to cross-market validation:
 
-- `coinjure research batch-markets --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --limit 20 --output <batch.jsonl> --json`
+- `coinjure strategy batch --history-file <history.jsonl> --strategy-ref <strategy_ref> --strategy-kwargs-json '<json>' --limit 20 --output <batch.jsonl> --json`
 
 5. Manually record extra results to memory (if not using alpha-pipeline):
 
-- `coinjure research memory add --run-id <id> --strategy-ref <ref> --market-id <M> --metrics-json '{"total_pnl": ..., "sharpe_ratio": ...}' --tag <tag> --json`
+- `coinjure memory add --run-id <id> --strategy-ref <ref> --market-id <M> --metrics-json '{"total_pnl": ..., "sharpe_ratio": ...}' --tag <tag> --json`
 
 6. Handoff to paper run:
 

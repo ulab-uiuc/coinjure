@@ -446,6 +446,306 @@ def market_info(
 
 
 # ---------------------------------------------------------------------------
+# market match (fuzzy-match across platforms)
+# ---------------------------------------------------------------------------
+
+
+@market.command('match')
+@click.option('--query', required=True, help='Keyword to search on both platforms.')
+@click.option('--min-similarity', default='0.6', show_default=True)
+@click.option('--limit', default=50, show_default=True, type=int)
+@click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
+@click.option(
+    '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
+def market_match(
+    query: str,
+    min_similarity: str,
+    limit: int,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+    as_json: bool,
+) -> None:
+    """Fuzzy-match markets across Polymarket and Kalshi by keyword."""
+    from coinjure.cli.arb_helpers import _pair_ids_in_portfolio
+    from coinjure.portfolio.matching import MarketPair, match_markets
+
+    try:
+        min_sim = float(min_similarity)
+    except ValueError as exc:
+        raise click.ClickException(f'Invalid --min-similarity: {exc}') from exc
+
+    async def _fetch() -> list[MarketPair]:
+        poly_markets, kalshi_markets = await asyncio.gather(
+            _polymarket_search_markets(query, limit),
+            _kalshi_search_markets(
+                query, limit, kalshi_api_key_id, kalshi_private_key_path
+            ),
+        )
+        pairs = match_markets(poly_markets, kalshi_markets, min_similarity=min_sim)
+
+        in_portfolio = _pair_ids_in_portfolio(pairs)
+        for pair in pairs:
+            key = f'{pair.poly.get("id", "")}::{pair.kalshi.get("ticker", "")}'
+            pair.already_in_portfolio = key in in_portfolio
+
+        return pairs
+
+    try:
+        pairs = asyncio.run(_fetch())
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Failed to match markets: {exc}') from exc
+
+    if as_json:
+        click.echo(
+            json.dumps(
+                {
+                    'ok': True,
+                    'query': query,
+                    'count': len(pairs),
+                    'pairs': [
+                        {
+                            'poly': p.poly,
+                            'kalshi': p.kalshi,
+                            'similarity': p.similarity,
+                            'already_in_portfolio': p.already_in_portfolio,
+                        }
+                        for p in pairs
+                    ],
+                },
+                default=str,
+            )
+        )
+        return
+
+    if not pairs:
+        click.echo(f'No matching market pairs found for {query!r}.')
+        return
+
+    click.echo(
+        f'\nMarket pairs matching {query!r}  (min_similarity={min_similarity}):\n'
+    )
+    for p in pairs:
+        already = ' [IN PORTFOLIO]' if p.already_in_portfolio else ''
+        click.echo(f'  sim={p.similarity:.3f}{already}')
+        click.echo(f'  poly:   {p.poly.get("question", "")[:70]}')
+        click.echo(
+            f'  kalshi: {p.kalshi.get("title", "")[:70]}  [{p.kalshi.get("ticker", "")}]'
+        )
+        click.echo()
+
+
+# ---------------------------------------------------------------------------
+# arb-scan (cross-platform arb scanning)
+# ---------------------------------------------------------------------------
+
+
+@market.command('scan')
+@click.option(
+    '--query', required=True, help='Keyword to search markets on both platforms.'
+)
+@click.option(
+    '--min-edge', default='0.02', show_default=True, help='Minimum gross edge (0-1).'
+)
+@click.option(
+    '--min-similarity',
+    default='0.6',
+    show_default=True,
+    help='Minimum fuzzy-match similarity.',
+)
+@click.option(
+    '--limit',
+    default=50,
+    show_default=True,
+    type=int,
+    help='Max markets to fetch per exchange.',
+)
+@click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
+@click.option(
+    '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
+def market_scan(
+    query: str,
+    min_edge: str,
+    min_similarity: str,
+    limit: int,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+    as_json: bool,
+) -> None:
+    """Scan for live cross-platform arb opportunities matching a keyword."""
+    from decimal import Decimal, InvalidOperation
+
+    from coinjure.cli.arb_helpers import _compute_edge, _pair_ids_in_portfolio
+    from coinjure.portfolio.matching import match_markets
+
+    try:
+        min_edge_dec = Decimal(min_edge)
+        min_sim = float(min_similarity)
+    except (InvalidOperation, ValueError) as exc:
+        raise click.ClickException(f'Invalid numeric argument: {exc}') from exc
+
+    async def _fetch_and_scan() -> list[dict]:
+        poly_task = _polymarket_search_markets(query, limit)
+        kalshi_task = _kalshi_search_markets(
+            query, limit, kalshi_api_key_id, kalshi_private_key_path
+        )
+        poly_markets, kalshi_markets = await asyncio.gather(poly_task, kalshi_task)
+
+        pairs = match_markets(poly_markets, kalshi_markets, min_similarity=min_sim)
+
+        in_portfolio = _pair_ids_in_portfolio(pairs)
+        for pair in pairs:
+            key = f'{pair.poly.get("id", "")}::{pair.kalshi.get("ticker", "")}'
+            pair.already_in_portfolio = key in in_portfolio
+
+        opportunities: list[dict] = []
+        for pair in pairs:
+            edge_info = _compute_edge(pair)
+            if edge_info is None:
+                continue
+            if Decimal(edge_info['edge']) >= min_edge_dec:
+                opportunities.append(edge_info)
+
+        opportunities.sort(key=lambda x: Decimal(x['edge']), reverse=True)
+        return opportunities
+
+    try:
+        opportunities = asyncio.run(_fetch_and_scan())
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Scan failed: {exc}') from exc
+
+    if as_json:
+        click.echo(
+            json.dumps(
+                {'ok': True, 'query': query, 'opportunities': opportunities},
+                default=str,
+            )
+        )
+        return
+
+    if not opportunities:
+        click.echo(f'No arb opportunities found for {query!r} with edge >= {min_edge}.')
+        return
+
+    click.echo(f'\nArb scan: {query!r}  (min_edge={min_edge})\n')
+    for opp in opportunities:
+        already = ' [IN PORTFOLIO]' if opp['already_in_portfolio'] else ''
+        click.echo(
+            f'  edge={float(opp["edge"]):.3f} net={float(opp["edge_net"]):.3f}'
+            f'  sim={opp["similarity"]:.2f}{already}'
+        )
+        click.echo(f'  poly:  {opp["poly_question"][:60]}')
+        click.echo(f'  kalshi ticker: {opp["kalshi_ticker"]}')
+        click.echo(f'  poly_ask={opp["poly_ask"]} kalshi_ask={opp["kalshi_ask"]}')
+        click.echo(f'  {opp["rationale"]}')
+        click.echo()
+
+
+# ---------------------------------------------------------------------------
+# arb-scan-events (intra-event sum arb scanning)
+# ---------------------------------------------------------------------------
+
+
+@market.command('scan-events')
+@click.option(
+    '--query', default='', help='Keyword to filter event titles (empty = all).'
+)
+@click.option(
+    '--min-edge',
+    default='0.01',
+    show_default=True,
+    help='Minimum net edge after fees (0-1).',
+)
+@click.option(
+    '--min-markets',
+    default=2,
+    show_default=True,
+    type=int,
+    help='Minimum number of priced markets in the event.',
+)
+@click.option(
+    '--limit',
+    default=20,
+    show_default=True,
+    type=int,
+    help='Max opportunities to return.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def market_scan_events(
+    query: str,
+    min_edge: str,
+    min_markets: int,
+    limit: int,
+    as_json: bool,
+) -> None:
+    """Scan Polymarket events for intra-event sum(YES) arbitrage.
+
+    Finds multi-outcome events where the sum of YES ask prices deviates
+    from 1.0 by more than fees, creating a risk-free arb opportunity.
+
+    Example:
+
+        coinjure market arb-scan-events --query "NBA" --min-edge 0.01 --json
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from coinjure.cli.arb_helpers import _fetch_event_sum_opportunities
+
+    try:
+        min_edge_dec = Decimal(min_edge)
+    except InvalidOperation as exc:
+        raise click.ClickException(f'Invalid --min-edge: {exc}') from exc
+
+    try:
+        opportunities = asyncio.run(
+            _fetch_event_sum_opportunities(query, limit * 4, min_edge_dec, min_markets)
+        )
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Scan failed: {exc}') from exc
+
+    opportunities = opportunities[:limit]
+
+    if as_json:
+        click.echo(
+            json.dumps(
+                {
+                    'ok': True,
+                    'query': query,
+                    'count': len(opportunities),
+                    'opportunities': opportunities,
+                },
+                default=str,
+            )
+        )
+        return
+
+    if not opportunities:
+        click.echo(
+            f'No event-sum arb opportunities found (query={query!r}, min_edge={min_edge}).'
+        )
+        return
+
+    click.echo(f'\nEvent-sum arb scan  query={query!r}  min_edge={min_edge}\n')
+    for opp in opportunities:
+        click.echo(
+            f'  edge={opp["best_edge"]}  action={opp["action"]}'
+            f'  n={opp["n_markets"]}  sum_yes={opp["sum_yes"]}'
+        )
+        click.echo(f'  event: {opp["event_title"]}')
+        click.echo(f'  event_id: {opp["event_id"]}')
+        click.echo()
+
+
+# ---------------------------------------------------------------------------
 # Polymarket price history
 # ---------------------------------------------------------------------------
 
@@ -510,3 +810,286 @@ async def _polymarket_price_history(
         'last_price': last_price,
         'total_move': total_move,
     }
+
+
+# ---------------------------------------------------------------------------
+# market news (absorbed from news_commands.py)
+# ---------------------------------------------------------------------------
+
+
+@market.command('news')
+@click.option(
+    '--source',
+    type=click.Choice(['google', 'rss', 'thenewsapi']),
+    default='google',
+    show_default=True,
+    help='News source to fetch from.',
+)
+@click.option('--query', default=None, help='Optional search/filter query.')
+@click.option(
+    '--limit', default=10, show_default=True, type=int, help='Max articles to fetch.'
+)
+@click.option(
+    '--api-token',
+    default=None,
+    help='TheNewsAPI token (or THENEWSAPI_TOKEN env var). Required for --source thenewsapi.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Output as JSON.')
+def market_news(
+    source: str, query: str | None, limit: int, api_token: str | None, as_json: bool
+) -> None:
+    """Fetch news headlines from a specified source."""
+    from coinjure.cli.news_commands import (
+        _fetch_google_news,
+        _fetch_rss,
+        _fetch_thenewsapi,
+        _format_article,
+    )
+
+    token = api_token or os.environ.get('THENEWSAPI_TOKEN', '')
+
+    try:
+        if source == 'google':
+            articles = asyncio.run(_fetch_google_news(query, limit))
+        elif source == 'rss':
+            articles = asyncio.run(_fetch_rss(query, limit))
+        else:
+            if not token:
+                raise click.ClickException(
+                    'TheNewsAPI requires a token. Pass --api-token or set THENEWSAPI_TOKEN.'
+                )
+            articles = asyncio.run(_fetch_thenewsapi(query, limit, token))
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f'Failed to fetch news: {exc}') from exc
+
+    if as_json:
+        click.echo(
+            json.dumps({'source': source, 'count': len(articles), 'articles': articles})
+        )
+        return
+
+    if not articles:
+        click.echo('No articles found.')
+        return
+
+    click.echo(f'Fetched {len(articles)} article(s) from {source}:\n')
+    for i, article in enumerate(articles, 1):
+        click.echo(f'[{i}]')
+        click.echo(_format_article(article))
+        click.echo()
+
+
+# ---------------------------------------------------------------------------
+# market record (absorbed from data_commands.py)
+# ---------------------------------------------------------------------------
+
+
+@market.command('record')
+@click.option(
+    '--exchange',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default='polymarket',
+    show_default=True,
+    help='Exchange to record from.',
+)
+@click.option(
+    '--output',
+    default='events.jsonl',
+    show_default=True,
+    type=click.Path(dir_okay=False),
+    help='Output JSONL file path (appended if it already exists).',
+)
+@click.option(
+    '--duration',
+    default=None,
+    type=float,
+    help='How many seconds to record (default: run until Ctrl-C).',
+)
+@click.option(
+    '--polling-interval',
+    default=60.0,
+    show_default=True,
+    type=float,
+    help='Polling interval in seconds for market data sources.',
+)
+@click.option(
+    '--kalshi-api-key-id',
+    default=None,
+    help='Kalshi API key id (or KALSHI_API_KEY_ID).',
+)
+@click.option(
+    '--kalshi-private-key-path',
+    default=None,
+    help='Kalshi private key path (or KALSHI_PRIVATE_KEY_PATH).',
+)
+@click.option(
+    '--verbose', '-v', is_flag=True, default=False, help='Print each recorded event.'
+)
+@click.option(
+    '--json',
+    'as_json',
+    is_flag=True,
+    default=False,
+    help='Emit JSON status on completion.',
+)
+def market_record(
+    exchange: str,
+    output: str,
+    duration: float | None,
+    polling_interval: float,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+    verbose: bool,
+    as_json: bool,
+) -> None:
+    """Record live market events to a JSONL file for later backtesting.
+
+    Events are written in a format compatible with ``strategy backtest``.
+    Press Ctrl-C to stop recording early.
+    """
+    from pathlib import Path
+
+    from coinjure.cli.data_commands import _record_loop
+    from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
+    from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+
+    output_path = Path(output).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if exchange == 'polymarket':
+        data_source = LivePolyMarketDataSource(
+            event_cache_file='record_events_cache.jsonl',
+            polling_interval=polling_interval,
+            orderbook_refresh_interval=min(polling_interval, 10.0),
+            reprocess_on_start=True,
+        )
+    else:
+        data_source = LiveKalshiDataSource(
+            api_key_id=kalshi_api_key_id,
+            private_key_path=kalshi_private_key_path,
+            event_cache_file='record_kalshi_cache.jsonl',
+            polling_interval=polling_interval,
+            reprocess_on_start=True,
+        )
+
+    dur_msg = f'{duration}s' if duration else 'until Ctrl-C'
+    if not as_json:
+        click.echo(f'Recording {exchange} events → {output_path}  ({dur_msg})')
+        click.echo('Press Ctrl-C to stop.\n')
+
+    count = 0
+    try:
+        count = asyncio.run(_record_loop(data_source, output_path, duration, verbose))
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:
+        raise click.ClickException(f'Recording failed: {exc}') from exc
+
+    if as_json:
+        click.echo(
+            json.dumps(
+                {
+                    'exchange': exchange,
+                    'output': str(output_path),
+                    'events_recorded': count,
+                }
+            )
+        )
+    else:
+        click.echo(f'\nRecording complete: {count} event(s) written to {output_path}')
+
+
+# ---------------------------------------------------------------------------
+# market snapshot (absorbed from portfolio_commands.py)
+# ---------------------------------------------------------------------------
+
+
+@market.command('snapshot')
+@click.option(
+    '--exchange',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default='polymarket',
+    show_default=True,
+)
+@click.option('--query', 'search_query', default=None, help='Optional search filter.')
+@click.option('--limit', default=20, show_default=True, type=int)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def market_snapshot(
+    exchange: str,
+    search_query: str | None,
+    limit: int,
+    as_json: bool,
+) -> None:
+    """One-shot market intelligence: movers, arb edges, portfolio & memory overlap."""
+    from datetime import datetime, timezone
+
+    from coinjure.portfolio.registry import StrategyRegistry
+    from coinjure.research.ledger import ExperimentLedger
+
+    snapshot: dict[str, Any] = {
+        'ok': True,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'exchange': exchange,
+    }
+
+    markets: list[dict[str, Any]] = []
+    try:
+        if exchange == 'polymarket':
+            from coinjure.data.live.live_data_source import LivePolyMarketDataSource
+
+            ds = LivePolyMarketDataSource(polling_interval=0)
+            raw_markets = (
+                asyncio.get_event_loop().run_until_complete(ds._fetch_markets())
+                if hasattr(ds, '_fetch_markets')
+                else []
+            )
+            for m in raw_markets[:limit]:
+                markets.append(
+                    {
+                        'market_id': getattr(m, 'market_id', str(m)),
+                        'title': getattr(m, 'question', getattr(m, 'title', '')),
+                    }
+                )
+    except Exception:  # noqa: BLE001
+        snapshot['markets_error'] = 'Failed to fetch live markets'
+
+    snapshot['markets_count'] = len(markets)
+
+    try:
+        registry = StrategyRegistry()
+        active = [
+            e.to_dict()
+            for e in registry.list()
+            if e.lifecycle in ('paper_trading', 'live_trading')
+        ]
+        snapshot['active_portfolio'] = active
+        snapshot['active_count'] = len(active)
+    except Exception:  # noqa: BLE001
+        snapshot['active_portfolio'] = []
+        snapshot['active_count'] = 0
+
+    try:
+        ledger = ExperimentLedger()
+        summary = ledger.summary()
+        recent_best = ledger.best(metric_key='total_pnl', top_n=5)
+        snapshot['memory_summary'] = summary
+        snapshot['memory_top5'] = [
+            {
+                'run_id': e.run_id,
+                'strategy_ref': e.strategy_ref,
+                'market_id': e.market_id,
+                'gate_passed': e.gate_passed,
+                'pnl': e.metrics.get('total_pnl'),
+            }
+            for e in recent_best
+        ]
+    except Exception:  # noqa: BLE001
+        snapshot['memory_summary'] = {'total_experiments': 0}
+        snapshot['memory_top5'] = []
+
+    if as_json:
+        click.echo(json.dumps(snapshot, default=str))
+    else:
+        click.echo(json.dumps(snapshot, indent=2, default=str))
