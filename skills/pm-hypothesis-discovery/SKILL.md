@@ -18,9 +18,9 @@ Use this skill to produce candidate hypotheses before coding or promotion.
 
 1. Check what has been tried before:
 
-- `coinjure research memory summary --json`
-- `coinjure research memory best --metric total_pnl --top 5 --json`
-- `coinjure research memory list --gate-passed --json`
+- `coinjure memory summary --json`
+- `coinjure memory best --metric total_pnl --top 5 --json`
+- `coinjure memory list --gate-passed --json`
 
 2. Build local market universe (fast, deterministic):
 
@@ -30,12 +30,12 @@ Use this skill to produce candidate hypotheses before coding or promotion.
 
 - `coinjure market search --exchange <exchange> --query "<theme>" --limit 50 --json`
 - `coinjure market list --exchange <exchange> --limit 50 --json`
-- `coinjure news fetch --source google --query "<theme>" --limit 20 --json`
-- `coinjure news fetch --source rss --query "<theme>" --limit 20 --json`
+- `coinjure market news --source google --query "<theme>" --limit 20 --json`
+- `coinjure market news --source rss --query "<theme>" --limit 20 --json`
 
 4. Get a market snapshot for situational awareness:
 
-- `coinjure research market-snapshot --exchange <exchange> --json`
+- `coinjure market snapshot --exchange <exchange> --json`
 
 5. Inspect top candidates:
 

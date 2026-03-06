@@ -12,7 +12,7 @@ This skill orchestrates the complete strategy discovery workflow. Each iteration
 ### 1. Orient — understand current situation
 
 ```bash
-coinjure research market-snapshot --exchange polymarket --json
+coinjure market snapshot --exchange polymarket --json
 ```
 
 This returns active portfolio, memory summary, and top past experiments in one call.
@@ -20,8 +20,8 @@ This returns active portfolio, memory summary, and top past experiments in one c
 ### 2. Remember — review past experiments
 
 ```bash
-coinjure research memory best --metric total_pnl --top 5 --json
-coinjure research memory summary --json
+coinjure memory best --metric total_pnl --top 5 --json
+coinjure memory summary --json
 ```
 
 Avoid repeating strategies/markets that already failed. Focus on unexplored approaches or markets with edge.
@@ -44,7 +44,7 @@ coinjure strategy validate --strategy-ref strategies/<name>.py:<ClassName> --str
 Use the `pm-backtest-ops` fast path. Results auto-record to the experiment ledger.
 
 ```bash
-coinjure research alpha-pipeline \
+coinjure strategy alpha-pipeline \
   --history-file data/backtest_data.jsonl \
   --strategy-ref strategies/<name>.py:<ClassName> \
   --strategy-kwargs-json '<json>' \
@@ -59,27 +59,27 @@ coinjure research alpha-pipeline \
 - **Gate FAILED**: record learnings, loop back to step 3 with adjusted hypothesis. Use `--tag failed` when adding notes.
 
 ```bash
-coinjure research memory add --run-id <id> --strategy-ref <ref> --notes "Failed: <reason>" --tag failed --json
+coinjure memory add --run-id <id> --strategy-ref <ref> --notes "Failed: <reason>" --tag failed --json
 ```
 
 ### 7. Promote — paper trade
 
 ```bash
-coinjure portfolio add --strategy-id <id> --strategy-ref <ref> --kwargs-json '<json>' --json
-coinjure portfolio promote --strategy-id <id> --to paper_trading --json
+coinjure engine add --strategy-id <id> --strategy-ref <ref> --kwargs-json '<json>' --json
+coinjure engine promote --strategy-id <id> --to paper_trading --json
 ```
 
 ### 8. Monitor & Harvest — collect paper performance
 
 ```bash
-coinjure trade status -s ~/.coinjure/<id>.sock --json
-coinjure research harvest --strategy-id <id> --json
+coinjure engine status -s ~/.coinjure/<id>.sock --json
+coinjure engine feedback --strategy-id <id> --json
 ```
 
 ### 9. Compare — backtest vs. paper reality
 
 ```bash
-coinjure research feedback-report --strategy-id <id> --json
+coinjure engine feedback --strategy-id <id> --json
 ```
 
 If paper significantly underperforms backtest, investigate slippage, market conditions, or overfitting.

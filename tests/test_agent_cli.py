@@ -51,14 +51,14 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
     async def fake_run_backtest(**kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr('coinjure.cli.agent_commands.run_backtest', fake_run_backtest)
+    monkeypatch.setattr('coinjure.backtest.backtester.run_backtest', fake_run_backtest)
 
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
+            'strategy',
             'backtest',
-            'run',
             '--history-file',
             str(history_file),
             '--market-id',
@@ -202,19 +202,19 @@ def test_paper_and_live_commands_invokable(monkeypatch):
     monkeypatch.setattr(
         'coinjure.cli.agent_commands.LivePolyMarketDataSource', DummySource
     )
+    monkeypatch.setattr('coinjure.live.live_trader.run_live_paper_trading', fake_paper)
     monkeypatch.setattr(
-        'coinjure.cli.agent_commands.run_live_paper_trading', fake_paper
-    )
-    monkeypatch.setattr(
-        'coinjure.cli.agent_commands.run_live_polymarket_trading', fake_live
+        'coinjure.live.live_trader.run_live_polymarket_trading', fake_live
     )
 
     runner = CliRunner()
     paper_res = runner.invoke(
         cli,
         [
-            'paper',
+            'engine',
             'run',
+            '--mode',
+            'paper',
             '--exchange',
             'polymarket',
             '--duration',
@@ -229,8 +229,10 @@ def test_paper_and_live_commands_invokable(monkeypatch):
     live_res = runner.invoke(
         cli,
         [
-            'live',
+            'engine',
             'run',
+            '--mode',
+            'live',
             '--exchange',
             'polymarket',
             '--wallet-private-key',
@@ -244,5 +246,3 @@ def test_paper_and_live_commands_invokable(monkeypatch):
     )
     assert live_res.exit_code == 0
     assert captured['live_kwargs']['duration'] == 1.0
-
-
