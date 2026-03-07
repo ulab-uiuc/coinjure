@@ -38,17 +38,13 @@ coinjure engine run --mode paper ... --hub-socket ~/.coinjure/hub.sock --json
 coinjure engine run --mode paper ... --monitor
 ```
 
-### Method B: Batch deployment via portfolio (recommended)
+### Method B: Register via portfolio then run
 
 ```bash
-# Cross-platform batch (auto scan + register + launch)
-coinjure engine deploy --query "NBA" --min-edge 0.02 --max-deploy 5 --json
-
-# Single-platform event-sum batch
-coinjure engine deploy-events --query "NBA" --min-edge 0.01 --max-deploy 5 --json
-
-# Dry-run validation first
-coinjure engine deploy-events --query "NBA" --dry-run --json
+# Agent registers strategy after discovery + analysis
+coinjure engine add --strategy-id arb-nba-001 \
+  --strategy-ref examples/strategies/direct_arb_strategy.py:DirectArbStrategy \
+  --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' --json
 ```
 
 ## Runtime Control (single engine)
