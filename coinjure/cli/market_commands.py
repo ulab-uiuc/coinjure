@@ -467,6 +467,125 @@ def market_analyze(
         else:
             click.echo(f'  {key}: {val}')
     click.echo()
+    for key, val in pair_stats.items():
+        if isinstance(val, float):
+            if math.isnan(val):
+                click.echo(f'  {key}: NaN')
+            else:
+                click.echo(f'  {key}: {val:.6f}')
+        else:
+            click.echo(f'  {key}: {val}')
+    click.echo()
+
+
+def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
+    """Compute single-series statistics (no external deps beyond stdlib)."""
+    if not prices:
+        return {'error': 'no_price_data'}
+
+    n = len(prices)
+    mean_price = sum(prices) / n
+    variance = sum((p - mean_price) ** 2 for p in prices) / n if n > 1 else 0.0
+    std_price = variance**0.5
+
+    # Returns (log-returns proxy via differences)
+    returns = [prices[i] - prices[i - 1] for i in range(1, n)]
+    mean_return = sum(returns) / len(returns) if returns else 0.0
+    vol = (
+        (sum((r - mean_return) ** 2 for r in returns) / len(returns)) ** 0.5
+        if returns
+        else 0.0
+    )
+
+    # Bid-ask spread
+    bid_raw = info.get('best_bid')
+    ask_raw = info.get('best_ask')
+    try:
+        bid = float(bid_raw) if bid_raw not in (None, '') else None
+    except (ValueError, TypeError):
+        bid = None
+    try:
+        ask = float(ask_raw) if ask_raw not in (None, '') else None
+    except (ValueError, TypeError):
+        ask = None
+    ba_spread = ask - bid if bid is not None and ask is not None else None
+
+    # Trend: first vs last price
+    trend = prices[-1] - prices[0] if n >= 2 else 0.0
+
+    result: dict[str, Any] = {
+        'mean_price': mean_price,
+        'std_price': std_price,
+        'volatility': vol,
+        'min_price': min(prices),
+        'max_price': max(prices),
+        'last_price': prices[-1],
+        'trend': trend,
+        'bid_ask_spread': ba_spread,
+    }
+    return result
+
+
+def _compute_pair_stats(prices_a: list[float], prices_b: list[float]) -> dict[str, Any]:
+    """Compute pair statistics: correlation, cointegration, spread, half-life."""
+    import math
+
+    n = min(len(prices_a), len(prices_b))
+    if n < 5:
+        return {
+            'error': 'insufficient_data',
+            'points_a': len(prices_a),
+            'points_b': len(prices_b),
+        }
+
+    a = prices_a[-n:]
+    b = prices_b[-n:]
+
+    # Simple correlation (stdlib, no numpy needed)
+    mean_a = sum(a) / n
+    mean_b = sum(b) / n
+    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n)) / n
+    std_a = (sum((x - mean_a) ** 2 for x in a) / n) ** 0.5
+    std_b = (sum((x - mean_b) ** 2 for x in b) / n) ** 0.5
+    correlation = cov / (std_a * std_b) if std_a > 0 and std_b > 0 else 0.0
+
+    # Spread stats (simple, hedge_ratio=1)
+    spread = [a[i] - b[i] for i in range(n)]
+    mean_spread = sum(spread) / n
+    std_spread = (sum((s - mean_spread) ** 2 for s in spread) / n) ** 0.5
+
+    result: dict[str, Any] = {
+        'aligned_points': n,
+        'correlation': correlation,
+        'mean_spread': mean_spread,
+        'std_spread': std_spread,
+        'current_spread': spread[-1] if spread else None,
+        'spread_zscore': (spread[-1] - mean_spread) / std_spread
+        if std_spread > 0
+        else 0.0,
+    }
+
+    # Try advanced stats if statsmodels available
+    try:
+        from coinjure.market.validation import validate_relation
+
+        vr = validate_relation(a, b)
+        result.update(
+            {
+                'hedge_ratio': vr.hedge_ratio,
+                'adf_statistic': vr.adf_statistic,
+                'adf_pvalue': vr.adf_pvalue,
+                'is_stationary': vr.is_stationary,
+                'coint_statistic': vr.coint_statistic,
+                'coint_pvalue': vr.coint_pvalue,
+                'is_cointegrated': vr.is_cointegrated,
+                'half_life': vr.half_life,
+            }
+        )
+    except (ImportError, Exception):
+        result['note'] = 'install statsmodels+scipy for cointegration/ADF tests'
+
+    return result
 
 
 def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
@@ -689,6 +808,10 @@ def relations_add(
     click.echo(f'  type={spread_type} hypothesis={hypothesis}')
     click.echo()
 
+    store = RelationStore()
+    rel = store.get(relation_id)
+    if rel is None:
+        raise click.ClickException(f'Relation not found: {relation_id}')
 
 @market_relations_group.command('list')
 @click.option('--type', 'spread_type', default=None, help='Filter by spread type.')
@@ -697,6 +820,7 @@ def relations_add(
     default=None,
     help='Filter by status (active, deployed, invalidated, retired).',
 )
+@click.option('--significance', default=0.05, help='Statistical significance level.')
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 def relations_list(
     spread_type: str | None,
@@ -758,6 +882,9 @@ def relations_remove(relation_id: str) -> None:
 # market discover (multi-keyword search + structural pair detection)
 # ---------------------------------------------------------------------------
 
+    path = pathlib.Path(history_file)
+    if not path.exists():
+        raise click.ClickException(f'File not found: {history_file}')
 
 
 @market.command('discover')
@@ -902,7 +1029,13 @@ def market_discover(
         f'Use --json to get full data for agent analysis.'
     )
 
+    click.echo(
+        f'Total {len(poly_markets) + len(kalshi_markets)} markets returned. '
+        f'Use --json to get full data for agent analysis.'
+    )
 
+
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Polymarket price history

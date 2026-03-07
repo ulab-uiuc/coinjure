@@ -756,26 +756,7 @@ def engine_retire(
 
     if entry.socket_path and Path(entry.socket_path).exists():
         try:
-            status_resp = run_command('status', socket_path=Path(entry.socket_path))
-            if status_resp.get('ok'):
-                from coinjure.memory import FeedbackEntry, FeedbackLedger
-
-                fb = FeedbackEntry(
-                    strategy_id=strategy_id,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                    source='paper' if entry.lifecycle == 'paper_trading' else 'live',
-                    runtime_seconds=status_resp.get('runtime', 0),
-                    metrics={
-                        'realized_pnl': status_resp.get('portfolio', {}).get(
-                            'realized_pnl'
-                        ),
-                        'event_count': status_resp.get('event_count', 0),
-                        'total_orders': status_resp.get('orders', 0),
-                    },
-                    decision_stats=status_resp.get('decision_stats', {}),
-                    notes=f'auto-harvested on retire: {reason}',
-                )
-                FeedbackLedger().append(fb)
+            run_command('status', socket_path=Path(entry.socket_path))
         except Exception:  # noqa: BLE001
             pass
 
@@ -809,105 +790,6 @@ def engine_retire(
 
 _STALE_DAYS = 7
 _NO_SIGNAL_HOURS = 24
-
-
-# ── feedback ──────────────────────────────────────────────────────────────────
-
-
-@engine.command('feedback')
-@click.option('--id', 'strategy_id', required=True, help='Portfolio strategy ID.')
-@click.option(
-    '--socket-path',
-    default=None,
-    help='Control socket path (default: ~/.coinjure/<strategy-id>.sock).',
-)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def engine_feedback(strategy_id: str, socket_path: str | None, as_json: bool) -> None:
-    """Harvest paper performance and compare against backtest predictions."""
-    from coinjure.memory import (
-        ExperimentLedger,
-        FeedbackEntry,
-        FeedbackLedger,
-    )
-
-    sock = socket_path or str(Path.home() / '.coinjure' / f'{strategy_id}.sock')
-    if not Path(sock).exists():
-        raise click.ClickException(f'Socket not found: {sock}')
-
-    resp = run_command('status', socket_path=Path(sock))
-    if not resp.get('ok'):
-        raise click.ClickException(
-            f'Status query failed: {resp.get("error", "unknown")}'
-        )
-
-    portfolio_data = resp.get('portfolio', {})
-    pnl = None
-    for pos in portfolio_data.get('non_cash', []):
-        if 'unrealized_pnl' in pos:
-            try:
-                pnl = (pnl or 0.0) + float(pos['unrealized_pnl'])
-            except (TypeError, ValueError):
-                pass
-    realized = None
-    try:
-        realized = float(portfolio_data.get('realized_pnl', 0))
-    except (TypeError, ValueError):
-        pass
-
-    entry = FeedbackEntry(
-        strategy_id=strategy_id,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        source='paper' if 'paper' in resp.get('status', '') else 'live',
-        runtime_seconds=resp.get('runtime', 0),
-        metrics={
-            'realized_pnl': realized,
-            'unrealized_pnl': pnl,
-            'event_count': resp.get('event_count', 0),
-            'total_orders': resp.get('orders', 0),
-        },
-        decision_stats=resp.get('decision_stats', {}),
-    )
-    FeedbackLedger().append(entry)
-
-    experiments = ExperimentLedger().query(strategy_ref=strategy_id)
-    if not experiments:
-        all_exp = ExperimentLedger().load_all()
-        experiments = [e for e in all_exp if e.run_id == strategy_id]
-
-    backtest_metrics = experiments[-1].metrics if experiments else {}
-
-    def _safe_float(val: object) -> float | None:
-        if val is None:
-            return None
-        try:
-            return float(val)
-        except (TypeError, ValueError):
-            return None
-
-    bt_pnl = _safe_float(backtest_metrics.get('total_pnl'))
-    paper_pnl = _safe_float(entry.metrics.get('realized_pnl'))
-
-    report: dict[str, Any] = {
-        'ok': True,
-        'strategy_id': strategy_id,
-        'feedback_entry': entry.to_dict(),
-        'backtest': {
-            'total_pnl': bt_pnl,
-            'sharpe_ratio': _safe_float(backtest_metrics.get('sharpe_ratio')),
-            'max_drawdown': _safe_float(backtest_metrics.get('max_drawdown')),
-        },
-        'paper': {
-            'realized_pnl': paper_pnl,
-            'unrealized_pnl': _safe_float(entry.metrics.get('unrealized_pnl')),
-            'runtime_seconds': entry.runtime_seconds,
-            'event_count': entry.metrics.get('event_count'),
-        },
-        'comparison': {},
-    }
-    if bt_pnl is not None and paper_pnl is not None:
-        report['comparison']['pnl_gap'] = round(paper_pnl - bt_pnl, 6)
-    report['comparison']['decision_stats'] = entry.decision_stats
-    _emit(report, as_json=as_json)
 
 
 # ── monitor ────────────────────────────────────────────────────────────────────
