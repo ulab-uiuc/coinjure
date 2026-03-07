@@ -14,8 +14,8 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+from coinjure.data.data_source import DataSource
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
-from coinjure.market.data_source import DataSource
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
 
 logger = logging.getLogger(__name__)

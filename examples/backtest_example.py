@@ -14,12 +14,12 @@ import asyncio
 import os
 from decimal import Decimal
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.data.backtest.historical_data_source import HistoricalDataSource
+from coinjure.data.data_manager import DataManager
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager, StandardRiskManager
 from coinjure.engine.trading_engine import TradingEngine
-from coinjure.market.backtest.historical_data_source import HistoricalDataSource
-from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.test_strategy import TestStrategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
@@ -60,7 +60,7 @@ async def run_basic_backtest():
     data_source = HistoricalDataSource(data_file, ticker)
 
     # Set up market data manager
-    market_data = MarketDataManager()
+    market_data = DataManager()
 
     # Set up position manager with initial capital
     position_manager = PositionManager()
@@ -152,7 +152,7 @@ async def run_backtest_with_risk_management():
         return
 
     data_source = HistoricalDataSource(data_file, ticker)
-    market_data = MarketDataManager()
+    market_data = DataManager()
 
     position_manager = PositionManager()
     position_manager.update_position(

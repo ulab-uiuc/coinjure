@@ -14,9 +14,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from coinjure.engine.execution.position_manager import PositionManager
-from coinjure.engine.execution.trader import Trader
-from coinjure.engine.execution.types import OrderStatus
+from coinjure.engine.trader.position_manager import PositionManager
+from coinjure.engine.trader.trader import Trader
+from coinjure.engine.trader.types import OrderStatus
 from coinjure.ticker import CashTicker
 
 

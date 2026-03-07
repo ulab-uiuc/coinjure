@@ -6,7 +6,8 @@
       "Bash(poetry run:*)",
       "Skill(strategy-lab)",
       "Bash(grep:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "WebFetch(domain:pmxt.dev)"
     ]
   }
 }

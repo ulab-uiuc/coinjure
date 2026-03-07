@@ -16,7 +16,7 @@ Use this skill when the user asks to write a strategy that uses LLM / MCP tools 
 ## Code Entry Points
 
 - Base class contract: `coinjure/strategy/agent_strategy.py` (`AgentStrategy`)
-- LLM strategy reference: `coinjure/strategy/simple_strategy.py`
+- Example strategies: `examples/strategies/` (spread/arb patterns)
 - New strategy directory: `strategies/`
 
 ## Implementation Workflow
@@ -59,8 +59,8 @@ coinjure engine run --mode paper \
 4. Observe running status
 
 ```bash
-coinjure engine status --json       # basic status
-coinjure engine state --json        # full snapshot (positions, decisions, orders)
+coinjure engine status --json        # basic status
+coinjure engine status --full --json # full snapshot (positions, decisions, orders)
 ```
 
 5. Intervention and adjustment
@@ -76,7 +76,6 @@ coinjure engine swap \
 
 ## Hard Rules
 
-- `AgentStrategy` subclasses must not be used with `strategy batch` (non-deterministic, results are meaningless).
 - External API calls must handle timeouts and errors properly to avoid blocking the asyncio event loop.
 - Must check `self.is_paused()` before making decisions to respect control plane pause signals.
 - Do not use future information (no look-ahead).

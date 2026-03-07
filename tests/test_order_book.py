@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from coinjure.market.order_book import Level, OrderBook
+from coinjure.data.order_book import Level, OrderBook
 
 
 class TestLevel:

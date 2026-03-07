@@ -7,8 +7,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.types import Order, Trade
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.types import Order, Trade
 from coinjure.storage.serializers import (
     deserialize_equity_point,
     deserialize_order,

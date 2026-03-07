@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import pytest
 
 from coinjure.cli.control import ControlServer
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager
-from coinjure.engine.execution.types import OrderFailureReason, TradeSide
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.market.order_book import Level, OrderBook
+from coinjure.data.data_manager import DataManager
+from coinjure.data.order_book import Level, OrderBook
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager
+from coinjure.engine.trader.types import OrderFailureReason, TradeSide
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
@@ -28,7 +28,7 @@ def test_ticker() -> PolyMarketTicker:
 
 @pytest.fixture
 def paper_trader(test_ticker: PolyMarketTicker) -> PaperTrader:
-    mdm = MarketDataManager()
+    mdm = DataManager()
     ob = OrderBook()
     ob.update(
         asks=[Level(price=Decimal('0.55'), size=Decimal('1000'))],

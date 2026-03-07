@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
 
-from coinjure.engine.execution.trader import Trader
+from coinjure.data.data_manager import DataPoint
+from coinjure.engine.trader.trader import Trader
 from coinjure.events import Event
-from coinjure.market.market_data_manager import MarketDataPoint
 from coinjure.ticker import CashTicker, Ticker
 
 
@@ -75,10 +75,10 @@ class StrategyContext:
 
     def market_history(
         self, ticker: Ticker | None = None, limit: int | None = None
-    ) -> list[MarketDataPoint]:
+    ) -> list[DataPoint]:
         return self.trader.market_data.get_market_history(ticker=ticker, limit=limit)
 
-    def ticker_history(self, limit: int | None = None) -> list[MarketDataPoint]:
+    def ticker_history(self, limit: int | None = None) -> list[DataPoint]:
         if self.ticker is None:
             return []
         return self.market_history(ticker=self.ticker, limit=limit)
@@ -193,8 +193,7 @@ class Strategy(ABC):
     def supports_auto_tune(cls) -> bool:
         """Return True if this strategy can participate in parameter grid search.
 
-        QuantStrategy overrides to True; AgentStrategy stays False.
-        Checked by `research discover-alpha` before running param combos.
+        Subclasses may override to True to enable parameter grid search.
         """
         return False
 
@@ -239,6 +238,14 @@ class Strategy(ABC):
 
     async def on_stop(self) -> None:  # noqa: B027
         """Called once when the engine shuts down, after the last event."""
+
+    def watch_tokens(self) -> list[str]:
+        """Return token IDs that the data source should prioritize refreshing.
+
+        Override this in strategies that need specific market data from the start
+        (e.g., spread strategies that track two specific markets).
+        """
+        return []
 
     # -- Context binding -----------------------------------------------------
 

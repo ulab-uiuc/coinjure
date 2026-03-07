@@ -10,12 +10,22 @@ Commands
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import click
 
-from coinjure.cli.research_helpers import _parse_json_object
 from coinjure.cli.utils import _emit
+
+
+def _parse_json_object(raw: str, *, option_name: str) -> dict:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f'Invalid {option_name}: {exc.msg}') from exc
+    if not isinstance(parsed, dict):
+        raise click.ClickException(f'{option_name} must be a JSON object.')
+    return parsed
 
 
 @click.group()

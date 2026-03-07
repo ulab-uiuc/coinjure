@@ -29,13 +29,13 @@ from pathlib import Path
 # Ensure project root is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.market.data_source import DataSource
-from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.market.market_data_manager import DataManager
 from coinjure.ticker import CashTicker, KalshiTicker, PolyMarketTicker
 from examples.strategies.cross_platform_arb_strategy import (
     CompositeTrader,
@@ -325,7 +325,7 @@ async def run_backtest(
 
     # Build components
     data_source = CrossPlatformHistoricalDataSource(events)
-    market_data = MarketDataManager(spread=Decimal('0.01'))
+    market_data = DataManager(spread=Decimal('0.01'))
 
     # Two paper traders — one per platform
     def make_trader(cash_ticker: CashTicker) -> PaperTrader:

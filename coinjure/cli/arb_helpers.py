@@ -15,7 +15,7 @@ from typing import Any
 import click
 
 from coinjure.engine.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
-from coinjure.market.matching import MarketPair, match_markets
+from coinjure.market.discovery import MarketPair, match_markets
 
 _DIRECT_ARB_REF = 'examples/strategies/direct_arb_strategy.py:DirectArbStrategy'
 _EVENT_SUM_ARB_REF = 'examples/strategies/event_sum_arb_strategy.py:EventSumArbStrategy'

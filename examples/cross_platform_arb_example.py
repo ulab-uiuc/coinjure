@@ -37,14 +37,14 @@ import asyncio
 import logging
 from decimal import Decimal
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager
+from coinjure.data.data_manager import DataManager
+from coinjure.data.data_source import CompositeDataSource
+from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
+from coinjure.data.live.polymarket_data_source import LivePolyMarketDataSource
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager
 from coinjure.engine.trading_engine import TradingEngine
-from coinjure.market.composite_data_source import CompositeDataSource
-from coinjure.market.live.kalshi_data_source import LiveKalshiDataSource
-from coinjure.market.live.live_data_source import LivePolyMarketDataSource
-from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.ticker import CashTicker
 from examples.strategies.cross_platform_arb_strategy import (
     CompositeTrader,
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_paper_trader(
-    market_data: MarketDataManager,
+    market_data: DataManager,
     initial_capital: Decimal,
     cash_ticker: CashTicker,
 ) -> PaperTrader:
@@ -112,8 +112,8 @@ async def run_cross_platform_arb(duration: float = 300) -> None:
     )
     composite_ds = CompositeDataSource(sources=[poly_ds, kalshi_ds])
 
-    # ── Shared MarketDataManager ──────────────────────────────────
-    market_data = MarketDataManager()
+    # ── Shared DataManager ──────────────────────────────────
+    market_data = DataManager()
 
     # ── Paper traders (one per platform) ──────────────────────────
     poly_trader = _build_paper_trader(
