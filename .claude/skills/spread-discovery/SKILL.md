@@ -24,14 +24,14 @@ Different relation types require fundamentally different search strategies and a
 **Search strategy**: Discover with a topic keyword, then scan results for the same `event_id` or similar question text with different dates.
 
 ```bash
-coinjure market discover -q "Ukraine election" --exchange polymarket --limit 30 --json
+coinjure market discover -q "Ukraine election" --exchange polymarket --limit 30 --json (optional)
 # Look for: "called by March" vs "called by June" vs "held by June" vs "held by Dec"
 ```
 
 **Analysis**: Use `--relation-type implication`. Validates `A <= B` (auto-detects direction).
 
 ```bash
-coinjure market analyze --market-id <earlier> --compare <later> --relation-type implication --json
+coinjure market analyze --market-id <earlier> --compare <later> --relation-type implication --json (optional)
 ```
 
 **Key metrics**: `constraint_holds` (boolean), `violation_count`, `violation_rate`. Valid if 0 violations.
@@ -43,13 +43,15 @@ coinjure market analyze --market-id <earlier> --compare <later> --relation-type 
 **How to find**: Search the **same keywords on both exchanges** and look for matching questions.
 
 ```bash
-coinjure market discover -q "Trump resign" --exchange both --limit 20 --json
-# Compare: Polymarket "Trump resign" vs Kalshi "KXTRUMPRESIGN"
+coinjure market discover -q "Trump resign" --exchange both --with-rules --limit 20
+# Compare resolution rules between platforms to confirm same event
 ```
+
+Use `--with-rules` to include resolution criteria in output. Even if titles differ, the resolution rules may be substantially the same. Compare the rules text to decide if two markets are truly the same event.
 
 **Analysis**: Use `--relation-type same_event`. Validates `A <= B` (prices should be near-equal).
 
-**Reality**: Polymarket (geopolitics, pop culture) and Kalshi (economic data) have very little overlap. Cross-platform same_event pairs are rare.
+**Reality**: Polymarket (geopolitics, pop culture) and Kalshi (economic data) have very little overlap. Cross-platform same_event pairs are rare — use `--with-rules` to find near-matches.
 
 ### 3. Complementary / Exclusivity (structural)
 
@@ -58,14 +60,14 @@ coinjure market discover -q "Trump resign" --exchange both --limit 20 --json
 **How to find**: Look for markets within the **same event** that represent different outcomes (e.g., different winners of the same election).
 
 ```bash
-coinjure market discover -q "2028 presidential" --exchange polymarket --limit 40 --json
+coinjure market discover -q "2028 presidential" --exchange polymarket --limit 40 --json (optional)
 # Look for: multiple candidates in the same event_id where sum of prices should <= 1
 ```
 
 **Analysis**: Use `--relation-type complementary` or `--relation-type exclusivity`.
 
 ```bash
-coinjure market analyze --market-id <outcome_a> --compare <outcome_b> --relation-type complementary --json
+coinjure market analyze --market-id <outcome_a> --compare <outcome_b> --relation-type complementary --json (optional)
 ```
 
 **Key metrics**: `constraint_holds`, `violation_count`. Violations = arb opportunities (sum > 1).
@@ -81,15 +83,15 @@ coinjure market analyze --market-id <outcome_a> --compare <outcome_b> --relation
 - "tariffs" vs "recession" — economic chain reaction
 
 ```bash
-coinjure market discover -q "ceasefire" --exchange polymarket --limit 20 --json
-coinjure market discover -q "Ukraine election" --exchange polymarket --limit 20 --json
+coinjure market discover -q "ceasefire" --exchange polymarket --limit 20 --json (optional)
+coinjure market discover -q "Ukraine election" --exchange polymarket --limit 20 --json (optional)
 # Cross-reference: do any pairs have shared fundamental drivers?
 ```
 
 **Analysis**: Use `--relation-type temporal` (or `semantic` / `conditional`). Runs cointegration + ADF + half-life.
 
 ```bash
-coinjure market analyze --market-id <id_a> --compare <id_b> --relation-type temporal --json
+coinjure market analyze --market-id <id_a> --compare <id_b> --relation-type temporal --json (optional)
 ```
 
 **Key metrics**: `is_cointegrated` (Engle-Granger p < 0.05), `is_stationary` (ADF), `half_life` (mean-reversion speed), `hedge_ratio` (OLS beta). Valid only if cointegrated AND spread is stationary.
@@ -109,7 +111,7 @@ coinjure market analyze --market-id <id_a> --compare <id_b> --relation-type temp
 ### Step 1: Discover candidates across categories
 
 ```bash
-coinjure market discover -q "keyword1" -q "keyword2" --exchange both --limit 40 --json
+coinjure market discover -q "keyword1" -q "keyword2" --exchange both --limit 40 --json (optional)
 ```
 
 Search multiple topic areas: elections, crypto, geopolitics, macro, sports, etc.
@@ -125,26 +127,26 @@ Before analyzing, decide the type:
 ### Step 3: Analyze with the correct relation type
 
 ```bash
-coinjure market analyze --market-id <a> --compare <b> --relation-type <type> --json
+coinjure market analyze --market-id <a> --compare <b> --relation-type <type> --json (optional)
 ```
 
 ### Step 4: Add validated pairs as relations
 
 ```bash
-coinjure market relations add --market-id-a <a> --market-id-b <b> --spread-type <type> --json
+coinjure market relations add --market-id-a <a> --market-id-b <b> --spread-type <type> --json (optional)
 ```
 
 ### Step 5: Run quantitative validation on stored relations
 
 ```bash
-coinjure market relations validate <relation_id> --json
+coinjure market relations validate <relation_id> --json (optional)
 ```
 
 ### Step 6: Review all relations
 
 ```bash
-coinjure market relations list --json
-coinjure market relations list --status validated --json
+coinjure market relations list --json (optional)
+coinjure market relations list --status validated --json (optional)
 ```
 
 ## Validation Criteria by Type
@@ -164,6 +166,8 @@ Note: structural pairs with low violation rates (< 3%) are still interesting —
 ## Hard Rules
 
 - This phase is discovery only — no strategy implementation or trading.
-- Always use `--json` output.
+- Default table output is readable by both humans and agents. Use `--json` only when programmatic parsing is needed.
 - Determine the relation type BEFORE running analysis — using the wrong type gives meaningless results.
 - For implication pairs, always put the narrower/earlier market as A and broader/later as B.
+- For same_event discovery, always use `--with-rules` to include resolution criteria for cross-platform comparison.
+- Only add relations that have actual or potential trading opportunities (current_arb > 0, high violation_rate, or cointegrated with significant zscore).

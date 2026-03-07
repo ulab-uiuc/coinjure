@@ -34,45 +34,64 @@ async def _polymarket_list_markets(
     limit: int,
     *,
     tag: str | None = None,
+    with_rules: bool = False,
 ) -> list[dict]:
-    params: dict[str, Any] = {
-        'active': 'true',
-        'closed': 'false',
-        'limit': min(limit, 100),
-    }
-    if tag:
-        params['tag'] = tag
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(GAMMA_EVENTS_URL, params=params)
-    if resp.status_code != 200:
-        raise click.ClickException(
-            f'Polymarket API returned HTTP {resp.status_code}: {resp.text[:200]}'
-        )
-    events = resp.json()
     markets: list[dict[str, Any]] = []
-    for event in events[:limit]:
-        tags = [t.get('label', '') for t in event.get('tags', []) if t.get('label')]
-        category = event.get('category', '')
-        for mkt in event.get('markets', []):
-            if len(markets) >= limit:
+    offset = 0
+    page_size = 100  # Gamma API max per request
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while len(markets) < limit:
+            params: dict[str, Any] = {
+                'active': 'true',
+                'closed': 'false',
+                'limit': page_size,
+                'offset': offset,
+            }
+            if tag:
+                params['tag'] = tag
+            resp = await client.get(GAMMA_EVENTS_URL, params=params)
+            if resp.status_code != 200:
+                if offset == 0:
+                    raise click.ClickException(
+                        f'Polymarket API returned HTTP {resp.status_code}: {resp.text[:200]}'
+                    )
                 break
-            markets.append(
-                {
-                    'id': mkt.get('id', ''),
-                    'question': mkt.get('question', ''),
-                    'event_id': str(event.get('id', '')),
-                    'event_title': event.get('title', ''),
-                    'token_id': _parse_clob_ids(mkt)[0] if _parse_clob_ids(mkt) else '',
-                    'best_bid': mkt.get('bestBid', ''),
-                    'best_ask': mkt.get('bestAsk', ''),
-                    'volume': mkt.get('volume', ''),
-                    'end_date': mkt.get('endDate', ''),
-                    'tags': tags,
-                    'category': category,
-                }
-            )
-        if len(markets) >= limit:
-            break
+            events = resp.json()
+            if not events:
+                break
+            for event in events:
+                tags_list = [
+                    t.get('label', '') for t in event.get('tags', []) if t.get('label')
+                ]
+                category = event.get('category', '')
+                for mkt in event.get('markets', []):
+                    if len(markets) >= limit:
+                        break
+                    entry: dict[str, Any] = {
+                        'id': mkt.get('id', ''),
+                        'question': mkt.get('question', ''),
+                        'event_id': str(event.get('id', '')),
+                        'event_title': event.get('title', ''),
+                        'token_id': _parse_clob_ids(mkt)[0]
+                        if _parse_clob_ids(mkt)
+                        else '',
+                        'best_bid': mkt.get('bestBid', ''),
+                        'best_ask': mkt.get('bestAsk', ''),
+                        'volume': mkt.get('volume', ''),
+                        'end_date': mkt.get('endDate', ''),
+                        'tags': tags_list,
+                        'category': category,
+                    }
+                    if with_rules:
+                        entry['description'] = mkt.get('description', '')
+                    markets.append(entry)
+                if len(markets) >= limit:
+                    break
+            offset += len(events)
+            if len(events) < page_size:
+                break  # No more pages
+
     return markets[:limit]
 
 
@@ -81,8 +100,9 @@ async def _polymarket_search_markets(
     limit: int,
     *,
     tag: str | None = None,
+    with_rules: bool = False,
 ) -> list[dict]:
-    all_markets = await _polymarket_list_markets(500, tag=tag)
+    all_markets = await _polymarket_list_markets(500, tag=tag, with_rules=with_rules)
     q = query.lower()
     filtered = [
         m
@@ -171,6 +191,7 @@ async def _kalshi_list_markets(
 async def _kalshi_search_via_events(
     query: str,
     limit: int,
+    with_rules: bool = False,
 ) -> list[dict]:
     """Search Kalshi events by keyword via raw HTTP and extract nested markets.
 
@@ -215,19 +236,20 @@ async def _kalshi_search_via_events(
             for mkt in event.get('markets', []) or []:
                 if len(matched_markets) >= limit:
                     break
-                matched_markets.append(
-                    {
-                        'ticker': mkt.get('ticker', ''),
-                        'title': mkt.get('title', ''),
-                        'event_ticker': mkt.get('event_ticker', ''),
-                        'series_ticker': mkt.get('series_ticker', ''),
-                        'yes_bid': mkt.get('yes_bid', 0),
-                        'yes_ask': mkt.get('yes_ask', 0),
-                        'volume': mkt.get('volume', 0),
-                        'close_time': str(mkt.get('close_time', '')),
-                        'status': mkt.get('status', ''),
-                    }
-                )
+                entry = {
+                    'ticker': mkt.get('ticker', ''),
+                    'title': mkt.get('title', ''),
+                    'event_ticker': mkt.get('event_ticker', ''),
+                    'series_ticker': mkt.get('series_ticker', ''),
+                    'yes_bid': mkt.get('yes_bid', 0),
+                    'yes_ask': mkt.get('yes_ask', 0),
+                    'volume': mkt.get('volume', 0),
+                    'close_time': str(mkt.get('close_time', '')),
+                    'status': mkt.get('status', ''),
+                }
+                if with_rules:
+                    entry['rules_primary'] = mkt.get('rules_primary', '')
+                matched_markets.append(entry)
             if len(matched_markets) >= limit:
                 break
 
@@ -240,9 +262,13 @@ async def _kalshi_search_via_events(
 
 
 async def _kalshi_search_markets(
-    query: str, limit: int, api_key_id: str | None, private_key_path: str | None
+    query: str,
+    limit: int,
+    api_key_id: str | None,
+    private_key_path: str | None,
+    with_rules: bool = False,
 ) -> list[dict]:
-    return await _kalshi_search_via_events(query, limit)
+    return await _kalshi_search_via_events(query, limit, with_rules=with_rules)
 
 
 async def _kalshi_market_info(
@@ -382,11 +408,17 @@ def market_analyze(
         if exchange == 'polymarket':
             hist_a = asyncio.run(_polymarket_price_history(market_id, interval, None))
         else:
-            hist_a = {'series': []}  # Kalshi price history not yet supported
+            hist_a = {'series': []}  # Kalshi has no public price history API
     except Exception:
         hist_a = {'series': []}
 
     prices_a = [float(p['p']) for p in hist_a.get('series', []) if 'p' in p]
+    # Kalshi fallback: use current mid-price as a single data point
+    if not prices_a and exchange == 'kalshi':
+        bid = info_a.get('yes_bid', 0)
+        ask = info_a.get('yes_ask', 0)
+        if bid or ask:
+            prices_a = [(bid + ask) / 2 / 100]  # Kalshi prices are in cents
 
     # Single-market stats
     stats_a = _compute_series_stats(prices_a, info_a)
@@ -441,6 +473,12 @@ def market_analyze(
         hist_b = {'series': []}
 
     prices_b = [float(p['p']) for p in hist_b.get('series', []) if 'p' in p]
+    # Kalshi fallback: use current mid-price as a single data point
+    if not prices_b and exchange == 'kalshi':
+        bid = info_b.get('yes_bid', 0)
+        ask = info_b.get('yes_ask', 0)
+        if bid or ask:
+            prices_b = [(bid + ask) / 2 / 100]
     stats_b = _compute_series_stats(prices_b, info_b)
 
     # Pair quantitative analysis (method depends on relation type)
@@ -468,21 +506,58 @@ def market_analyze(
         click.echo(json.dumps(result, default=str))
         return
 
-    click.echo(f'\nPair Analysis: {market_id} vs {compare}')
-    click.echo('=' * 60)
-    click.echo(f'  A: {info_a.get("question", "?")[:70]}')
-    click.echo(f'     points={len(prices_a)}')
-    click.echo(f'  B: {info_b.get("question", "?")[:70]}')
-    click.echo(f'     points={len(prices_b)}')
+    click.echo(f'\nPair Analysis ({relation_type or "auto"})')
+    click.echo('=' * 70)
+    q_a = info_a.get('question') or info_a.get('title') or '?'
+    q_b = info_b.get('question') or info_b.get('title') or '?'
+    bid_a = info_a.get('best_bid') or info_a.get('yes_bid') or '?'
+    ask_a = info_a.get('best_ask') or info_a.get('yes_ask') or '?'
+    bid_b = info_b.get('best_bid') or info_b.get('yes_bid') or '?'
+    ask_b = info_b.get('best_ask') or info_b.get('yes_ask') or '?'
+    click.echo(f'  A: {q_a[:65]}')
+    click.echo(f'     id={market_id}  bid={bid_a}  ask={ask_a}  pts={len(prices_a)}')
+    click.echo(f'  B: {q_b[:65]}')
+    click.echo(f'     id={compare}  bid={bid_b}  ask={ask_b}  pts={len(prices_b)}')
     click.echo()
-    for key, val in pair_stats.items():
-        if isinstance(val, float):
-            if math.isnan(val):
-                click.echo(f'  {key}: NaN')
-            else:
-                click.echo(f'  {key}: {val:.6f}')
-        else:
-            click.echo(f'  {key}: {val}')
+
+    ps = pair_stats
+    at = ps.get('analysis_type', '?')
+    click.echo(f'  {"Metric":<22} {"Value":>10}')
+    click.echo(f'  {"─"*22} {"─"*10}')
+    click.echo(f'  {"Analysis type":<22} {at:>10}')
+    click.echo(f'  {"Correlation":<22} {ps.get("correlation", 0):>10.3f}')
+    click.echo(f'  {"Aligned points":<22} {ps.get("aligned_points", 0):>10}')
+    click.echo(f'  {"Mean spread":<22} {ps.get("mean_spread", 0):>10.4f}')
+    click.echo(f'  {"Current spread":<22} {ps.get("current_spread", 0):>10.4f}')
+    click.echo(f'  {"Spread zscore":<22} {ps.get("spread_zscore", 0):>10.2f}')
+
+    if at == 'structural':
+        click.echo()
+        click.echo(f'  {"Constraint":<22} {ps.get("constraint", "?"):>10}')
+        holds = ps.get('constraint_holds')
+        click.echo(f'  {"Holds":<22} {"YES" if holds else "NO":>10}')
+        click.echo(f'  {"Violations":<22} {ps.get("violation_count", 0):>10}')
+        click.echo(f'  {"Violation rate":<22} {ps.get("violation_rate", 0)*100:>9.1f}%')
+        click.echo(f'  {"Current arb":<22} {ps.get("current_arb", 0):>10.4f}')
+        click.echo(f'  {"Mean arb":<22} {ps.get("mean_arb", 0):>10.4f}')
+    elif at == 'cointegration':
+        click.echo()
+        click.echo(f'  {"Cointegrated":<22} {"YES" if ps.get("is_cointegrated") else "NO":>10}')
+        click.echo(f'  {"Coint p-value":<22} {ps.get("coint_pvalue", 1):>10.4f}')
+        click.echo(f'  {"ADF stationary":<22} {"YES" if ps.get("is_stationary") else "NO":>10}')
+        click.echo(f'  {"ADF p-value":<22} {ps.get("adf_pvalue", 1):>10.4f}')
+        hl = ps.get('half_life')
+        click.echo(f'  {"Half-life (bars)":<22} {hl:>10.1f}' if hl else f'  {"Half-life":<22} {"N/A":>10}')
+        click.echo(f'  {"Hedge ratio":<22} {ps.get("hedge_ratio", 0):>10.3f}')
+
+    ll_sig = ps.get('lead_lag_significant')
+    ll = ps.get('lead_lag')
+    ll_corr = ps.get('lead_lag_corr')
+    if ll is not None:
+        click.echo()
+        click.echo(f'  {"Lead-lag (steps)":<22} {ll:>10}')
+        click.echo(f'  {"Lead-lag corr":<22} {ll_corr:>10.3f}' if ll_corr else '')
+        click.echo(f'  {"Significant":<22} {"YES" if ll_sig else "NO":>10}')
     click.echo()
 
 
@@ -500,7 +575,10 @@ def _compute_pair_stats(
     - All types also check lead-lag
     """
     n = min(len(prices_a), len(prices_b))
-    if n < 5:
+    # Structural types only need 1 point (current snapshot); cointegration needs 5+
+    structural_types = {'same_event', 'implication', 'complementary', 'exclusivity'}
+    min_points = 1 if relation_type in structural_types else 5
+    if n < min_points:
         return {
             'error': 'insufficient_data',
             'points_a': len(prices_a),
@@ -957,6 +1035,13 @@ def relations_validate(relation_id: str, interval: str, as_json: bool) -> None:
 @click.option(
     '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
 )
+@click.option(
+    '--with-rules/--no-rules',
+    'with_rules',
+    default=True,
+    show_default=True,
+    help='Include resolution rules/description. Use --no-rules to omit.',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 def market_discover(
     exchange: str,
@@ -965,6 +1050,7 @@ def market_discover(
     limit: int,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
+    with_rules: bool,
     as_json: bool,
 ) -> None:
     """Fetch markets from exchanges for agent analysis.
@@ -973,10 +1059,13 @@ def market_discover(
     the raw data. The agent decides which markets are related and adds them
     to the relation store via ``market relations add``.
 
+    Use --with-rules to include resolution criteria (for cross-platform
+    same_event comparison).
+
     \b
       coinjure market discover -q "election" -q "Trump" --json
+      coinjure market discover -q "Trump resign" --exchange both --with-rules --json
       coinjure market discover -t Crypto -t Finance --exchange polymarket --json
-      coinjure market discover -q "tariff" -t Economy --exchange both --json
     """
 
     # ── Fetch markets ──────────────────────────────────────────────────
@@ -1006,7 +1095,9 @@ def market_discover(
         if has_filters:
             for q in query:
                 if exchange in ('polymarket', 'both'):
-                    _merge_poly(await _polymarket_search_markets(q, limit))
+                    _merge_poly(await _polymarket_search_markets(
+                        q, limit, with_rules=with_rules,
+                    ))
                 if exchange in ('kalshi', 'both'):
                     _merge_kalshi(
                         await _kalshi_search_markets(
@@ -1014,14 +1105,19 @@ def market_discover(
                             limit,
                             kalshi_api_key_id,
                             kalshi_private_key_path,
+                            with_rules=with_rules,
                         )
                     )
             for t in tag:
                 if exchange in ('polymarket', 'both'):
-                    _merge_poly(await _polymarket_list_markets(limit, tag=t))
+                    _merge_poly(await _polymarket_list_markets(
+                        limit, tag=t, with_rules=with_rules,
+                    ))
         else:
             if exchange in ('polymarket', 'both'):
-                poly_markets = await _polymarket_list_markets(limit)
+                poly_markets = await _polymarket_list_markets(
+                    limit, with_rules=with_rules,
+                )
             if exchange in ('kalshi', 'both'):
                 kalshi_markets = await _kalshi_list_markets(
                     limit,
@@ -1062,15 +1158,46 @@ def market_discover(
     parts = [f'"{q}"' for q in query] + [f'tag:{t}' for t in tag]
     query_desc = ', '.join(parts) if parts else 'top by volume'
     click.echo(
-        f'Fetched {len(poly_markets)} Polymarket + {len(kalshi_markets)} Kalshi '
-        f'markets (queries: {query_desc}). '
-        f'Use --json to get full data for agent analysis.'
+        f'\nDiscovered {len(poly_markets)} Polymarket + {len(kalshi_markets)} Kalshi '
+        f'markets (queries: {query_desc})\n'
     )
 
-    click.echo(
-        f'Total {len(poly_markets) + len(kalshi_markets)} markets returned. '
-        f'Use --json to get full data for agent analysis.'
-    )
+    def _fmt_table(
+        markets: list[dict], platform: str,
+    ) -> None:
+        if not markets:
+            return
+        click.echo(f'  [{platform}] {len(markets)} markets')
+        click.echo(f'  {"ID":>12}  {"Bid":>6}  {"Ask":>6}  {"Volume":>12}  Question')
+        click.echo(f'  {"─"*12}  {"─"*6}  {"─"*6}  {"─"*12}  {"─"*50}')
+        for m in markets:
+            mid = m.get('id') or m.get('ticker', '')
+            bid = m.get('best_bid') or m.get('yes_bid', '')
+            ask = m.get('best_ask') or m.get('yes_ask', '')
+            vol = m.get('volume', 0)
+            q = m.get('question') or m.get('title', '')
+            try:
+                bid_s = f'{float(bid):6.3f}' if bid not in (None, '') else '     —'
+            except (ValueError, TypeError):
+                bid_s = '     —'
+            try:
+                ask_s = f'{float(ask):6.3f}' if ask not in (None, '') else '     —'
+            except (ValueError, TypeError):
+                ask_s = '     —'
+            try:
+                vol_s = f'{float(str(vol).replace(",", "")):12.0f}'
+            except (ValueError, TypeError):
+                vol_s = '           0'
+            click.echo(f'  {mid:>12}  {bid_s}  {ask_s}  {vol_s}  {q[:55]}')
+            if with_rules:
+                desc = m.get('description') or m.get('rules_primary', '')
+                if desc:
+                    # Show first 120 chars of rules
+                    click.echo(f'  {"":>12}  Rules: {desc[:120]}...')
+        click.echo()
+
+    _fmt_table(poly_markets, 'Polymarket')
+    _fmt_table(kalshi_markets, 'Kalshi')
 
 
 # ---------------------------------------------------------------------------
@@ -1080,7 +1207,7 @@ def market_discover(
 # ---------------------------------------------------------------------------
 
 _INTERVAL_FIDELITY: dict[str, int] = {
-    'max': 1440,
+    'max': 1,
     '1d': 1440,
     '6h': 360,
     '1h': 60,
