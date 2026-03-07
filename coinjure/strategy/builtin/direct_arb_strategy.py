@@ -6,7 +6,7 @@ instantiated directly from CLI kwargs:
 
     coinjure paper run \\
         --exchange cross_platform \\
-        --strategy-ref examples/strategies/direct_arb_strategy.py:DirectArbStrategy \\
+        --strategy-ref coinjure/strategy/builtin/direct_arb_strategy.py:DirectArbStrategy \\
         --strategy-kwargs-json '{
             "poly_market_id": "0xabc...",
             "poly_token_id":  "1234...",

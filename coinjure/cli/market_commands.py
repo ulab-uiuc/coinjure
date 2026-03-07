@@ -1135,6 +1135,46 @@ def market_discover(
     if not poly_markets and not kalshi_markets:
         raise click.ClickException('No markets fetched. Check API keys or queries.')
 
+    # ── Annotate with existing relations ──────────────────────────────
+
+    from coinjure.market.relations import RelationStore
+
+    store = RelationStore()
+    all_relations = store.list()
+
+    # Build a set of market IDs already in relations
+    related_ids: dict[str, list[str]] = {}  # market_id → [relation_id, ...]
+    for r in all_relations:
+        for mkt in (r.market_a, r.market_b):
+            for key in ('id', 'market_id', 'ticker'):
+                mid = mkt.get(key, '')
+                if mid:
+                    related_ids.setdefault(mid, []).append(r.relation_id)
+
+    # Tag each market with its existing relations
+    for mk in poly_markets:
+        mid = mk.get('id', '')
+        if mid and mid in related_ids:
+            mk['existing_relations'] = related_ids[mid]
+    for mk in kalshi_markets:
+        mid = mk.get('ticker', '')
+        if mid and mid in related_ids:
+            mk['existing_relations'] = related_ids[mid]
+
+    # Compact summary of existing relations for agent context
+    relation_summary = [
+        {
+            'relation_id': r.relation_id,
+            'type': r.spread_type,
+            'status': r.status,
+            'market_a_id': r.market_a.get('id', r.market_a.get('ticker', '')),
+            'market_b_id': r.market_b.get('id', r.market_b.get('ticker', '')),
+            'market_a_question': r.market_a.get('question', '')[:60],
+            'market_b_question': r.market_b.get('question', '')[:60],
+        }
+        for r in all_relations
+    ]
+
     # ── Output ─────────────────────────────────────────────────────────
 
     total = len(poly_markets) + len(kalshi_markets)
@@ -1149,6 +1189,8 @@ def market_discover(
                         'kalshi': kalshi_markets,
                     },
                     'total_markets': total,
+                    'existing_relations': relation_summary,
+                    'existing_relation_count': len(relation_summary),
                 },
                 default=str,
             )
