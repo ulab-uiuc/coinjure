@@ -14,7 +14,7 @@ Use this skill when the user asks to manage multiple strategies, allocate capita
 coinjure engine add --strategy-id <id> --strategy-ref <ref> --kwargs-json '<json>' --json
 
 # Deploy (start paper/live process)
-coinjure engine deploy --strategy-id <id> --json
+coinjure engine add --strategy-id <id> --strategy-ref <ref> --kwargs-json '<json>' --json
 
 # View all strategies
 coinjure engine list --json
@@ -35,15 +35,13 @@ coinjure engine retire --all --reason "end_of_season" --json
 coinjure engine allocate --method kelly --max-exposure 10000 --max-per-strategy 2000 --json
 ```
 
-## LLM Supervision
+## Monitoring & Intervention
 
 ```bash
-# LLM reviews all active strategies, recommends hold/pause/retire
-coinjure engine supervise --json
-coinjure engine supervise --execute    # auto-apply recommendations
-
-# Deep validity analysis of a single strategy
-coinjure engine supervise --id <strategy_id> --json
+# Agent checks health and decides actions
+coinjure engine report --check-health --json
+coinjure engine pause --id <strategy_id> --json
+coinjure engine retire --id <strategy_id> --reason "spread collapsed" --json
 ```
 
 ## Bulk Operations

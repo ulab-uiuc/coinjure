@@ -10,7 +10,7 @@ Use this skill when the user asks to have the agent design and code a strategy.
 ## Goal
 
 - Produce a runnable strategy class (`Strategy` subclass)
-- Expose JSON-serializable constructor parameters (for `engine deploy` / `engine add`)
+- Expose JSON-serializable constructor parameters (for `engine add` / `engine add`)
 - Ensure `strategy validate` and `strategy backtest` can execute
 
 ## Code Entry Points
@@ -19,13 +19,12 @@ Use this skill when the user asks to have the agent design and code a strategy.
 - Existing strategy references:
   - `examples/strategies/direct_arb_strategy.py` — cross-platform two-leg arbitrage
   - `examples/strategies/event_sum_arb_strategy.py` — single-platform event-sum arbitrage
-  - `examples/strategies/multi_leg_arb_strategy.py` — multi-leg arbitrage
-  - `examples/strategies/spread_arb_strategy.py` — spread mean-reversion
+  - `examples/strategies/relation_spread_strategy.py` — relation-based spread trading
 - New strategy directory: `strategies/` or `examples/strategies/`
 
 ## Arbitrage Strategy Key Constraints
 
-Constructor must only accept JSON-serializable primitive types (str / float / int / bool) so it can be deployed via `engine deploy --strategy-kwargs-json` or `engine add --kwargs-json`:
+Constructor must only accept JSON-serializable primitive types (str / float / int / bool) so it can be deployed via `engine add --strategy-kwargs-json` or `engine add --kwargs-json`:
 
 ```python
 class MyArbStrategy(Strategy):

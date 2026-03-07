@@ -49,6 +49,7 @@ class RelationSpreadStrategy(Strategy):
         relation_id: str = '',
         trade_size: float = 10.0,
         hedge_ratio: float | None = None,
+        lead_lag: int | None = None,
         entry_mult: float = 2.0,
         exit_mult: float = 0.5,
         warmup: int = 200,
@@ -79,6 +80,14 @@ class RelationSpreadStrategy(Strategy):
             self._hedge_ratio = Decimal(str(self._relation.hedge_ratio))
         else:
             self._hedge_ratio = Decimal('1.0')
+
+        # Lead-lag: explicit > relation > 0 (no lag)
+        if lead_lag is not None:
+            self._lead_lag = lead_lag
+        elif self._relation and self._relation.lead_lag:
+            self._lead_lag = self._relation.lead_lag
+        else:
+            self._lead_lag = 0
 
         # Market identifiers
         if self._relation:
@@ -111,9 +120,15 @@ class RelationSpreadStrategy(Strategy):
         # Warmup buffer
         self._spread_buffer: deque[float] = deque(maxlen=warmup)
 
-        # Track latest prices for both legs
+        # Track latest prices for both legs.
+        # When lead_lag > 0 (A leads B), we buffer A's prices and compare
+        # A[t - lead_lag] with B[t].  When lead_lag < 0 (B leads A), we
+        # buffer B's prices and compare A[t] with B[t - |lead_lag|].
         self._price_a: Decimal | None = None
         self._price_b: Decimal | None = None
+        lag_buf_size = max(abs(self._lead_lag) + 1, 1)
+        self._price_a_buf: deque[Decimal] = deque(maxlen=lag_buf_size)
+        self._price_b_buf: deque[Decimal] = deque(maxlen=lag_buf_size)
 
         # Position state: 'flat', 'long_spread', 'short_spread'
         self._position_state = 'flat'
@@ -190,16 +205,35 @@ class RelationSpreadStrategy(Strategy):
         # Update price for the matching leg
         if self._matches_market(tid, self._id_a):
             self._price_a = event.price
+            self._price_a_buf.append(event.price)
         elif self._matches_market(tid, self._id_b):
             self._price_b = event.price
+            self._price_b_buf.append(event.price)
         else:
             return
 
-        # Need both prices to compute spread
-        if self._price_a is None or self._price_b is None:
+        # Resolve time-shifted prices for spread computation.
+        # lead_lag > 0: A leads B → use A[t - lag] vs B[t]
+        # lead_lag < 0: B leads A → use A[t] vs B[t - |lag|]
+        # lead_lag == 0: use A[t] vs B[t]
+        if self._lead_lag > 0:
+            if len(self._price_a_buf) < abs(self._lead_lag) + 1:
+                return  # not enough A history yet
+            price_a_shifted = self._price_a_buf[-(self._lead_lag + 1)]
+            price_b_shifted = self._price_b
+        elif self._lead_lag < 0:
+            if len(self._price_b_buf) < abs(self._lead_lag) + 1:
+                return  # not enough B history yet
+            price_a_shifted = self._price_a
+            price_b_shifted = self._price_b_buf[-(abs(self._lead_lag) + 1)]
+        else:
+            price_a_shifted = self._price_a
+            price_b_shifted = self._price_b
+
+        if price_a_shifted is None or price_b_shifted is None:
             return
 
-        actual_spread = self._price_a - self._hedge_ratio * self._price_b
+        actual_spread = price_a_shifted - self._hedge_ratio * price_b_shifted
         spread_f = float(actual_spread)
 
         # ── Warmup phase ──

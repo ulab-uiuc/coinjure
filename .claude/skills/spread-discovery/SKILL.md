@@ -17,8 +17,6 @@ coinjure market discover -q "crypto" --exchange polymarket --limit 30 --json
 ```
 
 Supports `--exchange polymarket|kalshi|both`. Kalshi searches via events API (bypasses SDK bug).
-Discovered pairs are persisted to `~/.coinjure/relations.json`.
-Detects three structural types: temporal/implication (same event, different deadlines), complementary (same event, outcomes sum to 1), same_event (cross-platform fuzzy match).
 
 2. Quantitative analysis of a single market or pair
 
@@ -26,25 +24,23 @@ Detects three structural types: temporal/implication (same event, different dead
 # Single market stats
 coinjure market analyze --exchange polymarket --market-id <id> --json
 
-# Pair analysis (correlation, cointegration, hedge ratio, half-life)
+# Pair analysis (correlation, cointegration, hedge ratio, half-life, lead-lag)
 coinjure market analyze --exchange polymarket --market-id <id_a> --compare <id_b> --json
 ```
 
-3. Manage discovered relations
+3. Manage relations (agent adds after analysis)
 
 ```bash
 coinjure market relations list --type same_event --json
-coinjure market relations show <relation_id> --json
-coinjure market relations strongest -n 10 --json
-coinjure market relations find <market_id> --json
-coinjure market relations validate <relation_id> --history-a a.jsonl --history-b b.jsonl --json
+coinjure market relations add --market-id-a <id_a> --market-id-b <id_b> --spread-type implication --json
 coinjure market relations remove <relation_id>
 ```
 
 ## Output
 
-- Each pair includes: market_a, market_b, spread_type, confidence, hypothesis, expected_spread, entry/exit_threshold
-- All results are persisted to `~/.coinjure/relations.json` for downstream backtesting and deployment
+- `market discover` returns raw market data for agent analysis (no auto-persist)
+- `market analyze --compare` returns quantitative stats (correlation, cointegration, hedge ratio, lead-lag, half-life)
+- Agent decides relation type and adds via `market relations add`; relations are persisted to `~/.coinjure/relations.json`
 
 ## Hard Rules
 

@@ -155,7 +155,7 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
 
 def test_example_strategy_files_validate() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    momentum = repo_root / 'examples' / 'strategies' / 'threshold_momentum_strategy.py'
+    direct_arb = repo_root / 'examples' / 'strategies' / 'direct_arb_strategy.py'
 
     runner = CliRunner()
     result1 = runner.invoke(
@@ -164,7 +164,9 @@ def test_example_strategy_files_validate() -> None:
             'strategy',
             'validate',
             '--strategy-ref',
-            f'{momentum}:ThresholdMomentumStrategy',
+            f'{direct_arb}:DirectArbStrategy',
+            '--strategy-kwargs-json',
+            '{"poly_market_id": "test"}',
             '--json',
         ],
     )

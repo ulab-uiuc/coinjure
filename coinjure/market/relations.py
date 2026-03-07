@@ -60,6 +60,10 @@ class ValidationResult:
     mean_spread: float | None = None
     std_spread: float | None = None
 
+    # Lead-lag
+    lead_lag: int | None = None  # positive = A leads B by N steps
+    lead_lag_corr: float | None = None  # cross-correlation at optimal lag
+
     validated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -88,6 +92,7 @@ class MarketRelation:
     # Quantitative hypothesis (set by analyze/discover)
     hypothesis: str = ''  # e.g. "p_A - p_B ≈ 0"
     hedge_ratio: float = 1.0  # β from OLS: p_A = α + β * p_B
+    lead_lag: int = 0  # positive = A leads B by N steps
 
     # Analysis results (set by market analyze)
     analysis_a: dict[str, Any] = field(default_factory=dict)
@@ -115,6 +120,8 @@ class MarketRelation:
         # Propagate hedge ratio (relatively stable across windows)
         if result.hedge_ratio is not None:
             self.hedge_ratio = result.hedge_ratio
+        if result.lead_lag is not None:
+            self.lead_lag = result.lead_lag
 
     def get_validation(self) -> ValidationResult | None:
         if not self.validation:

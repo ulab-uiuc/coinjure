@@ -63,7 +63,7 @@ Agent (Claude)
 CLI Layer (4 groups)
   coinjure market    — discover, analyze, relations, news
   coinjure strategy  — validate, backtest, batch, pipeline, gate
-  coinjure engine    — run, list, add, deploy, supervise, allocate, pipeline, hub-*
+  coinjure engine    — run, list, add, deploy, allocate, report, retire
   coinjure memory    — add, list, best, summary
      | reads/writes ~/.coinjure/
      | spawns subprocesses
@@ -156,7 +156,7 @@ Coinjure includes a spread trading system that discovers, validates, and manages
 1. **Market Discovery** (`market discover`) — multi-keyword search + structural pair detection (temporal implication, cross-platform match, complementary outcomes).
 2. **Quantitative Analysis** (`market analyze`) — single-market stats or pair analysis (correlation, cointegration, hedge ratio, half-life).
 3. **Relation Management** (`market relations`) — persistent graph of discovered pairs with lifecycle (active → validated → deployed → retired).
-4. **Live Maintenance** (`engine supervise`) — continuously validates running strategies.
+4. **Live Maintenance** (`engine report --check-health`) — agent checks status and takes action via pause/retire.
 
 ### Discover spread opportunities
 
@@ -176,23 +176,13 @@ coinjure market analyze --exchange polymarket --market-id <id_a> --compare <id_b
 
 ```bash
 coinjure market relations list --type same_event --json
-coinjure market relations show <relation_id> --json
-coinjure market relations strongest -n 10 --json
-coinjure market relations find <market_id> --json
-coinjure market relations validate <relation_id> --history-a data/a.jsonl --history-b data/b.jsonl --json
+coinjure market relations add --market-id-a <id_a> --market-id-b <id_b> --spread-type implication --json
 coinjure market relations remove <relation_id>
 ```
 
-### LLM supervision and capital allocation
+### Capital allocation
 
 ```bash
-# LLM reviews all active strategies, recommends hold/pause/retire
-coinjure engine supervise --json
-coinjure engine supervise --execute  # auto-apply recommendations
-
-# Deep validity analysis of a single strategy
-coinjure engine supervise --id my-strategy-001 --json
-
 # Capital allocation across strategies
 coinjure engine allocate --method kelly --max-exposure 10000 --json
 ```
@@ -205,12 +195,10 @@ Manage ~50 parallel strategy instances through a single registry:
 # Register a new strategy
 coinjure engine add \
   --strategy-id arb-nba-001 \
-  --strategy-ref examples/strategies/cross_platform_arb_strategy.py:CrossPlatformArbStrategy \
+  --strategy-ref examples/strategies/direct_arb_strategy.py:DirectArbStrategy \
   --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' --json
 
 # Deploy to paper trading
-coinjure engine deploy --strategy-id arb-nba-001 --json
-
 # Portfolio report with health diagnostics
 coinjure engine report --check-health --json
 
@@ -246,10 +234,7 @@ The operator should not need to manually place/cancel orders in normal operation
 | `market discover`            | Multi-keyword search + structural spread pair discovery            |
 | `market news`                | Fetch news headlines                                               |
 | `market relations list`      | List stored market relations                                       |
-| `market relations show`      | Show details of a relation                                         |
-| `market relations find`      | Find all relations involving a specific market                     |
-| `market relations strongest` | Show top N relations by confidence                                 |
-| `market relations validate`  | Quantitatively validate a relation (cointegration, ADF, half-life) |
+| `market relations add`       | Create a relation between two markets                              |
 | `market relations remove`    | Remove a relation                                                  |
 
 ### `coinjure strategy` — Strategy development and testing
@@ -272,16 +257,18 @@ The operator should not need to manually place/cancel orders in normal operation
 | `engine stop`       | Graceful shutdown (`--all` for all instances)                      |
 | `engine swap`       | Hot-swap strategy without restarting                               |
 | `engine retire`     | Stop and mark as retired (`--all` for all instances)               |
-| `engine deploy`     | Scan and batch-deploy strategies (`--mode cross-platform\|events`) |
 | `engine report`     | Portfolio PnL report (`--check-health` for diagnostics)            |
 | `engine feedback`   | Record feedback on a strategy                                      |
 | `engine monitor`    | Attach Textual TUI to a running engine                             |
 | `engine killswitch` | Toggle the global kill-switch                                      |
-| `engine supervise`  | LLM review (`--id` for single, omit for all strategies)            |
 | `engine allocate`   | Capital allocation across strategies                               |
-| `engine hub-start`  | Start the shared Market Data Hub                                   |
-| `engine hub-status` | Show hub status                                                    |
-| `engine hub-stop`   | Stop the hub                                                       |
+### `coinjure hub` — Shared Market Data Hub
+
+| Command      | Description                                |
+| ------------ | ------------------------------------------ |
+| `hub start`  | Start the shared Market Data Hub           |
+| `hub status` | Show hub status                            |
+| `hub stop`   | Stop the hub                               |
 
 ### `coinjure memory` — Experiment memory
 
