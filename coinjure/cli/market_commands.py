@@ -325,6 +325,15 @@ def market() -> None:
 @click.option(
     '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
 )
+@click.option(
+    '--relation-type',
+    type=click.Choice([
+        'same_event', 'complementary', 'implication', 'exclusivity',
+        'temporal', 'semantic', 'conditional',
+    ]),
+    default=None,
+    help='Relation type — determines analysis method (structural vs cointegration).',
+)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 def market_analyze(
     market_id: str,
@@ -333,15 +342,23 @@ def market_analyze(
     interval: str,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
+    relation_type: str | None,
     as_json: bool,
 ) -> None:
     """Quantitative analysis of a market or pair of markets.
 
-    Single market: returns market info + price series statistics (volatility,
-    trend, bid-ask spread).
+    Single market: returns market info + price series statistics.
 
-    With --compare: returns pair statistics — correlation, cointegration (ADF,
-    Engle-Granger), hedge ratio, half-life, spread mean/std.
+    With --compare: runs pair analysis. The method depends on --relation-type:
+
+    \b
+      structural (same_event/implication/complementary/exclusivity):
+        checks pricing constraint violations (A≤B, A+B≤1)
+      cointegration (temporal/semantic/conditional):
+        ADF, Engle-Granger, hedge ratio, half-life
+      unspecified: defaults to cointegration analysis
+
+    Lead-lag detection runs for all types.
     """
     import math
 
@@ -426,8 +443,8 @@ def market_analyze(
     prices_b = [float(p['p']) for p in hist_b.get('series', []) if 'p' in p]
     stats_b = _compute_series_stats(prices_b, info_b)
 
-    # Pair quantitative analysis
-    pair_stats = _compute_pair_stats(prices_a, prices_b)
+    # Pair quantitative analysis (method depends on relation type)
+    pair_stats = _compute_pair_stats(prices_a, prices_b, relation_type=relation_type)
 
     result = {
         'ok': True,
@@ -467,123 +484,108 @@ def market_analyze(
         else:
             click.echo(f'  {key}: {val}')
     click.echo()
-    for key, val in pair_stats.items():
-        if isinstance(val, float):
-            if math.isnan(val):
-                click.echo(f'  {key}: NaN')
-            else:
-                click.echo(f'  {key}: {val:.6f}')
+
+
+def _compute_pair_stats(
+    prices_a: list[float],
+    prices_b: list[float],
+    relation_type: str | None = None,
+) -> dict[str, Any]:
+    """Compute pair statistics using the appropriate method for the relation type.
+
+    - same_event / implication: structural constraint (A ≤ B)
+    - complementary / exclusivity: structural constraint (A + B ≤ 1)
+    - temporal / semantic / conditional: cointegration + ADF + half-life
+    - None (unspecified): runs cointegration (backward compat)
+    - All types also check lead-lag
+    """
+    n = min(len(prices_a), len(prices_b))
+    if n < 5:
+        return {
+            'error': 'insufficient_data',
+            'points_a': len(prices_a),
+            'points_b': len(prices_b),
+        }
+
+    a = prices_a[-n:]
+    b = prices_b[-n:]
+
+    # Basic stats (always computed, no deps)
+    mean_a = sum(a) / n
+    mean_b = sum(b) / n
+    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n)) / n
+    std_a = (sum((x - mean_a) ** 2 for x in a) / n) ** 0.5
+    std_b = (sum((x - mean_b) ** 2 for x in b) / n) ** 0.5
+    correlation = cov / (std_a * std_b) if std_a > 0 and std_b > 0 else 0.0
+
+    spread = [a[i] - b[i] for i in range(n)]
+    mean_spread = sum(spread) / n
+    std_spread = (sum((s - mean_spread) ** 2 for s in spread) / n) ** 0.5
+
+    result: dict[str, Any] = {
+        'aligned_points': n,
+        'correlation': correlation,
+        'mean_spread': mean_spread,
+        'std_spread': std_spread,
+        'current_spread': spread[-1] if spread else None,
+        'spread_zscore': (spread[-1] - mean_spread) / std_spread
+        if std_spread > 0
+        else 0.0,
+    }
+
+    # Type-dispatched validation
+    try:
+        from coinjure.market.validation import (
+            validate_by_type,
+            validate_cointegration,
+            validate_lead_lag,
+        )
+
+        if relation_type:
+            vr = validate_by_type(a, b, relation_type)
         else:
-            click.echo(f'  {key}: {val}')
-    click.echo()
+            vr = validate_cointegration(a, b)
 
+        # Structural fields
+        if vr.analysis_type == 'structural':
+            result.update(
+                {
+                    'analysis_type': 'structural',
+                    'constraint': vr.constraint,
+                    'constraint_holds': vr.constraint_holds,
+                    'violation_count': vr.violation_count,
+                    'violation_rate': vr.violation_rate,
+                    'current_arb': vr.current_arb,
+                    'mean_arb': vr.mean_arb,
+                }
+            )
+        else:
+            # Cointegration fields
+            result.update(
+                {
+                    'analysis_type': 'cointegration',
+                    'hedge_ratio': vr.hedge_ratio,
+                    'adf_statistic': vr.adf_statistic,
+                    'adf_pvalue': vr.adf_pvalue,
+                    'is_stationary': vr.is_stationary,
+                    'coint_statistic': vr.coint_statistic,
+                    'coint_pvalue': vr.coint_pvalue,
+                    'is_cointegrated': vr.is_cointegrated,
+                    'half_life': vr.half_life,
+                }
+            )
 
-def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
-    """Compute single-series statistics (no external deps beyond stdlib)."""
-    if not prices:
-        return {'error': 'no_price_data'}
-
-    n = len(prices)
-    mean_price = sum(prices) / n
-    variance = sum((p - mean_price) ** 2 for p in prices) / n if n > 1 else 0.0
-    std_price = variance**0.5
-
-    # Returns (log-returns proxy via differences)
-    returns = [prices[i] - prices[i - 1] for i in range(1, n)]
-    mean_return = sum(returns) / len(returns) if returns else 0.0
-    vol = (
-        (sum((r - mean_return) ** 2 for r in returns) / len(returns)) ** 0.5
-        if returns
-        else 0.0
-    )
-
-    # Bid-ask spread
-    bid_raw = info.get('best_bid')
-    ask_raw = info.get('best_ask')
-    try:
-        bid = float(bid_raw) if bid_raw not in (None, '') else None
-    except (ValueError, TypeError):
-        bid = None
-    try:
-        ask = float(ask_raw) if ask_raw not in (None, '') else None
-    except (ValueError, TypeError):
-        ask = None
-    ba_spread = ask - bid if bid is not None and ask is not None else None
-
-    # Trend: first vs last price
-    trend = prices[-1] - prices[0] if n >= 2 else 0.0
-
-    result: dict[str, Any] = {
-        'mean_price': mean_price,
-        'std_price': std_price,
-        'volatility': vol,
-        'min_price': min(prices),
-        'max_price': max(prices),
-        'last_price': prices[-1],
-        'trend': trend,
-        'bid_ask_spread': ba_spread,
-    }
-    return result
-
-
-def _compute_pair_stats(prices_a: list[float], prices_b: list[float]) -> dict[str, Any]:
-    """Compute pair statistics: correlation, cointegration, spread, half-life."""
-    import math
-
-    n = min(len(prices_a), len(prices_b))
-    if n < 5:
-        return {
-            'error': 'insufficient_data',
-            'points_a': len(prices_a),
-            'points_b': len(prices_b),
-        }
-
-    a = prices_a[-n:]
-    b = prices_b[-n:]
-
-    # Simple correlation (stdlib, no numpy needed)
-    mean_a = sum(a) / n
-    mean_b = sum(b) / n
-    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n)) / n
-    std_a = (sum((x - mean_a) ** 2 for x in a) / n) ** 0.5
-    std_b = (sum((x - mean_b) ** 2 for x in b) / n) ** 0.5
-    correlation = cov / (std_a * std_b) if std_a > 0 and std_b > 0 else 0.0
-
-    # Spread stats (simple, hedge_ratio=1)
-    spread = [a[i] - b[i] for i in range(n)]
-    mean_spread = sum(spread) / n
-    std_spread = (sum((s - mean_spread) ** 2 for s in spread) / n) ** 0.5
-
-    result: dict[str, Any] = {
-        'aligned_points': n,
-        'correlation': correlation,
-        'mean_spread': mean_spread,
-        'std_spread': std_spread,
-        'current_spread': spread[-1] if spread else None,
-        'spread_zscore': (spread[-1] - mean_spread) / std_spread
-        if std_spread > 0
-        else 0.0,
-    }
-
-    # Try advanced stats if statsmodels available
-    try:
-        from coinjure.market.validation import validate_relation
-
-        vr = validate_relation(a, b)
+        # Always add lead-lag (supplementary for all types)
+        ll = validate_lead_lag(a, b)
         result.update(
             {
-                'hedge_ratio': vr.hedge_ratio,
-                'adf_statistic': vr.adf_statistic,
-                'adf_pvalue': vr.adf_pvalue,
-                'is_stationary': vr.is_stationary,
-                'coint_statistic': vr.coint_statistic,
-                'coint_pvalue': vr.coint_pvalue,
-                'is_cointegrated': vr.is_cointegrated,
-                'half_life': vr.half_life,
+                'lead_lag': ll.lead_lag,
+                'lead_lag_corr': ll.lead_lag_corr,
+                'lead_lag_significant': ll.lead_lag_significant,
             }
         )
     except (ImportError, Exception):
-        result['note'] = 'install statsmodels+scipy for cointegration/ADF tests'
+        result['note'] = 'install statsmodels+scipy for advanced analysis'
 
     return result
 
@@ -598,7 +600,6 @@ def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
     variance = sum((p - mean_price) ** 2 for p in prices) / n if n > 1 else 0.0
     std_price = variance**0.5
 
-    # Returns (log-returns proxy via differences)
     returns = [prices[i] - prices[i - 1] for i in range(1, n)]
     mean_return = sum(returns) / len(returns) if returns else 0.0
     vol = (
@@ -607,7 +608,6 @@ def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
         else 0.0
     )
 
-    # Bid-ask spread
     bid_raw = info.get('best_bid')
     ask_raw = info.get('best_ask')
     try:
@@ -620,10 +620,9 @@ def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
         ask = None
     ba_spread = ask - bid if bid is not None and ask is not None else None
 
-    # Trend: first vs last price
     trend = prices[-1] - prices[0] if n >= 2 else 0.0
 
-    result: dict[str, Any] = {
+    return {
         'mean_price': mean_price,
         'std_price': std_price,
         'volatility': vol,
@@ -633,71 +632,6 @@ def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
         'trend': trend,
         'bid_ask_spread': ba_spread,
     }
-    return result
-
-
-def _compute_pair_stats(prices_a: list[float], prices_b: list[float]) -> dict[str, Any]:
-    """Compute pair statistics: correlation, cointegration, spread, half-life."""
-    import math
-
-    n = min(len(prices_a), len(prices_b))
-    if n < 5:
-        return {
-            'error': 'insufficient_data',
-            'points_a': len(prices_a),
-            'points_b': len(prices_b),
-        }
-
-    a = prices_a[-n:]
-    b = prices_b[-n:]
-
-    # Simple correlation (stdlib, no numpy needed)
-    mean_a = sum(a) / n
-    mean_b = sum(b) / n
-    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n)) / n
-    std_a = (sum((x - mean_a) ** 2 for x in a) / n) ** 0.5
-    std_b = (sum((x - mean_b) ** 2 for x in b) / n) ** 0.5
-    correlation = cov / (std_a * std_b) if std_a > 0 and std_b > 0 else 0.0
-
-    # Spread stats (simple, hedge_ratio=1)
-    spread = [a[i] - b[i] for i in range(n)]
-    mean_spread = sum(spread) / n
-    std_spread = (sum((s - mean_spread) ** 2 for s in spread) / n) ** 0.5
-
-    result: dict[str, Any] = {
-        'aligned_points': n,
-        'correlation': correlation,
-        'mean_spread': mean_spread,
-        'std_spread': std_spread,
-        'current_spread': spread[-1] if spread else None,
-        'spread_zscore': (spread[-1] - mean_spread) / std_spread
-        if std_spread > 0
-        else 0.0,
-    }
-
-    # Try advanced stats if statsmodels available
-    try:
-        from coinjure.market.validation import validate_relation
-
-        vr = validate_relation(a, b)
-        result.update(
-            {
-                'hedge_ratio': vr.hedge_ratio,
-                'adf_statistic': vr.adf_statistic,
-                'adf_pvalue': vr.adf_pvalue,
-                'is_stationary': vr.is_stationary,
-                'coint_statistic': vr.coint_statistic,
-                'coint_pvalue': vr.coint_pvalue,
-                'is_cointegrated': vr.is_cointegrated,
-                'half_life': vr.half_life,
-                'lead_lag': vr.lead_lag,
-                'lead_lag_corr': vr.lead_lag_corr,
-            }
-        )
-    except (ImportError, Exception):
-        result['note'] = 'install statsmodels+scipy for cointegration/ADF tests'
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -808,10 +742,6 @@ def relations_add(
     click.echo(f'  type={spread_type} hypothesis={hypothesis}')
     click.echo()
 
-    store = RelationStore()
-    rel = store.get(relation_id)
-    if rel is None:
-        raise click.ClickException(f'Relation not found: {relation_id}')
 
 @market_relations_group.command('list')
 @click.option('--type', 'spread_type', default=None, help='Filter by spread type.')
@@ -820,7 +750,6 @@ def relations_add(
     default=None,
     help='Filter by status (active, deployed, invalidated, retired).',
 )
-@click.option('--significance', default=0.05, help='Statistical significance level.')
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 def relations_list(
     spread_type: str | None,
@@ -878,13 +807,122 @@ def relations_remove(relation_id: str) -> None:
         raise click.ClickException(f'Relation not found: {relation_id}')
 
 
+@market_relations_group.command('validate')
+@click.argument('relation_id')
+@click.option(
+    '--interval',
+    type=click.Choice(['1h', '6h', '1d', 'max']),
+    default='max',
+    show_default=True,
+    help='Price history interval.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
+def relations_validate(relation_id: str, interval: str, as_json: bool) -> None:
+    """Validate a relation with type-specific quantitative analysis.
+
+    Fetches price history for both legs and runs the appropriate validation
+    based on the relation's spread_type.
+    """
+    from coinjure.market.relations import RelationStore, ValidationResult
+
+    store = RelationStore()
+    rel = store.get(relation_id)
+    if rel is None:
+        raise click.ClickException(f'Relation not found: {relation_id}')
+
+    platform_a = rel.market_a.get('platform', 'polymarket')
+    platform_b = rel.market_b.get('platform', 'polymarket')
+    mid_a = rel.market_a.get('id', '')
+    mid_b = rel.market_b.get('id', '')
+
+    if not mid_a or not mid_b:
+        raise click.ClickException('Relation is missing market IDs')
+
+    # Fetch price history
+    try:
+        if platform_a == 'polymarket':
+            hist_a = asyncio.run(_polymarket_price_history(mid_a, interval, None))
+        else:
+            hist_a = {'series': []}
+        if platform_b == 'polymarket':
+            hist_b = asyncio.run(_polymarket_price_history(mid_b, interval, None))
+        else:
+            hist_b = {'series': []}
+    except Exception as exc:
+        raise click.ClickException(f'Failed to fetch price history: {exc}') from exc
+
+    prices_a = [float(p['p']) for p in hist_a.get('series', []) if 'p' in p]
+    prices_b = [float(p['p']) for p in hist_b.get('series', []) if 'p' in p]
+
+    if len(prices_a) < 5 or len(prices_b) < 5:
+        raise click.ClickException(
+            f'Insufficient price data: A={len(prices_a)}, B={len(prices_b)}'
+        )
+
+    # Run type-dispatched analysis
+    pair_stats = _compute_pair_stats(prices_a, prices_b, relation_type=rel.spread_type)
+
+    # Build ValidationResult from pair_stats
+    vr = ValidationResult(
+        analysis_type=pair_stats.get('analysis_type'),
+        constraint=pair_stats.get('constraint'),
+        constraint_holds=pair_stats.get('constraint_holds'),
+        violation_count=pair_stats.get('violation_count'),
+        violation_rate=pair_stats.get('violation_rate'),
+        current_arb=pair_stats.get('current_arb'),
+        mean_arb=pair_stats.get('mean_arb'),
+        adf_statistic=pair_stats.get('adf_statistic'),
+        adf_pvalue=pair_stats.get('adf_pvalue'),
+        is_stationary=pair_stats.get('is_stationary'),
+        coint_statistic=pair_stats.get('coint_statistic'),
+        coint_pvalue=pair_stats.get('coint_pvalue'),
+        is_cointegrated=pair_stats.get('is_cointegrated'),
+        half_life=pair_stats.get('half_life'),
+        hedge_ratio=pair_stats.get('hedge_ratio'),
+        correlation=pair_stats.get('correlation'),
+        mean_spread=pair_stats.get('mean_spread'),
+        std_spread=pair_stats.get('std_spread'),
+        lead_lag=pair_stats.get('lead_lag'),
+        lead_lag_corr=pair_stats.get('lead_lag_corr'),
+        lead_lag_significant=pair_stats.get('lead_lag_significant'),
+    )
+
+    rel.set_validation(vr)
+    store.update(rel)
+
+    if as_json:
+        click.echo(
+            json.dumps(
+                {
+                    'ok': True,
+                    'relation_id': relation_id,
+                    'status': rel.status,
+                    'validation': rel.validation,
+                },
+                default=str,
+            )
+        )
+        return
+
+    click.echo(f'\nValidated relation: {relation_id}')
+    click.echo(f'  Status: {rel.status}')
+    click.echo(f'  Analysis type: {vr.analysis_type}')
+    if vr.analysis_type == 'structural':
+        click.echo(f'  Constraint: {vr.constraint}')
+        click.echo(f'  Holds: {vr.constraint_holds}')
+        click.echo(f'  Violations: {vr.violation_count} ({(vr.violation_rate or 0)*100:.1f}%)')
+    else:
+        click.echo(f'  Cointegrated: {vr.is_cointegrated}')
+        click.echo(f'  ADF p-value: {vr.adf_pvalue}')
+        click.echo(f'  Half-life: {vr.half_life}')
+    if vr.lead_lag_significant:
+        click.echo(f'  Lead-lag: {vr.lead_lag} (corr={vr.lead_lag_corr:.3f})')
+    click.echo()
+
+
 # ---------------------------------------------------------------------------
 # market discover (multi-keyword search + structural pair detection)
 # ---------------------------------------------------------------------------
-
-    path = pathlib.Path(history_file)
-    if not path.exists():
-        raise click.ClickException(f'File not found: {history_file}')
 
 
 @market.command('discover')

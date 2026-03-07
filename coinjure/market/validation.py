@@ -297,24 +297,137 @@ def detect_lead_lag(
     return best_lag, best_corr
 
 
-# ── Full Validation Pipeline ─────────────────────────────────────────────
+# ── Structural Constraint Validation ───────────────────────────────────
 
 
-def validate_relation(
+def _check_constraint(
+    a: list[float], b: list[float], constraint: str
+) -> tuple[int, list[float], float]:
+    """Check a single constraint, return (violation_count, violation_sizes, current_arb)."""
+    violations: list[float] = []
+    for i in range(len(a)):
+        if constraint == 'A <= B':
+            if a[i] > b[i]:
+                violations.append(a[i] - b[i])
+        elif constraint == 'A >= B':
+            if a[i] < b[i]:
+                violations.append(b[i] - a[i])
+        elif constraint == 'A + B <= 1':
+            total = a[i] + b[i]
+            if total > 1.0:
+                violations.append(total - 1.0)
+
+    if constraint == 'A <= B':
+        current_arb = max(a[-1] - b[-1], 0.0)
+    elif constraint == 'A >= B':
+        current_arb = max(b[-1] - a[-1], 0.0)
+    elif constraint == 'A + B <= 1':
+        current_arb = max(a[-1] + b[-1] - 1.0, 0.0)
+    else:
+        current_arb = 0.0
+
+    return len(violations), violations, current_arb
+
+
+def validate_structural(
+    prices_a: Sequence[float],
+    prices_b: Sequence[float],
+    constraint: str = 'A <= B',
+) -> ValidationResult:
+    """Validate a structural pricing constraint between two markets.
+
+    Constraint types:
+      'A <= B'     — implication / nested timeframe (A implies B, so A ≤ B)
+      'A >= B'     — reverse implication
+      'A + B <= 1' — exclusivity (A and B cannot both be true)
+      'auto'       — tries A<=B and A>=B, picks the one with fewer violations
+
+    Reports violation frequency, current arb size, and mean arb when violated.
+    """
+    a = list(prices_a)
+    b = list(prices_b)
+    n = min(len(a), len(b))
+    a, b = a[:n], b[:n]
+
+    if n < 2:
+        return ValidationResult(analysis_type='structural', constraint=constraint)
+
+    # Auto-detect constraint direction for implication
+    if constraint == 'auto':
+        v_le, _, _ = _check_constraint(a, b, 'A <= B')
+        v_ge, _, _ = _check_constraint(a, b, 'A >= B')
+        constraint = 'A <= B' if v_le <= v_ge else 'A >= B'
+
+    violation_count, violations, current_arb = _check_constraint(a, b, constraint)
+    violation_rate = violation_count / n
+    mean_arb = sum(violations) / len(violations) if violations else 0.0
+
+    corr = pearson_correlation(a, b) if n >= 5 else None
+    mean_spread = sum(ai - bi for ai, bi in zip(a, b)) / n
+    std_spread = (
+        sum((ai - bi - mean_spread) ** 2 for ai, bi in zip(a, b)) / n
+    ) ** 0.5
+
+    return ValidationResult(
+        analysis_type='structural',
+        constraint=constraint,
+        constraint_holds=violation_count == 0,
+        violation_count=violation_count,
+        violation_rate=violation_rate,
+        current_arb=current_arb,
+        mean_arb=mean_arb,
+        correlation=corr,
+        mean_spread=mean_spread,
+        std_spread=std_spread,
+    )
+
+
+# ── Lead-Lag Validation ───────────────────────────────────────────────
+
+
+def validate_lead_lag(
+    prices_a: Sequence[float],
+    prices_b: Sequence[float],
+    min_corr: float = 0.3,
+) -> ValidationResult:
+    """Validate whether A significantly leads or lags B.
+
+    A lead-lag relationship is significant if |cross-correlation| > min_corr
+    at a non-zero lag.
+    """
+    a = list(prices_a)
+    b = list(prices_b)
+    n = min(len(a), len(b))
+    a, b = a[:n], b[:n]
+
+    if n < 15:
+        return ValidationResult(analysis_type='lead_lag')
+
+    lag, lag_corr = detect_lead_lag(a, b)
+    corr = pearson_correlation(a, b) if n >= 5 else None
+    significant = lag != 0 and abs(lag_corr) > min_corr
+
+    return ValidationResult(
+        analysis_type='lead_lag',
+        lead_lag=lag if lag != 0 else None,
+        lead_lag_corr=lag_corr if lag != 0 else None,
+        lead_lag_significant=significant,
+        correlation=corr,
+    )
+
+
+# ── Cointegration Validation (existing, renamed) ─────────────────────
+
+
+def validate_cointegration(
     prices_a: Sequence[float],
     prices_b: Sequence[float],
     significance: float = 0.05,
 ) -> ValidationResult:
-    """Run the full validation pipeline on a pair of price series.
+    """Validate spread mean-reversion via cointegration and stationarity tests.
 
-    1. Estimate hedge ratio via OLS
-    2. Compute spread
-    3. Test spread stationarity (ADF)
-    4. Test cointegration (Engle-Granger)
-    5. Estimate half-life
-    6. Compute correlation
-
-    Returns a ValidationResult with all fields populated.
+    For temporal/semantic/conditional relations where no structural constraint
+    exists — the spread must be statistically mean-reverting.
     """
     import numpy as np
 
@@ -325,35 +438,22 @@ def validate_relation(
 
     if n < 30:
         logger.warning('Validation: insufficient data (%d < 30 points)', n)
-        return ValidationResult()
+        return ValidationResult(analysis_type='cointegration')
 
-    # Hedge ratio
     hedge = estimate_hedge_ratio(a, b)
-
-    # Spread
     spread = compute_spread(a, b, hedge_ratio=hedge)
-
-    # ADF on spread
     adf_stat, adf_p, is_stationary = adf_test(spread, significance)
-
-    # Cointegration
     coint_stat, coint_p, is_coint = engle_granger_test(a, b, significance)
-
-    # Half-life
     hl = estimate_half_life(spread)
-
-    # Correlation
     corr = pearson_correlation(a, b)
-
-    # Lead-lag
     lag, lag_corr = detect_lead_lag(a, b)
 
-    # Spread stats
     spread_arr = np.array(spread, dtype=float)
     mean_s = float(np.nanmean(spread_arr))
     std_s = float(np.nanstd(spread_arr))
 
     return ValidationResult(
+        analysis_type='cointegration',
         adf_statistic=adf_stat,
         adf_pvalue=adf_p,
         is_stationary=is_stationary,
@@ -368,3 +468,44 @@ def validate_relation(
         lead_lag=lag if lag != 0 else None,
         lead_lag_corr=lag_corr if lag != 0 else None,
     )
+
+
+# ── Backward compat alias ────────────────────────────────────────────
+
+validate_relation = validate_cointegration
+
+
+# ── Type-Dispatched Validation ────────────────────────────────────────
+
+# Maps spread_type -> (validation function, constraint if structural)
+_STRUCTURAL_TYPES: dict[str, str] = {
+    'same_event': 'A <= B',
+    'implication': 'auto',  # auto-detect A<=B or A>=B
+    'complementary': 'A + B <= 1',
+    'exclusivity': 'A + B <= 1',
+}
+
+_COINTEGRATION_TYPES = {'temporal', 'semantic', 'conditional', 'structural', 'correlated'}
+
+
+def validate_by_type(
+    prices_a: Sequence[float],
+    prices_b: Sequence[float],
+    spread_type: str,
+    significance: float = 0.05,
+) -> ValidationResult:
+    """Run the appropriate validation based on relation type.
+
+    - same_event / implication: structural constraint (A ≤ B)
+    - complementary / exclusivity: structural constraint (A + B ≤ 1)
+    - temporal / semantic / conditional: cointegration + ADF
+    - Any type: also checks lead-lag as supplementary signal
+    """
+    if spread_type in _STRUCTURAL_TYPES:
+        return validate_structural(prices_a, prices_b, _STRUCTURAL_TYPES[spread_type])
+
+    if spread_type in _COINTEGRATION_TYPES:
+        return validate_cointegration(prices_a, prices_b, significance)
+
+    # Unknown type — run cointegration as default
+    return validate_cointegration(prices_a, prices_b, significance)
