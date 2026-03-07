@@ -155,7 +155,7 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
 
 def test_example_strategy_files_validate() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    direct_arb = repo_root / 'examples' / 'strategies' / 'direct_arb_strategy.py'
+    direct_arb = repo_root / 'coinjure' / 'strategy' / 'builtin' / 'direct_arb_strategy.py'
 
     runner = CliRunner()
     result1 = runner.invoke(

@@ -195,7 +195,7 @@ Manage ~50 parallel strategy instances through a single registry:
 # Register a new strategy
 coinjure engine add \
   --strategy-id arb-nba-001 \
-  --strategy-ref examples/strategies/direct_arb_strategy.py:DirectArbStrategy \
+  --strategy-ref coinjure/strategy/builtin/direct_arb_strategy.py:DirectArbStrategy \
   --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' --json
 
 # Deploy to paper trading
