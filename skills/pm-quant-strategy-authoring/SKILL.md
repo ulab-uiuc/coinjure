@@ -19,8 +19,7 @@ Use this skill when the user asks to have the agent design and code a strategy.
 - Existing strategy references:
   - `examples/strategies/direct_arb_strategy.py` — cross-platform two-leg arbitrage
   - `examples/strategies/event_sum_arb_strategy.py` — single-platform event-sum arbitrage
-  - `examples/strategies/multi_leg_arb_strategy.py` — multi-leg arbitrage
-  - `examples/strategies/spread_arb_strategy.py` — spread mean-reversion
+  - `examples/strategies/relation_spread_strategy.py` — relation-based spread trading
 - New strategy directory: `strategies/` or `examples/strategies/`
 
 ## Arbitrage Strategy Key Constraints

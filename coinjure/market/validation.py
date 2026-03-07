@@ -241,6 +241,62 @@ def pearson_correlation(
     return float(corr)
 
 
+# ── Lead-Lag Detection ──────────────────────────────────────────────────
+
+
+def detect_lead_lag(
+    prices_a: Sequence[float],
+    prices_b: Sequence[float],
+    max_lag: int = 10,
+) -> tuple[int, float]:
+    """Detect lead-lag via cross-correlation on returns.
+
+    Computes corr(returns_a[t], returns_b[t+k]) for k in [-max_lag, max_lag].
+    Positive result means A leads B by that many steps.
+
+    Returns (optimal_lag, correlation_at_optimal_lag).
+    """
+    import numpy as np
+
+    a = np.array(prices_a, dtype=float)
+    b = np.array(prices_b, dtype=float)
+    n = min(len(a), len(b))
+    if n < max_lag + 5:
+        return 0, 0.0
+
+    a, b = a[:n], b[:n]
+    ra = np.diff(a)
+    rb = np.diff(b)
+
+    best_lag = 0
+    best_corr = 0.0
+
+    for lag in range(-max_lag, max_lag + 1):
+        if lag >= 0:
+            x = ra[:len(ra) - lag] if lag > 0 else ra
+            y = rb[lag:] if lag > 0 else rb
+        else:
+            x = ra[-lag:]
+            y = rb[:len(rb) + lag]
+
+        overlap = min(len(x), len(y))
+        if overlap < 5:
+            continue
+        x, y = x[:overlap], y[:overlap]
+
+        std_x = np.std(x)
+        std_y = np.std(y)
+        if std_x < 1e-12 or std_y < 1e-12:
+            continue
+
+        corr = float(np.corrcoef(x, y)[0, 1])
+        if abs(corr) > abs(best_corr):
+            best_corr = corr
+            best_lag = lag
+
+    return best_lag, best_corr
+
+
 # ── Full Validation Pipeline ─────────────────────────────────────────────
 
 
@@ -289,6 +345,9 @@ def validate_relation(
     # Correlation
     corr = pearson_correlation(a, b)
 
+    # Lead-lag
+    lag, lag_corr = detect_lead_lag(a, b)
+
     # Spread stats
     spread_arr = np.array(spread, dtype=float)
     mean_s = float(np.nanmean(spread_arr))
@@ -306,4 +365,6 @@ def validate_relation(
         correlation=corr,
         mean_spread=mean_s,
         std_spread=std_s,
+        lead_lag=lag if lag != 0 else None,
+        lead_lag_corr=lag_corr if lag != 0 else None,
     )

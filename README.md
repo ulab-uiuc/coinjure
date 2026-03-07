@@ -176,10 +176,7 @@ coinjure market analyze --exchange polymarket --market-id <id_a> --compare <id_b
 
 ```bash
 coinjure market relations list --type same_event --json
-coinjure market relations show <relation_id> --json
-coinjure market relations strongest -n 10 --json
-coinjure market relations find <market_id> --json
-coinjure market relations validate <relation_id> --history-a data/a.jsonl --history-b data/b.jsonl --json
+coinjure market relations add --market-id-a <id_a> --market-id-b <id_b> --spread-type implication --json
 coinjure market relations remove <relation_id>
 ```
 
@@ -205,7 +202,7 @@ Manage ~50 parallel strategy instances through a single registry:
 # Register a new strategy
 coinjure engine add \
   --strategy-id arb-nba-001 \
-  --strategy-ref examples/strategies/cross_platform_arb_strategy.py:CrossPlatformArbStrategy \
+  --strategy-ref examples/strategies/direct_arb_strategy.py:DirectArbStrategy \
   --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' --json
 
 # Deploy to paper trading
@@ -246,10 +243,7 @@ The operator should not need to manually place/cancel orders in normal operation
 | `market discover`            | Multi-keyword search + structural spread pair discovery            |
 | `market news`                | Fetch news headlines                                               |
 | `market relations list`      | List stored market relations                                       |
-| `market relations show`      | Show details of a relation                                         |
-| `market relations find`      | Find all relations involving a specific market                     |
-| `market relations strongest` | Show top N relations by confidence                                 |
-| `market relations validate`  | Quantitatively validate a relation (cointegration, ADF, half-life) |
+| `market relations add`       | Create a relation between two markets                              |
 | `market relations remove`    | Remove a relation                                                  |
 
 ### `coinjure strategy` — Strategy development and testing
@@ -279,9 +273,13 @@ The operator should not need to manually place/cancel orders in normal operation
 | `engine killswitch` | Toggle the global kill-switch                                      |
 | `engine supervise`  | LLM review (`--id` for single, omit for all strategies)            |
 | `engine allocate`   | Capital allocation across strategies                               |
-| `engine hub-start`  | Start the shared Market Data Hub                                   |
-| `engine hub-status` | Show hub status                                                    |
-| `engine hub-stop`   | Stop the hub                                                       |
+### `coinjure hub` — Shared Market Data Hub
+
+| Command      | Description                                |
+| ------------ | ------------------------------------------ |
+| `hub start`  | Start the shared Market Data Hub           |
+| `hub status` | Show hub status                            |
+| `hub stop`   | Stop the hub                               |
 
 ### `coinjure memory` — Experiment memory
 

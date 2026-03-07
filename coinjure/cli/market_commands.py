@@ -571,6 +571,8 @@ def _compute_pair_stats(prices_a: list[float], prices_b: list[float]) -> dict[st
                 'coint_pvalue': vr.coint_pvalue,
                 'is_cointegrated': vr.is_cointegrated,
                 'half_life': vr.half_life,
+                'lead_lag': vr.lead_lag,
+                'lead_lag_corr': vr.lead_lag_corr,
             }
         )
     except (ImportError, Exception):
@@ -739,36 +741,6 @@ def relations_list(
         click.echo()
 
 
-@market_relations_group.command('show')
-@click.argument('relation_id')
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
-def relations_show(relation_id: str, as_json: bool) -> None:
-    """Show details of a specific relation."""
-    from coinjure.market.relations import RelationStore
-
-    store = RelationStore()
-    rel = store.get(relation_id)
-    if rel is None:
-        raise click.ClickException(f'Relation not found: {relation_id}')
-
-    if as_json:
-        click.echo(json.dumps({'ok': True, 'relation': rel.to_dict()}, default=str))
-        return
-
-    d = rel.to_dict()
-    click.echo(f'\nRelation: {rel.relation_id}')
-    click.echo('=' * 60)
-    for key, val in d.items():
-        if key in ('market_a', 'market_b', 'analysis_a', 'analysis_b'):
-            click.echo(f'  {key}:')
-            if isinstance(val, dict):
-                for k2, v2 in val.items():
-                    click.echo(f'    {k2}: {v2}')
-        else:
-            click.echo(f'  {key}: {val}')
-    click.echo()
-
-
 @market_relations_group.command('remove')
 @click.argument('relation_id')
 def relations_remove(relation_id: str) -> None:
@@ -782,331 +754,10 @@ def relations_remove(relation_id: str) -> None:
         raise click.ClickException(f'Relation not found: {relation_id}')
 
 
-@market_relations_group.command('validate')
-@click.argument('relation_id')
-@click.option(
-    '--history-a',
-    required=True,
-    help='JSONL history file for market A.',
-)
-@click.option(
-    '--history-b',
-    required=True,
-    help='JSONL history file for market B.',
-)
-@click.option('--significance', default=0.05, help='Statistical significance level.')
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
-def relations_validate(
-    relation_id: str,
-    history_a: str,
-    history_b: str,
-    significance: float,
-    as_json: bool,
-) -> None:
-    """Quantitatively validate a relation (cointegration, ADF, half-life)."""
-    from coinjure.market.relations import RelationStore
-    from coinjure.market.validation import validate_relation
-
-    store = RelationStore()
-    rel = store.get(relation_id)
-    if rel is None:
-        raise click.ClickException(f'Relation not found: {relation_id}')
-
-    # Load price series from history files
-    prices_a = _load_price_series(history_a)
-    prices_b = _load_price_series(history_b)
-
-    if len(prices_a) < 30 or len(prices_b) < 30:
-        raise click.ClickException(
-            f'Insufficient data: A has {len(prices_a)}, B has {len(prices_b)} points (need ≥30)'
-        )
-
-    result = validate_relation(prices_a, prices_b, significance=significance)
-    rel.set_validation(result)
-    store.update(rel)
-
-    if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    'ok': True,
-                    'relation_id': relation_id,
-                    'validation': rel.validation,
-                    'status': rel.status,
-                },
-                default=str,
-            )
-        )
-        return
-
-    click.echo(f'\nValidation for relation {relation_id}:')
-    click.echo(f'  Status: {rel.status}')
-    click.echo(
-        f'  ADF: stat={result.adf_statistic:.4f} p={result.adf_pvalue:.4f} stationary={result.is_stationary}'
-    )
-    if result.coint_pvalue is not None:
-        click.echo(
-            f'  Cointegration: stat={result.coint_statistic:.4f} p={result.coint_pvalue:.4f} coint={result.is_cointegrated}'
-        )
-    if result.half_life is not None:
-        click.echo(f'  Half-life: {result.half_life:.1f} bars')
-    click.echo(f'  Hedge ratio: {result.hedge_ratio:.4f}')
-    click.echo(f'  Correlation: {result.correlation:.4f}')
-    click.echo(f'  Spread: mean={result.mean_spread:.4f} std={result.std_spread:.4f}')
-    click.echo()
-
-
-def _load_price_series(history_file: str) -> list[float]:
-    """Load a price series from a JSONL history file."""
-    import pathlib
-
-    path = pathlib.Path(history_file)
-    if not path.exists():
-        raise click.ClickException(f'File not found: {history_file}')
-
-    prices: list[float] = []
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        try:
-            data = json.loads(line)
-            ts = data.get('time_series', {})
-            for outcome, points in ts.items():
-                for pt in points:
-                    p = pt.get('p')
-                    if p is not None:
-                        prices.append(float(p))
-        except (json.JSONDecodeError, KeyError, TypeError):
-            continue
-    return prices
-
-
-@market_relations_group.command('find')
-@click.argument('market_id')
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
-def relations_find(market_id: str, as_json: bool) -> None:
-    """Find all relations involving a specific market."""
-    from coinjure.market.relations import RelationStore
-
-    store = RelationStore()
-    relations = store.find_by_market(market_id)
-
-    if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    'ok': True,
-                    'market_id': market_id,
-                    'count': len(relations),
-                    'relations': [r.to_dict() for r in relations],
-                },
-                default=str,
-            )
-        )
-        return
-
-    if not relations:
-        click.echo(f'No relations found for market: {market_id}')
-        return
-
-    click.echo(f'\n{len(relations)} relation(s) for market {market_id}:\n')
-    for r in relations:
-        click.echo(
-            f'  [{r.relation_id}] {r.spread_type} conf={r.confidence:.2f} status={r.status}'
-        )
-        click.echo(f'    A: {r.market_a.get("question", "?")[:50]}')
-        click.echo(f'    B: {r.market_b.get("question", "?")[:50]}')
-        click.echo()
-
-
-@market_relations_group.command('strongest')
-@click.option('-n', default=10, help='Number of top relations to show.')
-@click.option('--status', default=None, help='Filter by status.')
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
-def relations_strongest(n: int, status: str | None, as_json: bool) -> None:
-    """Show the N highest-confidence relations."""
-    from coinjure.market.relations import RelationStore
-
-    store = RelationStore()
-    relations = store.strongest(n=n, status=status)
-
-    if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    'ok': True,
-                    'count': len(relations),
-                    'relations': [r.to_dict() for r in relations],
-                },
-                default=str,
-            )
-        )
-        return
-
-    if not relations:
-        click.echo('No relations found.')
-        return
-
-    click.echo(f'\nTop {len(relations)} relations by confidence:\n')
-    for i, r in enumerate(relations, 1):
-        click.echo(
-            f'  {i}. [{r.relation_id}] {r.spread_type} conf={r.confidence:.2f} '
-            f'status={r.status}'
-        )
-        click.echo(f'     {r.market_a.get("question", "?")[:45]}')
-        click.echo(f'     ↔ {r.market_b.get("question", "?")[:45]}')
-    click.echo()
-
-
 # ---------------------------------------------------------------------------
 # market discover (multi-keyword search + structural pair detection)
 # ---------------------------------------------------------------------------
 
-
-def _discover_rules(
-    poly_markets: list[dict],
-    kalshi_markets: list[dict],
-) -> list[dict]:
-    """Find spread pairs using deterministic rules (no LLM needed).
-
-    Detects:
-    1. temporal/implication — same event, different deadlines: p_early ≤ p_late
-    2. complementary — markets in same event whose YES prices should sum to ~1
-    3. same_event cross-platform — same question on Poly and Kalshi
-    """
-    from collections import defaultdict
-    from difflib import SequenceMatcher
-
-    pairs: list[dict] = []
-
-    # --- 1. Temporal implication within same event_id (Polymarket) ---
-    by_event: dict[str, list[dict]] = defaultdict(list)
-    for m in poly_markets:
-        eid = m.get('event_id', '')
-        if eid:
-            by_event[eid].append(m)
-
-    for eid, mkts in by_event.items():
-        # Only consider events with priced markets and distinct end_dates
-        priced = [m for m in mkts if _safe_price(m) is not None]
-        if len(priced) < 2:
-            continue
-
-        # Sort by end_date; skip events where markets don't have distinct dates
-        # (those are likely mutually-exclusive outcomes, not temporal series)
-        dated = [(m, m.get('end_date', '')) for m in priced if m.get('end_date')]
-        dated.sort(key=lambda x: x[1])
-
-        # Deduplicate by end_date — if many markets share the same date,
-        # they're parallel outcomes (not temporal), skip the event
-        unique_dates = {d for _, d in dated}
-        if len(unique_dates) < 2:
-            continue
-
-        # Only pair ADJACENT deadlines (O(n) not O(n²))
-        for i in range(len(dated) - 1):
-            m_early, date_early = dated[i]
-            m_late, date_late = dated[i + 1]
-            if date_early == date_late:
-                continue  # same deadline = not a temporal pair
-            p_early = _safe_price(m_early)
-            p_late = _safe_price(m_late)
-            if p_early is None or p_late is None:
-                continue
-            violation = p_early - p_late
-            pairs.append(
-                {
-                    'market_a': {
-                        'id': m_early['id'],
-                        'platform': 'polymarket',
-                        'question': m_early['question'],
-                        'price': p_early,
-                        'end_date': date_early,
-                    },
-                    'market_b': {
-                        'id': m_late['id'],
-                        'platform': 'polymarket',
-                        'question': m_late['question'],
-                        'price': p_late,
-                        'end_date': date_late,
-                    },
-                    'spread_type': 'implication',
-                    'confidence': 0.95,
-                    'reasoning': (
-                        f'Same event ({m_early.get("event_title", eid)[:50]}), '
-                        f'earlier deadline must have lower probability. '
-                        f'Violation={violation:.4f}'
-                    ),
-                    'hypothesis': 'p_early <= p_late',
-                    'method': 'rules',
-                    '_violation': violation,
-                }
-            )
-
-    # --- 2. Cross-platform same-event (fuzzy title match) ---
-    for pm in poly_markets:
-        p_price = _safe_price(pm)
-        if p_price is None:
-            continue
-        pq = pm.get('question', '').lower()
-        for km in kalshi_markets:
-            k_price = _safe_price_kalshi(km)
-            if k_price is None:
-                continue
-            kq = km.get('title', '').lower()
-            sim = SequenceMatcher(None, pq, kq).ratio()
-            if sim >= 0.7:
-                spread = abs(p_price - k_price)
-                pairs.append(
-                    {
-                        'market_a': {
-                            'id': pm['id'],
-                            'platform': 'polymarket',
-                            'question': pm['question'],
-                            'price': p_price,
-                        },
-                        'market_b': {
-                            'id': km.get('ticker', ''),
-                            'platform': 'kalshi',
-                            'question': km.get('title', ''),
-                            'price': k_price,
-                        },
-                        'spread_type': 'same_event',
-                        'confidence': round(sim, 3),
-                        'reasoning': (
-                            f'Same event across platforms (similarity={sim:.2f}). '
-                            f'Spread={spread:.4f}'
-                        ),
-                        'hypothesis': 'p_A - p_B ≈ 0',
-                        'method': 'rules',
-                    }
-                )
-
-    return pairs
-
-
-def _safe_price(m: dict) -> float | None:
-    """Extract a usable price from a Polymarket market dict."""
-    for key in ('best_ask', 'best_bid'):
-        v = m.get(key)
-        if v is not None and v != '':
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                pass
-    return None
-
-
-def _safe_price_kalshi(m: dict) -> float | None:
-    """Extract a usable price from a Kalshi market dict."""
-    for key in ('yes_ask', 'yes_bid'):
-        v = m.get(key)
-        if v is not None and v != '':
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                pass
-    return None
 
 
 @market.command('discover')
@@ -1151,14 +802,11 @@ def market_discover(
     kalshi_private_key_path: str | None,
     as_json: bool,
 ) -> None:
-    """Fetch markets and find structural spread pairs.
+    """Fetch markets from exchanges for agent analysis.
 
-    Searches multiple keywords and/or tags, merges unique markets, then runs
-    deterministic rules to find structural pairs (temporal implication,
-    cross-platform match).
-
-    Returns both the full market list and discovered pairs so the agent can
-    do its own semantic analysis on the raw data.
+    Searches multiple keywords and/or tags, merges unique markets, and returns
+    the raw data. The agent decides which markets are related and adds them
+    to the relation store via ``market relations add``.
 
     \b
       coinjure market discover -q "election" -q "Trump" --json
@@ -1226,33 +874,9 @@ def market_discover(
     if not poly_markets and not kalshi_markets:
         raise click.ClickException('No markets fetched. Check API keys or queries.')
 
-    # ── Structural rules ───────────────────────────────────────────────
-
-    rule_pairs = _discover_rules(poly_markets, kalshi_markets)
-
-    # ── Persist pairs to relation store ────────────────────────────────
-
-    from coinjure.market.relations import MarketRelation, RelationStore
-
-    store = RelationStore()
-    saved_count = 0
-    for p in rule_pairs:
-        ma = p.get('market_a', {})
-        mb = p.get('market_b', {})
-        rid = f'{ma.get("id", "a")[:8]}-{mb.get("id", "b")[:8]}'
-        rel = MarketRelation(
-            relation_id=rid,
-            market_a=ma,
-            market_b=mb,
-            spread_type=p.get('spread_type', 'unknown'),
-            confidence=float(p.get('confidence', 0)),
-            reasoning=p.get('reasoning', ''),
-            hypothesis=p.get('hypothesis', ''),
-        )
-        store.add(rel)
-        saved_count += 1
-
     # ── Output ─────────────────────────────────────────────────────────
+
+    total = len(poly_markets) + len(kalshi_markets)
 
     if as_json:
         click.echo(
@@ -1263,9 +887,7 @@ def market_discover(
                         'polymarket': poly_markets,
                         'kalshi': kalshi_markets,
                     },
-                    'total_markets': len(poly_markets) + len(kalshi_markets),
-                    'structural_pairs': rule_pairs,
-                    'saved': saved_count,
+                    'total_markets': total,
                 },
                 default=str,
             )
@@ -1276,29 +898,7 @@ def market_discover(
     query_desc = ', '.join(parts) if parts else 'top by volume'
     click.echo(
         f'Fetched {len(poly_markets)} Polymarket + {len(kalshi_markets)} Kalshi '
-        f'markets (queries: {query_desc}).'
-    )
-
-    if rule_pairs:
-        click.echo(f'\n{len(rule_pairs)} structural pairs found:\n')
-        for i, p in enumerate(rule_pairs, 1):
-            ma = p.get('market_a', {})
-            mb = p.get('market_b', {})
-            click.echo(
-                f'  {i}. [{p.get("spread_type", "?")}] '
-                f'confidence={p.get("confidence", "?")}'
-            )
-            click.echo(f'     A: [{ma.get("platform", "?")}] {ma.get("question", "?")}')
-            click.echo(f'     B: [{mb.get("platform", "?")}] {mb.get("question", "?")}')
-            if p.get('hypothesis'):
-                click.echo(f'     Hypothesis: {p["hypothesis"]}')
-            click.echo(f'     {p.get("reasoning", "")}')
-            click.echo()
-    else:
-        click.echo('\nNo structural pairs found.')
-
-    click.echo(
-        f'Total {len(poly_markets) + len(kalshi_markets)} markets returned. '
+        f'markets (queries: {query_desc}). '
         f'Use --json to get full data for agent analysis.'
     )
 

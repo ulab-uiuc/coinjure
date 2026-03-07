@@ -1,7 +1,7 @@
-"""Market matching utilities — extracted from cross_platform_arb_strategy.
+"""Market matching utilities for cross-platform market discovery.
 
 Provides a standalone `match_markets` function for use by CLI commands
-(arb scan, market match) without requiring a running strategy instance.
+(market discover) to find equivalent markets across platforms.
 """
 
 from __future__ import annotations
