@@ -24,7 +24,7 @@ This strategy is fully CLI-constructible:
 
     coinjure paper run \\
         --exchange polymarket \\
-        --strategy-ref examples/strategies/event_sum_arb_strategy.py:EventSumArbStrategy \\
+        --strategy-ref coinjure/strategy/builtin/event_sum_arb_strategy.py:EventSumArbStrategy \\
         --strategy-kwargs-json '{"event_id": "...", "min_edge": 0.02}'
 
 The strategy self-discovers markets by watching for any ticker whose

@@ -10,8 +10,8 @@ Use this skill when the user asks to write spread/arb strategy code.
 ## Code Entry Points
 
 - Base class: `coinjure/strategy/strategy.py` (`Strategy` subclass, implement `process_event`)
-- Examples: `examples/strategies/*.py`
-- New strategies go in: `strategies/`
+- Built-in strategies (one per relation type): `coinjure/strategy/builtin/*.py`
+- Custom strategies go in: `strategies/`
 
 ## Workflow
 
