@@ -43,6 +43,17 @@ VALID_TYPES = frozenset(
 class ValidationResult:
     """Quantitative validation result for a market relation."""
 
+    # Analysis type that produced this result
+    analysis_type: str | None = None  # 'structural', 'cointegration', 'lead_lag'
+
+    # Structural analysis (same_event, complementary, implication, exclusivity)
+    constraint: str | None = None  # e.g. 'A <= B', 'A + B <= 1'
+    constraint_holds: bool | None = None
+    violation_count: int | None = None  # number of times constraint violated
+    violation_rate: float | None = None  # fraction of observations violating
+    current_arb: float | None = None  # current constraint violation size
+    mean_arb: float | None = None  # mean violation size when violated
+
     # Stationarity
     adf_statistic: float | None = None
     adf_pvalue: float | None = None
@@ -63,6 +74,7 @@ class ValidationResult:
     # Lead-lag
     lead_lag: int | None = None  # positive = A leads B by N steps
     lead_lag_corr: float | None = None  # cross-correlation at optimal lag
+    lead_lag_significant: bool | None = None  # |corr| > threshold
 
     validated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
@@ -70,7 +82,16 @@ class ValidationResult:
 
     @property
     def is_valid(self) -> bool:
-        """A relation is quantitatively valid if the spread is stationary."""
+        """Check validity based on the analysis type.
+
+        For structural relations (implication, exclusivity, etc.), the logical
+        relationship is always valid — constraint violations are trading
+        opportunities, not evidence that the relation is wrong.
+        """
+        if self.analysis_type == 'structural':
+            return True
+        if self.analysis_type == 'lead_lag':
+            return self.lead_lag_significant is True
         if self.is_cointegrated is not None:
             return self.is_cointegrated
         if self.is_stationary is not None:
