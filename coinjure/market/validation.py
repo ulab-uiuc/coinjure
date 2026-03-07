@@ -349,14 +349,17 @@ def validate_structural(
     n = min(len(a), len(b))
     a, b = a[:n], b[:n]
 
-    if n < 2:
+    if n < 1:
         return ValidationResult(analysis_type='structural', constraint=constraint)
 
     # Auto-detect constraint direction for implication
     if constraint == 'auto':
-        v_le, _, _ = _check_constraint(a, b, 'A <= B')
-        v_ge, _, _ = _check_constraint(a, b, 'A >= B')
-        constraint = 'A <= B' if v_le <= v_ge else 'A >= B'
+        if n >= 2:
+            v_le, _, _ = _check_constraint(a, b, 'A <= B')
+            v_ge, _, _ = _check_constraint(a, b, 'A >= B')
+            constraint = 'A <= B' if v_le <= v_ge else 'A >= B'
+        else:
+            constraint = 'A <= B'  # default when too few points for auto
 
     violation_count, violations, current_arb = _check_constraint(a, b, constraint)
     violation_rate = violation_count / n
