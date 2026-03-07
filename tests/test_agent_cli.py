@@ -41,17 +41,19 @@ def test_strategy_create_and_validate(tmp_path):
 
 
 def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
-    history_file = tmp_path / 'history.jsonl'
-    history_file.write_text(
-        '{"event_id":"E1","market_id":"M1","time_series":{"Yes":[{"t":1,"p":0.5}]}}\n'
-    )
+    # Create a dummy parquet file (content doesn't matter — run_backtest_parquet is mocked)
+    parquet_file = tmp_path / 'orderbook.parquet'
+    parquet_file.write_bytes(b'PAR1')
 
     captured = {}
 
-    async def fake_run_backtest(**kwargs):
+    async def fake_run_backtest_parquet(**kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr('coinjure.engine.backtester.run_backtest', fake_run_backtest)
+    monkeypatch.setattr(
+        'coinjure.engine.backtester.run_backtest_parquet',
+        fake_run_backtest_parquet,
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -59,21 +61,17 @@ def test_backtest_run_invokes_runner(monkeypatch, tmp_path):
         [
             'strategy',
             'backtest',
-            '--history-file',
-            str(history_file),
+            '--parquet',
+            str(parquet_file),
             '--market-id',
             'M1',
-            '--event-id',
-            'E1',
             '--strategy-ref',
             'coinjure.strategy.test_strategy:TestStrategy',
         ],
     )
-    assert result.exit_code == 0
-    assert captured['history_file'] == str(history_file)
-    assert captured['ticker_symbol'].market_id == 'M1'
-    assert captured['include_all_markets_context'] is False
-    assert captured['allow_cross_market_trading'] is False
+    assert result.exit_code == 0, result.output
+    assert captured['parquet_path'] == str(parquet_file)
+    assert captured['market_ids'] == ['M1']
 
 
 def test_strategy_validate_with_kwargs_json(tmp_path):
@@ -83,7 +81,7 @@ def test_strategy_validate_with_kwargs_json(tmp_path):
             """
             from coinjure.events import Event
             from coinjure.strategy.strategy import Strategy
-            from coinjure.engine.execution.trader import Trader
+            from coinjure.engine.trader.trader import Trader
 
             class NeedsKwargs(Strategy):
                 def __init__(self, threshold: float):
@@ -121,7 +119,7 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
             """
             from coinjure.events import Event
             from coinjure.strategy.strategy import Strategy
-            from coinjure.engine.execution.trader import Trader
+            from coinjure.engine.trader.trader import Trader
 
             class DryRunStrategy(Strategy):
                 def __init__(self, multiplier: int):
@@ -158,7 +156,6 @@ def test_strategy_dry_run_with_kwargs_json(tmp_path):
 def test_example_strategy_files_validate() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     momentum = repo_root / 'examples' / 'strategies' / 'threshold_momentum_strategy.py'
-    pressure = repo_root / 'examples' / 'strategies' / 'orderbook_pressure_strategy.py'
 
     runner = CliRunner()
     result1 = runner.invoke(
@@ -171,19 +168,8 @@ def test_example_strategy_files_validate() -> None:
             '--json',
         ],
     )
-    result2 = runner.invoke(
-        cli,
-        [
-            'strategy',
-            'validate',
-            '--strategy-ref',
-            f'{pressure}:OrderBookPressureStrategy',
-            '--json',
-        ],
-    )
 
     assert result1.exit_code == 0
-    assert result2.exit_code == 0
 
 
 def test_paper_and_live_commands_invokable(monkeypatch):
@@ -202,12 +188,8 @@ def test_paper_and_live_commands_invokable(monkeypatch):
     monkeypatch.setattr(
         'coinjure.cli.agent_commands.LivePolyMarketDataSource', DummySource
     )
-    monkeypatch.setattr(
-        'coinjure.engine.live_trader.run_live_paper_trading', fake_paper
-    )
-    monkeypatch.setattr(
-        'coinjure.engine.live_trader.run_live_polymarket_trading', fake_live
-    )
+    monkeypatch.setattr('coinjure.engine.runner.run_live_paper_trading', fake_paper)
+    monkeypatch.setattr('coinjure.engine.runner.run_live_polymarket_trading', fake_live)
 
     runner = CliRunner()
     paper_res = runner.invoke(

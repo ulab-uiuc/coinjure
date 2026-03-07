@@ -12,7 +12,7 @@
 
 Coinjure is an agent-native trading stack for prediction markets.
 
-The goal is simple: give an autonomous agent everything it needs to design, test, and run strategies end-to-end — including managing a portfolio of ~50 parallel arb strategies across Polymarket and Kalshi — while the human operator only does two things:
+The goal is simple: give an autonomous agent everything it needs to discover, test, and run strategies end-to-end — including managing a portfolio of ~50 parallel spread/arb strategies across Polymarket and Kalshi — while the human operator only does two things:
 
 1. Monitor the system.
 2. Pause or emergency-stop when needed.
@@ -20,16 +20,16 @@ The goal is simple: give an autonomous agent everything it needs to design, test
 ## 1-Minute Start
 
 ```bash
-coinjure paper run --exchange polymarket --strategy-ref coinjure.strategy.orderbook_imbalance_strategy:OrderBookImbalanceStrategy
-
-coinjure monitor
+coinjure engine run --exchange polymarket \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --mode paper --monitor
 ```
 
 ![Coinjure Monitor](assets/coinjure_monitor.png)
 
 ## Why Agent-First
 
-AI agents are now strong enough to self-discover alpha from messy, fast-moving market and news streams. The practical question is no longer “can an agent reason about trades,” but:
+AI agents are now strong enough to self-discover alpha from messy, fast-moving market and news streams. The practical question is no longer "can an agent reason about trades," but:
 
 Can we build the tools, infrastructure, and environment that let an agent operate like a disciplined human trader, but through command-line APIs that are easy for agents to use?
 
@@ -40,20 +40,6 @@ Coinjure is our answer:
 - Data, simulation, monitoring, and live controls are unified behind CLI commands.
 
 This lets agents iterate quickly, safely, and reproducibly without rebuilding trading plumbing for every strategy or exchange.
-
-## What We Provide for Agent Trading
-
-Coinjure provides the full toolchain needed by an autonomous trading agent:
-
-- Unified strategy API across Polymarket and Kalshi.
-- Live market + news ingestion in paper mode.
-- Built-in paper trading execution engine.
-- Backtest replay for regression checks.
-- Runtime monitor and control socket.
-- Pause/resume/stop controls for human override.
-- **Portfolio supervisor** — manage ~50 parallel strategy processes, each with its own Unix socket, from a single registry.
-
-In paper mode, `--exchange polymarket` and `--exchange kalshi` run with a composite source (market feed + Google News + RSS), with conservative news polling defaults.
 
 ## System Structure
 
@@ -68,21 +54,24 @@ Core runtime components:
 - `ControlServer`: pause/resume/status/stop via Unix socket.
 - `Monitor UI`: human visibility and emergency controls.
 - `StrategyRegistry`: persistent portfolio registry (`~/.coinjure/portfolio.json`).
+- `RelationStore`: persistent market relation graph (`~/.coinjure/relations.json`).
 
 ```text
 Agent (Claude)
      | bash calls (--json)
-     ▼
-Portfolio CLI Layer
-  coinjure portfolio list/add/promote/retire/health-check
-  coinjure arb scan / coinjure market match
-     | reads/writes ~/.coinjure/portfolio.json
+     v
+CLI Layer (4 groups)
+  coinjure market    — discover, analyze, relations, news
+  coinjure strategy  — validate, backtest, batch, pipeline, gate
+  coinjure engine    — run, list, add, deploy, supervise, allocate, pipeline, hub-*
+  coinjure memory    — add, list, best, summary
+     | reads/writes ~/.coinjure/
      | spawns subprocesses
-     ▼
+     v
 [strategy-001]   [strategy-002]  ...  [strategy-050]
-coinjure paper   coinjure paper        coinjure live
-run (process)    run (process)          run (process)
-sock: 001.sock   sock: 002.sock         sock: 050.sock
+engine run       engine run            engine run
+(paper process)  (paper process)       (live process)
+sock: 001.sock   sock: 002.sock        sock: 050.sock
 
 Each strategy process:
 TradingEngine
@@ -110,331 +99,209 @@ pip install poetry
 poetry install
 ```
 
-## Quick Start (CLI Only)
+## Quick Start
 
-### 1) Explore market and news inputs
+### 1) Explore markets
 
 ```bash
-coinjure market list --exchange polymarket --limit 20
-coinjure market search --exchange polymarket --query "election" --limit 20
-coinjure market info --exchange polymarket --market-id <market_id>
-
-coinjure news fetch --source google --query "prediction market" --limit 10
-coinjure news fetch --source rss --query "fed rates" --limit 10
+coinjure market discover -q "election" --exchange both --limit 20 --json
+coinjure market analyze --exchange polymarket --market-id <market_id> --json
+coinjure market news --source google --query "prediction market" --limit 10
 ```
 
-### 2) Scaffold and validate a strategy
+### 2) Validate a strategy
 
 ```bash
-coinjure strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
 coinjure strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
-```
 
-Use constructor kwargs when needed:
-
-```bash
-coinjure strategy validate \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --strategy-kwargs-json '{"trade_size": "25", "entry_imbalance": 0.35}'
-```
-
-Quick runtime smoke check before backtest/paper run:
-
-```bash
+# Dry-run smoke check before backtest
 coinjure strategy validate \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --strategy-kwargs-json '{"trade_size": "25"}' \
   --dry-run --events 10 --json
 ```
 
-Built-in example strategy files (good templates for agents):
+### 3) Backtest
 
 ```bash
-coinjure strategy validate \
-  --strategy-ref ./examples/strategies/threshold_momentum_strategy.py:ThresholdMomentumStrategy
-
-coinjure strategy validate \
-  --strategy-ref ./examples/strategies/orderbook_pressure_strategy.py:OrderBookPressureStrategy
+coinjure strategy backtest \
+  --history-file ./data/events.jsonl \
+  --market-id M1 --event-id E1 \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy --json
 ```
 
-### 3) Run paper trading with monitor
+### 4) Paper trading
 
 ```bash
-coinjure paper run \
-  --exchange polymarket \
+coinjure engine run \
+  --exchange polymarket --mode paper \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
   --strategy-kwargs-json '{"trade_size": "25"}' \
   --monitor
 ```
 
-### 4) Operator control commands (separate terminal)
+### 5) Runtime control (separate terminal)
 
 ```bash
-coinjure trade status
-coinjure trade pause
-coinjure trade resume
-coinjure trade stop
+coinjure engine status --id my-strategy-001
+coinjure engine pause  --id my-strategy-001
+coinjure engine resume --id my-strategy-001
+coinjure engine stop   --id my-strategy-001
 ```
 
-### 5) Portfolio supervisor — run 50 strategies in parallel
+## Spread Trading System
 
-Discover opportunities, register them, promote through lifecycle stages, and retire stale ones:
+Coinjure includes a spread trading system that discovers, validates, and manages cross-market spread/arbitrage opportunities:
+
+1. **Market Discovery** (`market discover`) — multi-keyword search + structural pair detection (temporal implication, cross-platform match, complementary outcomes).
+2. **Quantitative Analysis** (`market analyze`) — single-market stats or pair analysis (correlation, cointegration, hedge ratio, half-life).
+3. **Relation Management** (`market relations`) — persistent graph of discovered pairs with lifecycle (active → validated → deployed → retired).
+4. **Live Maintenance** (`engine supervise`) — continuously validates running strategies.
+
+### Discover spread opportunities
 
 ```bash
-# Find cross-platform arb opportunities
-coinjure arb scan --query "NBA" --min-edge 0.02 --json
-# → {"opportunities": [{"poly_id": "...", "kalshi_ticker": "NBANBA-GSW",
-#      "edge": "0.031", "edge_net": "0.021", "direction": "buy_poly_yes_kalshi_no", ...}]}
+# Search markets and find structural spread pairs
+coinjure market discover -q "election" -q "Trump" --exchange both --limit 50 --json
+# -> persists discovered pairs to ~/.coinjure/relations.json
 
-# Fuzzy-match markets across exchanges
-coinjure market match --query "NBA" --min-similarity 0.6 --json
+# Quantitative analysis of a single market
+coinjure market analyze --exchange polymarket --market-id <id> --json
 
-# Register a new strategy (pending_backtest)
-coinjure portfolio add \
-  --strategy-id arb-nba-gsw-001 \
+# Pair analysis (correlation, cointegration, spread stats)
+coinjure market analyze --exchange polymarket --market-id <id_a> --compare <id_b> --json
+```
+
+### Manage discovered relations
+
+```bash
+coinjure market relations list --type same_event --json
+coinjure market relations show <relation_id> --json
+coinjure market relations strongest -n 10 --json
+coinjure market relations find <market_id> --json
+coinjure market relations validate <relation_id> --history-a data/a.jsonl --history-b data/b.jsonl --json
+coinjure market relations remove <relation_id>
+```
+
+### LLM supervision and capital allocation
+
+```bash
+# LLM reviews all active strategies, recommends hold/pause/retire
+coinjure engine supervise --json
+coinjure engine supervise --execute  # auto-apply recommendations
+
+# Deep validity analysis of a single strategy
+coinjure engine supervise --id my-strategy-001 --json
+
+# Capital allocation across strategies
+coinjure engine allocate --method kelly --max-exposure 10000 --json
+```
+
+## Portfolio Management
+
+Manage ~50 parallel strategy instances through a single registry:
+
+```bash
+# Register a new strategy
+coinjure engine add \
+  --strategy-id arb-nba-001 \
   --strategy-ref examples/strategies/cross_platform_arb_strategy.py:CrossPlatformArbStrategy \
-  --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' \
-  --json
+  --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' --json
 
-# Promote to paper trading (launches a background process)
-coinjure portfolio promote --strategy-id arb-nba-gsw-001 --to paper_trading --json
-# → {"ok": true, "pid": 23456, "socket": "~/.coinjure/arb-nba-gsw-001.sock"}
+# Deploy to paper trading
+coinjure engine deploy --strategy-id arb-nba-001 --json
 
-# Control an individual strategy process
-coinjure trade status --socket ~/.coinjure/arb-nba-gsw-001.sock --json
-coinjure trade stop   --socket ~/.coinjure/arb-nba-gsw-001.sock --json
-
-# Health-check the entire portfolio
-coinjure portfolio health-check --json
-# → {"stale": [...], "dead_process": [...], "healthy": [...]}
+# Portfolio report with health diagnostics
+coinjure engine report --check-health --json
 
 # Retire a stale strategy
-coinjure portfolio retire --strategy-id arb-nba-gsw-001 --reason "market_closed" --json
+coinjure engine retire --id arb-nba-001 --reason "market_closed" --json
 
-# View the full portfolio
-coinjure portfolio list --json
+# View all strategies
+coinjure engine list --json
+
+# Bulk operations
+coinjure engine pause --all --json
+coinjure engine stop --all --json
+coinjure engine retire --all --reason "end_of_season" --json
 ```
-
-### 6) Record and backtest
-
-```bash
-coinjure data record --exchange polymarket --output ./data/events.jsonl --duration 300
-
-# Standard backtest (interactive output)
-coinjure backtest run \
-  --history-file ./data/events.jsonl \
-  --market-id M1 \
-  --event-id E1 \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy
-
-# Machine-readable JSON output (agent-friendly)
-coinjure backtest run \
-  --history-file ./data/events.jsonl \
-  --market-id M1 --event-id E1 \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --json
-# → {"ok": true, "total_trades": 12, "win_rate": "0.583", "sharpe_ratio": "1.24", ...}
-```
-
-### 7) Agent strategy-discovery toolkit (`research`)
-
-Use these composable tools when an agent needs to discover strategies on yes/no time-series:
-
-```bash
-# 1) build a clean per-market slice
-# supports UNIX or ISO-8601 timestamps in historical files
-coinjure research slice \
-  --history-file ./data/events.jsonl \
-  --market-id M1 --event-id E1 \
-  --output ./data/m1_e1_slice.jsonl
-
-# 2) build features + labels
-coinjure research features \
-  --history-file ./data/events.jsonl \
-  --market-id M1 --event-id E1 \
-  --output ./data/m1_e1_features.jsonl
-
-coinjure research labels \
-  --history-file ./data/events.jsonl \
-  --market-id M1 --event-id E1 \
-  --horizon-steps 5 \
-  --threshold 0.01 \
-  --output ./data/m1_e1_labels.jsonl
-
-# 3) run parameter sweeps, rank, and persist memory
-coinjure research backtest-batch \
-  --history-file ./data/events.jsonl \
-  --market-id M1 --event-id E1 \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --params-jsonl ./data/params.jsonl \
-  --output ./data/batch_runs.jsonl
-
-coinjure research compare-runs \
-  --input-file ./data/batch_runs.jsonl \
-  --sort-key sharpe_ratio \
-  --top 20 \
-  --output ./data/top_runs.jsonl
-
-coinjure research memory add \
-  --input-file ./data/top_runs.jsonl \
-  --tag m1_e1
-
-# 4) scan many market/event pairs quickly and keep the best run per market
-coinjure research scan-markets \
-  --history-file ./data/events.jsonl \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --params-jsonl ./data/params.jsonl \
-  --max-markets 25 \
-  --min-points 30 \
-  --output ./data/market_scan.jsonl
-```
-
-Supported intervals: `1d` (default), `6h`, `1h`.
-
-## Agent Workflow: Portfolio Supervisor
-
-An autonomous agent can manage the full lifecycle of ~50 parallel strategies using only `--json` CLI calls:
-
-```bash
-# === Discovery loop ===
-OPPS=$(coinjure arb scan --query "NBA" --min-edge 0.02 --json)
-# Agent filters already_in_portfolio=false and registers new opportunities:
-coinjure portfolio add --strategy-id arb-nba-new \
-  --strategy-ref examples/strategies/cross_platform_arb_strategy.py:CrossPlatformArbStrategy \
-  --kwargs-json '{"poly_market_id":"...","kalshi_ticker":"..."}' --json
-
-# === Backtest validation ===
-coinjure backtest run --history-file data/backtest_data.jsonl \
-  --market-id M1 --event-id E1 \
-  --strategy-ref examples/strategies/cross_platform_arb_strategy.py:CrossPlatformArbStrategy \
-  --json
-# Agent reads PnL; if profitable, promotes:
-coinjure portfolio promote --strategy-id arb-nba-new --to paper_trading --json
-
-# === Retirement loop ===
-HEALTH=$(coinjure portfolio health-check --json)
-# Agent retires each stale/dead strategy:
-coinjure portfolio retire --strategy-id arb-nba-020 --reason "no_signal_7d" --json
-
-# === Per-strategy control (still works) ===
-coinjure trade status --socket ~/.coinjure/arb-nba-new.sock --json
-coinjure trade stop   --socket ~/.coinjure/arb-nba-new.sock --json
-```
-
-Each promoted strategy runs as an independent OS process with its own Unix socket at `~/.coinjure/<strategy_id>.sock`, isolated from all other strategies.
 
 ## Human-in-the-Loop Model
 
 The operator is intentionally lightweight:
 
-- Use `coinjure monitor` for live visibility.
-- Use `coinjure trade pause|resume|stop` for intervention.
+- Use `coinjure engine monitor` for live visibility.
+- Use `coinjure engine pause|resume|stop` for intervention.
+- Use `coinjure engine killswitch --on` for emergency halt.
 
 The operator should not need to manually place/cancel orders in normal operation.
 
 ## CLI Reference
 
-### `coinjure strategy` — Strategy management
+### `coinjure market` — Market discovery and analysis
 
-| Command             | Key options                                                                         | Description                                  |
-| ------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------- |
-| `strategy create`   | `--output` (req), `--class-name`, `--force`                                         | Scaffold a new strategy file                 |
-| `strategy validate` | `--strategy-ref` (req), `--strategy-kwargs-json`, `--dry-run`, `--events`, `--json` | Import-check and optionally feed mock events |
+| Command                      | Description                                                        |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `market analyze`             | Quantitative analysis of a market or pair of markets               |
+| `market discover`            | Multi-keyword search + structural spread pair discovery            |
+| `market news`                | Fetch news headlines                                               |
+| `market relations list`      | List stored market relations                                       |
+| `market relations show`      | Show details of a relation                                         |
+| `market relations find`      | Find all relations involving a specific market                     |
+| `market relations strongest` | Show top N relations by confidence                                 |
+| `market relations validate`  | Quantitatively validate a relation (cointegration, ADF, half-life) |
+| `market relations remove`    | Remove a relation                                                  |
 
-### `coinjure backtest` — Historical replay
+### `coinjure strategy` — Strategy development and testing
 
-| Command        | Key options                                                                                                                                                                                                                         | Description                                 |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `backtest run` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref`, `--strategy-kwargs-json`, `--initial-capital`, `--spread`, `--min-fill-rate`, `--max-fill-rate`, `--commission-rate`, `--risk-profile`, `--json` | Run a backtest against a local history file |
+| Command             | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `strategy validate` | Import-check and optionally feed mock events |
+| `strategy backtest` | Run a backtest against a local history file  |
 
-### `coinjure paper` — Paper trading
+### `coinjure engine` — Running instances and portfolio management
 
-| Command     | Key options                                                                                                                                                            | Description                                      |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `paper run` | `--exchange` (`polymarket`/`kalshi`/`rss`), `--strategy-ref`, `--strategy-kwargs-json`, `--duration`, `--initial-capital`, `--socket-path`, `--monitor`/`-m`, `--json` | Live-data paper trading with simulated execution |
+| Command             | Description                                                        |
+| ------------------- | ------------------------------------------------------------------ |
+| `engine run`        | Start trading (`--mode paper\|live`)                               |
+| `engine list`       | Show all strategies with lifecycle and PnL                         |
+| `engine add`        | Register a new strategy                                            |
+| `engine status`     | Show engine status (`--full` for positions, PnL, order books)      |
+| `engine pause`      | Pause event ingestion (`--all` for all instances)                  |
+| `engine resume`     | Resume after pause                                                 |
+| `engine stop`       | Graceful shutdown (`--all` for all instances)                      |
+| `engine swap`       | Hot-swap strategy without restarting                               |
+| `engine retire`     | Stop and mark as retired (`--all` for all instances)               |
+| `engine deploy`     | Scan and batch-deploy strategies (`--mode cross-platform\|events`) |
+| `engine report`     | Portfolio PnL report (`--check-health` for diagnostics)            |
+| `engine feedback`   | Record feedback on a strategy                                      |
+| `engine monitor`    | Attach Textual TUI to a running engine                             |
+| `engine killswitch` | Toggle the global kill-switch                                      |
+| `engine supervise`  | LLM review (`--id` for single, omit for all strategies)            |
+| `engine allocate`   | Capital allocation across strategies                               |
+| `engine hub-start`  | Start the shared Market Data Hub                                   |
+| `engine hub-status` | Show hub status                                                    |
+| `engine hub-stop`   | Stop the hub                                                       |
 
-### `coinjure live` — Live trading
+### `coinjure memory` — Experiment memory
 
-| Command    | Key options                                                                                                                                                                                                                                                  | Description             |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `live run` | `--exchange` (req: `polymarket`/`kalshi`), `--strategy-ref`, `--strategy-kwargs-json`, `--duration`, `--wallet-private-key`, `--signature-type`, `--funder`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--socket-path`, `--monitor`/`-m`, `--json` | Real-money live trading |
+| Command          | Description                              |
+| ---------------- | ---------------------------------------- |
+| `memory add`     | Persist run results to experiment memory |
+| `memory list`    | Query experiment memory                  |
+| `memory best`    | Show best runs                           |
+| `memory summary` | Summarize experiment history             |
 
-### `coinjure monitor` — Live UI
+### `coinjure research` — Research tooling
 
-| Command   | Key options     | Description                            |
-| --------- | --------------- | -------------------------------------- |
-| `monitor` | `--socket`/`-s` | Attach Textual TUI to a running engine |
-
-### `coinjure trade` — Runtime control
-
-| Command            | Key options                                                                 | Description                                            |
-| ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `trade pause`      | `--socket`/`-s`, `--json`                                                   | Pause event ingestion and strategy decisions           |
-| `trade resume`     | `--socket`/`-s`, `--json`                                                   | Resume after pause                                     |
-| `trade status`     | `--socket`/`-s`, `--json`                                                   | Show engine status (uptime, events, decisions, orders) |
-| `trade stop`       | `--socket`/`-s`, `--json`                                                   | Graceful shutdown                                      |
-| `trade swap`       | `--strategy-ref` (req), `--strategy-kwargs-json`, `--socket`/`-s`, `--json` | Hot-swap strategy without restarting                   |
-| `trade state`      | `--socket`/`-s`, `--json`                                                   | Full snapshot (positions, PnL, decisions, order books) |
-| `trade killswitch` | `--on`, `--off`, `--path`, `--json`                                         | Toggle/query the global kill-switch file               |
-
-### `coinjure market` — Market discovery
-
-| Command          | Key options                                                                                                  | Description                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `market list`    | `--exchange`, `--limit`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--json`                        | List open markets                                           |
-| `market search`  | `--query` (req), `--exchange`, `--limit`, `--json`                                                           | Search markets by keyword                                   |
-| `market info`    | `--market-id` (req), `--exchange`, `--json`                                                                  | Detailed market metadata                                    |
-| `market history` | `--market-id` (req), `--interval` (`1d`/`6h`/`1h`), `--limit`, `--json`                                      | Polymarket price history                                    |
-| `market match`   | `--query` (req), `--min-similarity`, `--limit`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--json` | Fuzzy-match equivalent markets across Polymarket and Kalshi |
-
-### `coinjure arb` — Arbitrage discovery
-
-| Command    | Key options                                                                                                                | Description                                                                                     |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `arb scan` | `--query` (req), `--min-edge`, `--min-similarity`, `--limit`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--json` | Scan for live cross-platform arb opportunities; returns edge, direction, and rationale per pair |
-
-### `coinjure portfolio` — Portfolio supervisor
-
-| Command                  | Key options                                                                                        | Description                                                                                |
-| ------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `portfolio list`         | `--lifecycle`, `--json`                                                                            | Show all strategies with lifecycle, pid, and PnL                                           |
-| `portfolio add`          | `--strategy-id` (req), `--strategy-ref` (req), `--kwargs-json`, `--exchange`, `--json`             | Register a new strategy (starts at `pending_backtest`)                                     |
-| `portfolio promote`      | `--strategy-id` (req), `--to` (req: `paper_trading`/`live_trading`), `--initial-capital`, `--json` | Advance lifecycle and launch a background process with a dedicated socket                  |
-| `portfolio retire`       | `--strategy-id` (req), `--reason`, `--json`                                                        | Stop the process and mark as retired                                                       |
-| `portfolio health-check` | `--update`/`--no-update`, `--json`                                                                 | Detect dead processes, stale (no signal >7d), and degraded (consecutive losses) strategies |
-
-### `coinjure news` — News fetching
-
-| Command      | Key options                                                                             | Description         |
-| ------------ | --------------------------------------------------------------------------------------- | ------------------- |
-| `news fetch` | `--source` (`google`/`rss`/`thenewsapi`), `--query`, `--limit`, `--api-token`, `--json` | Fetch news articles |
-
-### `coinjure data` — Data recording
-
-| Command       | Key options                                                                                                                                  | Description                        |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `data record` | `--exchange`, `--output`, `--duration`, `--polling-interval`, `--kalshi-api-key-id`, `--kalshi-private-key-path`, `--verbose`/`-v`, `--json` | Record live events to a JSONL file |
-
-### `coinjure research` — Strategy discovery toolkit
-
-| Command                      | Key options                                                                                                                                                                                                                                                                                                                                | Description                                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `research markets`           | `--history-file` (req), `--sort-by`, `--limit`, `--min-points`, `--min-volume`, `--min-span-seconds`, `--output`, `--json`                                                                                                                                                                                                                 | Rank markets in a history file                                                    |
-| `research slice`             | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--start-ts`, `--end-ts`, `--max-points`, `--output` (req), `--json`                                                                                                                                                                                                      | Extract a per-market time slice                                                   |
-| `research features`          | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--windows`, `--z-window`, `--output` (req), `--json`                                                                                                                                                                                                                     | Generate feature matrix                                                           |
-| `research labels`            | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--horizon-steps`, `--threshold`, `--output` (req), `--json`                                                                                                                                                                                                              | Generate forward-return labels                                                    |
-| `research backtest-batch`    | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--params-jsonl`, `--initial-capital`, `--max-runs`, `--output` (req), `--json`                                                                                                                                                                   | Run strategy over a param list                                                    |
-| `research grid`              | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--param-grid-json` (req), `--initial-capital`, `--max-runs`, `--sort-key`, `--output` (req), `--json`                                                                                                                                            | Grid search over hyperparameters                                                  |
-| `research compare-runs`      | `--input-file` (req), `--sort-key`, `--top`, `--output`, `--json`                                                                                                                                                                                                                                                                          | Rank and filter a set of run results                                              |
-| `research scan-markets`      | `--history-file` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--params-jsonl`, `--initial-capital`, `--max-markets`, `--min-points`, `--sort-key`, `--output` (req), `--json`                                                                                                                                                 | Scan strategy across many markets                                                 |
-| `research walk-forward`      | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--train-size`, `--test-size`, `--step-size`, `--initial-capital`, `--output` (req), `--json`                                                                                                                           | Manual walk-forward validation                                                    |
-| `research walk-forward-auto` | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--min-train-size`, `--min-test-size`, `--target-runs`, `--initial-capital`, `--output` (req), `--json`                                                                                                                 | Auto-sized walk-forward                                                           |
-| `research stress-test`       | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--initial-capital`, `--output` (req), `--json`                                                                                                                                                                         | Stress scenarios (spread shocks, fill-rate reduction)                             |
-| `research strategy-gate`     | `--history-file` (req), `--market-id` (req), `--event-id` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--min-trades`, `--min-total-pnl`, `--max-drawdown-pct`, `--json`                                                                                                                                                       | Promotion gate (pass/fail with thresholds)                                        |
-| `research alpha-pipeline`    | `--history-file` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--market-id`, `--event-id`, `--market-sort-by`, `--market-rank`, `--dry-run-events`, `--initial-capital`, `--min-trades`, `--min-total-pnl`, `--max-drawdown-pct`, `--batch-limit`, `--run-batch-markets`/`--no-run-batch-markets`, `--artifacts-dir`, `--json` | Full pipeline: validate + backtest + stress + gate (+ optional batch) in one shot |
-| `research batch-markets`     | `--history-file` (req), `--strategy-ref` (req), `--strategy-kwargs-json`, `--initial-capital`, `--limit`, `--output` (req), `--json`                                                                                                                                                                                                       | Run one strategy across N markets                                                 |
-| `research memory add`        | `--input-file` (req), `--memory-file`, `--tag`, `--json`                                                                                                                                                                                                                                                                                   | Persist run results to experiment memory                                          |
-| `research memory list`       | `--memory-file`, `--tag`, `--json`                                                                                                                                                                                                                                                                                                         | Query experiment memory                                                           |
+| Command                    | Description                         |
+| -------------------------- | ----------------------------------- |
+| `research strategy-gate`   | Promotion gate with thresholds      |
+| `research alpha-pipeline`  | Full alpha discovery pipeline       |
+| `research batch-markets`   | Run strategy across N markets       |
+| `research harvest`         | Harvest results from completed runs |
+| `research feedback-report` | Generate feedback report            |
+| `research market-snapshot` | Snapshot market state               |
 
 ## Environment Variables
 

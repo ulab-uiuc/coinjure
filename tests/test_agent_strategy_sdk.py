@@ -4,12 +4,12 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager
-from coinjure.engine.execution.trader import Trader
+from coinjure.data.data_manager import DataManager
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager
+from coinjure.engine.trader.trader import Trader
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.agent_strategy import AgentStrategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
@@ -33,7 +33,7 @@ def test_ticker() -> PolyMarketTicker:
 
 @pytest.fixture
 def paper_trader(test_ticker: PolyMarketTicker) -> PaperTrader:
-    market_data = MarketDataManager()
+    market_data = DataManager()
     market_data.process_price_change_event(
         PriceChangeEvent(ticker=test_ticker, price=Decimal('0.52'), timestamp='t1')
     )

@@ -16,8 +16,8 @@ from decimal import Decimal
 import click
 
 from coinjure.cli.monitor import TradingMonitor
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.types import TradeSide
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.types import TradeSide
 from coinjure.ticker import CashTicker, Ticker
 
 

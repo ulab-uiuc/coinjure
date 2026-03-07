@@ -15,8 +15,8 @@ from __future__ import annotations
 from collections import defaultdict
 from decimal import Decimal
 
-from coinjure.engine.execution.trader import Trader
-from coinjure.engine.execution.types import TradeSide
+from coinjure.engine.trader.trader import Trader
+from coinjure.engine.trader.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import Ticker

@@ -13,11 +13,11 @@ the Coinjure framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import ConservativeRiskManager
-from coinjure.engine.live_trader import run_live_paper_trading
-from coinjure.market.live.live_data_source import LiveRSSNewsDataSource
-from coinjure.market.market_data_manager import MarketDataManager
+from coinjure.data.data_manager import DataManager
+from coinjure.data.live.polymarket_data_source import LiveRSSNewsDataSource
+from coinjure.engine.runner import run_live_paper_trading
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import ConservativeRiskManager
 from coinjure.strategy.test_strategy import TestStrategy
 from coinjure.ticker import CashTicker
 
@@ -74,7 +74,7 @@ async def run_paper_trading_with_risk_management():
     duration = 60
 
     # Set up components manually for more control
-    market_data = MarketDataManager()
+    market_data = DataManager()
     position_manager = PositionManager()
     position_manager.update_position(
         Position(

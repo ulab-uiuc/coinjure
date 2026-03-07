@@ -4,15 +4,15 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager, StandardRiskManager
-from coinjure.engine.execution.trader import Trader
+from coinjure.data.data_manager import DataManager
+from coinjure.data.data_source import DataSource
+from coinjure.data.order_book import Level, OrderBook
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.engine.trader.trader import Trader
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.events import Event, NewsEvent
-from coinjure.market.data_source import DataSource
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.market.order_book import Level, OrderBook
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
@@ -44,7 +44,7 @@ def paper_trader() -> PaperTrader:
         market_id='market123',
         event_id='event123',
     )
-    mdm = MarketDataManager()
+    mdm = DataManager()
     ob = OrderBook()
     ob.update(
         asks=[Level(price=Decimal('0.55'), size=Decimal('1000'))],

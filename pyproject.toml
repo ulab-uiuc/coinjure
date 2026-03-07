@@ -51,10 +51,13 @@ kalshi-python = "*"
 cryptography = "*"
 litellm = {version = ">=1.0.0", optional = true}
 pyarrow = {version = ">=14.0.0", optional = true}
+statsmodels = {version = ">=0.14.0", optional = true}
+scipy = {version = ">=1.11.0", optional = true}
 
 [tool.poetry.extras]
 llm = ["litellm"]
 parquet = ["pyarrow"]
+quant = ["statsmodels", "scipy"]
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.6.0"
@@ -94,20 +97,15 @@ no_implicit_optional = false
 exclude = "(examples/|scripts/|tests/)"
 
 [[tool.mypy.overrides]]
-module = "coinjure.strategy.simple_strategy"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = [
     "coinjure.events",
     "coinjure.engine.performance",
-    "coinjure.market.market_data_manager",
-    "coinjure.market.backtest.historical_data_source",
-    "coinjure.market.live.live_data_source",
-    "coinjure.market.live.google_news_data_source",
-    "coinjure.market.live.kalshi_data_source",
-    "coinjure.engine.execution.kalshi_trader",
-    "coinjure.engine.execution.paper_trader",
+    "coinjure.data.data_manager",
+    "coinjure.data.live.polymarket_data_source",
+    "coinjure.data.live.google_news_data_source",
+    "coinjure.data.live.kalshi_data_source",
+    "coinjure.engine.trader.kalshi_trader",
+    "coinjure.engine.trader.paper_trader",
     "coinjure.engine.trading_engine",
     "coinjure.engine.backtester",
 ]
@@ -170,8 +168,7 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["S101"]
-"coinjure/strategy/simple_strategy.py" = ["C901"]
-"coinjure/market/live/live_data_source.py" = ["C901"]
+"coinjure/data/live/polymarket_data_source.py" = ["C901"]
 "coinjure/cli/agent_commands.py" = ["C901"]
 "coinjure/cli/monitor.py" = ["C901"]
 "scripts/*" = ["C901"]

@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from coinjure.engine.execution.alerter import Alerter, CompositeAlerter, LogAlerter
-from coinjure.engine.execution.telegram_alerter import TelegramAlerter
-from coinjure.engine.execution.types import OrderFailureReason, Trade, TradeSide
+from coinjure.engine.trader.alerter import Alerter, CompositeAlerter, LogAlerter
+from coinjure.engine.trader.telegram_alerter import TelegramAlerter
+from coinjure.engine.trader.types import OrderFailureReason, Trade, TradeSide
 from coinjure.ticker import PolyMarketTicker
 
 # ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ async def test_telegram_alerter_swallows_network_error():
     alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
 
     with patch(
-        'coinjure.engine.execution.telegram_alerter.httpx.AsyncClient'
+        'coinjure.engine.trader.telegram_alerter.httpx.AsyncClient'
     ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -151,7 +151,7 @@ async def test_telegram_alerter_sends_correct_url():
         return resp
 
     with patch(
-        'coinjure.engine.execution.telegram_alerter.httpx.AsyncClient'
+        'coinjure.engine.trader.telegram_alerter.httpx.AsyncClient'
     ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -172,7 +172,7 @@ async def test_telegram_alerter_swallows_http_error_response():
     alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
 
     with patch(
-        'coinjure.engine.execution.telegram_alerter.httpx.AsyncClient'
+        'coinjure.engine.trader.telegram_alerter.httpx.AsyncClient'
     ) as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)

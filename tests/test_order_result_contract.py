@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from coinjure.engine.execution.types import (
+from coinjure.engine.trader.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
