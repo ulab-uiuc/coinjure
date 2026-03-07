@@ -15,16 +15,15 @@ from typing import Any
 import click
 
 from coinjure.cli.utils import _emit
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import (
+from coinjure.data.data_manager import DataManager
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import (
     NoRiskManager,
     RiskManager,
     StandardRiskManager,
 )
 from coinjure.engine.trading_engine import TradingEngine
-from coinjure.market.backtest.historical_data_source import HistoricalDataSource
-from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
 
@@ -361,7 +360,7 @@ def _run_strategy_dry_run(
         no_token_id='DRYRUN_NO',
     )
     strategy = _strategy_from_ref(strategy_ref, strategy_kwargs)
-    market_data = MarketDataManager()
+    market_data = DataManager()
     position_manager = PositionManager()
     position_manager.update_position(
         Position(
@@ -408,41 +407,28 @@ def _run_strategy_dry_run(
     }
 
 
-def _run_backtest_once(
+def _run_backtest_parquet_once(
     *,
-    history_file: str,
+    parquet_path: str | list[str],
     strategy_ref: str,
     strategy_kwargs: dict[str, Any],
-    market_id: str,
-    event_id: str,
+    market_ids: list[str] | None = None,
     initial_capital: Decimal,
     min_fill_rate: Decimal = Decimal('0.5'),
     max_fill_rate: Decimal = Decimal('1.0'),
     commission_rate: Decimal = Decimal('0.0'),
-    spread: Decimal = Decimal('0.01'),
-    risk_profile: str = 'none',
-    include_all_markets_context: bool = False,
-    allow_cross_market_trading: bool = False,
 ) -> dict[str, object]:
+    from coinjure.data.backtest.parquet_data_source import ParquetDataSource
+
     strategy = _strategy_from_ref(strategy_ref, strategy_kwargs)
-    ticker = PolyMarketTicker(
-        symbol='RESEARCH_TOKEN',
-        name='Research Market',
-        market_id=market_id,
-        event_id=event_id,
-        token_id='RESEARCH_TOKEN',
-    )
 
     async def _run() -> dict[str, object]:
-        data_source = HistoricalDataSource(
-            history_file,
-            ticker,
-            include_all_markets=include_all_markets_context,
-        )
-        market_data = MarketDataManager(
-            spread=spread,
+        data_source = ParquetDataSource(parquet_path, market_ids=market_ids)
+        market_data = DataManager(
+            spread=Decimal('0'),
             max_history_per_ticker=None,
             max_timeline_events=None,
+            synthetic_book=False,
         )
         position_manager = PositionManager()
         position_manager.update_position(
@@ -453,15 +439,7 @@ def _run_backtest_once(
                 realized_pnl=Decimal('0'),
             )
         )
-        risk_manager: RiskManager
-        if risk_profile == 'standard':
-            risk_manager = StandardRiskManager(
-                position_manager=position_manager,
-                market_data=market_data,
-                initial_capital=initial_capital,
-            )
-        else:
-            risk_manager = NoRiskManager()
+        risk_manager: RiskManager = NoRiskManager()
 
         trader = PaperTrader(
             market_data=market_data,
@@ -471,12 +449,6 @@ def _run_backtest_once(
             max_fill_rate=max_fill_rate,
             commission_rate=commission_rate,
         )
-        if not allow_cross_market_trading:
-            tradable_tickers: list[Ticker | str] = [ticker]
-            no_ticker = ticker.get_no_ticker()
-            if no_ticker is not None:
-                tradable_tickers.append(no_ticker)
-            trader.set_allowed_tickers(tradable_tickers)
         engine = TradingEngine(
             data_source=data_source,
             strategy=strategy,

@@ -37,7 +37,7 @@ import httpx
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from swm_agent.analytics.performance_analyzer import PerformanceAnalyzer
-from swm_agent.data.market_data_manager import MarketDataManager
+from swm_agent.data.market_data_manager import DataManager
 from swm_agent.events.events import Event, NewsEvent, PriceChangeEvent
 from swm_agent.order.order_book import Level, OrderBook
 from swm_agent.position.position_manager import Position, PositionManager
@@ -50,29 +50,29 @@ from swm_agent.trader.types import TradeSide
 # Config
 # ---------------------------------------------------------------------------
 
-INITIAL_CAPITAL = Decimal("10000")
+INITIAL_CAPITAL = Decimal('10000')
 MIN_MID_PRICE = 0.15
 MAX_MID_PRICE = 0.85
 MAX_MARKETS = 4  # fewer markets to keep LLM calls manageable
-COMMISSION_RATE = Decimal("0.002")
-MIN_FILL_RATE = Decimal("0.85")
-MAX_FILL_RATE = Decimal("1.0")
+COMMISSION_RATE = Decimal('0.002')
+MIN_FILL_RATE = Decimal('0.85')
+MAX_FILL_RATE = Decimal('1.0')
 NEWS_INTERVAL = 30  # inject synthetic news every N price events (less frequent)
 
 # LLM config — uses `claude -p` CLI with user's Claude Code subscription
-FAST_MODEL = os.environ.get("BACKTEST_FAST_MODEL", "claude-haiku-4-5-20251001")
-JUDGE_MODEL = os.environ.get("BACKTEST_JUDGE_MODEL", "claude-haiku-4-5-20251001")
+FAST_MODEL = os.environ.get('BACKTEST_FAST_MODEL', 'claude-haiku-4-5-20251001')
+JUDGE_MODEL = os.environ.get('BACKTEST_JUDGE_MODEL', 'claude-haiku-4-5-20251001')
 LLM_MAX_RETRIES = 3
 LLM_RETRY_BASE_DELAY = 2.0  # seconds
 
-logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 logging.basicConfig(
     level=logging.WARNING,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%H:%M:%S',
 )
-logger = logging.getLogger("llm_backtest")
+logger = logging.getLogger('llm_backtest')
 logger.setLevel(logging.INFO)
 
 
@@ -84,24 +84,29 @@ _llm_call_count = 0
 _llm_cache: dict[str, str] = {}
 
 
-async def call_llm(model: str, prompt: str, system: str = "") -> str | None:
+async def call_llm(model: str, prompt: str, system: str = '') -> str | None:
     """Call LLM via `claude -p` CLI (stdin pipe) using the user's subscription."""
     global _llm_call_count
 
     # Cache key to avoid duplicate calls
-    cache_key = hashlib.md5(f"{model}:{system}:{prompt}".encode()).hexdigest()
+    cache_key = hashlib.md5(f'{model}:{system}:{prompt}'.encode()).hexdigest()
     if cache_key in _llm_cache:
         return _llm_cache[cache_key]
 
-    full_prompt = f"{system}\n\n{prompt}" if system else prompt
+    full_prompt = f'{system}\n\n{prompt}' if system else prompt
 
     for attempt in range(LLM_MAX_RETRIES):
         try:
             env = os.environ.copy()
-            env.pop("CLAUDECODE", None)  # bypass nested session check
+            env.pop('CLAUDECODE', None)  # bypass nested session check
 
             proc = await asyncio.create_subprocess_exec(
-                "claude", "-p", "--model", model, "--max-turns", "1",
+                'claude',
+                '-p',
+                '--model',
+                model,
+                '--max-turns',
+                '1',
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -114,19 +119,19 @@ async def call_llm(model: str, prompt: str, system: str = "") -> str | None:
 
             if proc.returncode != 0 or not text:
                 err = stderr.decode().strip()
-                logger.warning(f"claude CLI error (attempt {attempt+1}): {err[:200]}")
+                logger.warning(f'claude CLI error (attempt {attempt+1}): {err[:200]}')
                 if attempt < LLM_MAX_RETRIES - 1:
-                    await asyncio.sleep(LLM_RETRY_BASE_DELAY * (2 ** attempt))
+                    await asyncio.sleep(LLM_RETRY_BASE_DELAY * (2**attempt))
                     continue
                 return None
 
             _llm_call_count += 1
             _llm_cache[cache_key] = text
-            logger.info(f"  LLM #{_llm_call_count} OK ({len(text)} chars)")
+            logger.info(f'  LLM #{_llm_call_count} OK ({len(text)} chars)')
             return text
 
         except asyncio.TimeoutError:
-            logger.warning(f"claude CLI timeout (attempt {attempt+1})")
+            logger.warning(f'claude CLI timeout (attempt {attempt+1})')
             try:
                 proc.kill()
             except Exception:
@@ -136,7 +141,7 @@ async def call_llm(model: str, prompt: str, system: str = "") -> str | None:
             else:
                 return None
         except Exception as e:
-            logger.warning(f"claude CLI failed (attempt {attempt+1}): {e}")
+            logger.warning(f'claude CLI failed (attempt {attempt+1}): {e}')
             if attempt < LLM_MAX_RETRIES - 1:
                 await asyncio.sleep(LLM_RETRY_BASE_DELAY)
             else:
@@ -149,24 +154,24 @@ def parse_json_response(text: str | None) -> dict | None:
     if not text:
         return None
     # Try to find JSON block
-    if "```json" in text:
-        start = text.index("```json") + 7
-        end = text.index("```", start)
+    if '```json' in text:
+        start = text.index('```json') + 7
+        end = text.index('```', start)
         text = text[start:end].strip()
-    elif "```" in text:
-        start = text.index("```") + 3
-        end = text.index("```", start)
+    elif '```' in text:
+        start = text.index('```') + 3
+        end = text.index('```', start)
         text = text[start:end].strip()
     # Try direct parse
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         # Try to find first { ... }
-        start = text.find("{")
-        end = text.rfind("}")
+        start = text.find('{')
+        end = text.rfind('}')
         if start >= 0 and end > start:
             try:
-                return json.loads(text[start:end+1])
+                return json.loads(text[start : end + 1])
             except json.JSONDecodeError:
                 return None
     return None
@@ -235,21 +240,21 @@ NEU_TEMPLATES = [
 
 
 def make_news(market: MarketInfo, ts: datetime) -> NewsEvent:
-    sentiment = random.choices(["pos", "neg", "neu"], weights=[0.40, 0.35, 0.25])[0]
-    templates = {"pos": POS_TEMPLATES, "neg": NEG_TEMPLATES, "neu": NEU_TEMPLATES}
+    sentiment = random.choices(['pos', 'neg', 'neu'], weights=[0.40, 0.35, 0.25])[0]
+    templates = {'pos': POS_TEMPLATES, 'neg': NEG_TEMPLATES, 'neu': NEU_TEMPLATES}
     headline = random.choice(templates[sentiment]).format(q=market.question[:80])
     mid = (market.best_bid + market.best_ask) / 2
     body = (
-        f"{headline}. "
-        f"Current market-implied probability: {mid:.1%}. "
-        f"24h volume: ${market.volume:,.0f}. "
-        f"Liquidity depth: ${market.liquidity:,.0f}."
+        f'{headline}. '
+        f'Current market-implied probability: {mid:.1%}. '
+        f'24h volume: ${market.volume:,.0f}. '
+        f'Liquidity depth: ${market.liquidity:,.0f}.'
     )
-    uid = hashlib.md5(f"{market.token_id}-{ts.isoformat()}".encode()).hexdigest()[:12]
+    uid = hashlib.md5(f'{market.token_id}-{ts.isoformat()}'.encode()).hexdigest()[:12]
     return NewsEvent(
         news=body,
         title=headline,
-        source=random.choice(["Reuters", "AP", "Bloomberg", "WSJ"]),
+        source=random.choice(['Reuters', 'AP', 'Bloomberg', 'WSJ']),
         published_at=ts,
         ticker=market.ticker,
         uuid=uid,
@@ -263,10 +268,10 @@ def make_news(market: MarketInfo, ts: datetime) -> NewsEvent:
 
 
 async def fetch_markets(client: httpx.AsyncClient) -> list[dict]:
-    logger.info("Fetching markets from Polymarket Gamma API...")
+    logger.info('Fetching markets from Polymarket Gamma API...')
     resp = await client.get(
-        "https://gamma-api.polymarket.com/markets",
-        params={"active": "true", "closed": "false", "limit": "100"},
+        'https://gamma-api.polymarket.com/markets',
+        params={'active': 'true', 'closed': 'false', 'limit': '100'},
         timeout=30.0,
     )
     resp.raise_for_status()
@@ -277,10 +282,10 @@ def select_markets(raw: list[dict]) -> list[MarketInfo]:
     candidates: list[MarketInfo] = []
     for mkt in raw:
         try:
-            bb = float(mkt.get("bestBid", 0))
-            ba = float(mkt.get("bestAsk", 0))
-            vol = float(mkt.get("volume", 0))
-            liq = float(mkt.get("liquidityNum", 0))
+            bb = float(mkt.get('bestBid', 0))
+            ba = float(mkt.get('bestAsk', 0))
+            vol = float(mkt.get('volume', 0))
+            liq = float(mkt.get('liquidityNum', 0))
         except (ValueError, TypeError):
             continue
         if bb <= 0 or ba <= 0:
@@ -288,7 +293,7 @@ def select_markets(raw: list[dict]) -> list[MarketInfo]:
         mid = (bb + ba) / 2
         if mid < MIN_MID_PRICE or mid > MAX_MID_PRICE:
             continue
-        clob_ids = mkt.get("clobTokenIds", "")
+        clob_ids = mkt.get('clobTokenIds', '')
         if isinstance(clob_ids, str):
             try:
                 clob_ids = json.loads(clob_ids)
@@ -296,15 +301,15 @@ def select_markets(raw: list[dict]) -> list[MarketInfo]:
                 continue
         if not clob_ids or not isinstance(clob_ids, list):
             continue
-        cid = mkt.get("conditionId", "")
+        cid = mkt.get('conditionId', '')
         if not cid:
             continue
         candidates.append(
             MarketInfo(
-                question=mkt.get("question", ""),
+                question=mkt.get('question', ''),
                 condition_id=cid,
                 token_id=clob_ids[0],
-                outcome="Yes",
+                outcome='Yes',
                 best_bid=bb,
                 best_ask=ba,
                 volume=vol,
@@ -313,24 +318,26 @@ def select_markets(raw: list[dict]) -> list[MarketInfo]:
         )
     candidates.sort(key=lambda m: m.volume, reverse=True)
     sel = candidates[:MAX_MARKETS]
-    logger.info(f"Selected {len(sel)} markets (mid {MIN_MID_PRICE}-{MAX_MID_PRICE})")
+    logger.info(f'Selected {len(sel)} markets (mid {MIN_MID_PRICE}-{MAX_MID_PRICE})')
     return sel
 
 
 async def fetch_price_history(client: httpx.AsyncClient, token_id: str) -> list[dict]:
-    url = "https://clob.polymarket.com/prices-history"
-    params = {"market": token_id, "interval": "max", "fidelity": "60"}
+    url = 'https://clob.polymarket.com/prices-history'
+    params = {'market': token_id, 'interval': 'max', 'fidelity': '60'}
     try:
         resp = await client.get(url, params=params, timeout=30.0)
         resp.raise_for_status()
-        return resp.json().get("history", [])
+        return resp.json().get('history', [])
     except Exception as e:
-        logger.warning(f"Price history failed for {token_id[:16]}...: {e}")
+        logger.warning(f'Price history failed for {token_id[:16]}...: {e}')
         return []
 
 
-async def fetch_all_histories(client: httpx.AsyncClient, markets: list[MarketInfo]) -> None:
-    logger.info(f"Fetching price histories for {len(markets)} markets...")
+async def fetch_all_histories(
+    client: httpx.AsyncClient, markets: list[MarketInfo]
+) -> None:
+    logger.info(f'Fetching price histories for {len(markets)} markets...')
     tasks = [fetch_price_history(client, m.token_id) for m in markets]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for market, result in zip(markets, results, strict=False):
@@ -338,7 +345,7 @@ async def fetch_all_histories(client: httpx.AsyncClient, markets: list[MarketInf
             market.price_history = []
         else:
             market.price_history = result
-            logger.info(f"  {market.question[:50]}... -> {len(result)} pts")
+            logger.info(f'  {market.question[:50]}... -> {len(result)} pts')
 
 
 def create_ticker(market: MarketInfo) -> PolyMarketTicker:
@@ -357,12 +364,17 @@ def build_timeline(markets: list[MarketInfo]) -> list[Event]:
         ticker = market.ticker
         for pt in market.price_history:
             try:
-                ts = datetime.fromtimestamp(int(pt["t"]), tz=timezone.utc)
-                price = Decimal(str(pt["p"]))
-                price = max(Decimal("0.01"), min(Decimal("0.99"), price))
+                ts = datetime.fromtimestamp(int(pt['t']), tz=timezone.utc)
+                price = Decimal(str(pt['p']))
+                price = max(Decimal('0.01'), min(Decimal('0.99'), price))
             except (KeyError, ValueError, TypeError):
                 continue
-            raw.append((float(pt["t"]), PriceChangeEvent(ticker=ticker, price=price, timestamp=ts)))
+            raw.append(
+                (
+                    float(pt['t']),
+                    PriceChangeEvent(ticker=ticker, price=price, timestamp=ts),
+                )
+            )
     raw.sort(key=lambda x: x[0])
 
     timeline: list[Event] = []
@@ -372,11 +384,17 @@ def build_timeline(markets: list[MarketInfo]) -> list[Event]:
         price_count += 1
         if price_count % NEWS_INTERVAL == 0:
             m = random.choice(markets)
-            ts_dt = event.timestamp if hasattr(event, "timestamp") else datetime.now(timezone.utc)
+            ts_dt = (
+                event.timestamp
+                if hasattr(event, 'timestamp')
+                else datetime.now(timezone.utc)
+            )
             timeline.append(make_news(m, ts_dt))
 
     news_count = len(timeline) - price_count
-    logger.info(f"Timeline: {len(timeline)} events ({price_count} price, {news_count} news)")
+    logger.info(
+        f'Timeline: {len(timeline)} events ({price_count} price, {news_count} news)'
+    )
     return timeline
 
 
@@ -387,15 +405,15 @@ def build_timeline(markets: list[MarketInfo]) -> list[Event]:
 
 class BacktestContext:
     def __init__(self, markets: list[MarketInfo]) -> None:
-        self.market_data = MarketDataManager()
+        self.market_data = DataManager()
         self.position_manager = PositionManager()
         self.risk_manager = StandardRiskManager(
             position_manager=self.position_manager,
             market_data=self.market_data,
-            max_single_trade_size=Decimal("500"),
-            max_position_size=Decimal("2000"),
-            max_total_exposure=Decimal("8000"),
-            max_drawdown_pct=Decimal("0.25"),
+            max_single_trade_size=Decimal('500'),
+            max_position_size=Decimal('2000'),
+            max_total_exposure=Decimal('8000'),
+            max_drawdown_pct=Decimal('0.25'),
             max_positions=len(markets),
             initial_capital=INITIAL_CAPITAL,
         )
@@ -413,18 +431,22 @@ class BacktestContext:
             Position(
                 ticker=CashTicker.POLYMARKET_USDC,
                 quantity=INITIAL_CAPITAL,
-                average_cost=Decimal("1"),
-                realized_pnl=Decimal("0"),
+                average_cost=Decimal('1'),
+                realized_pnl=Decimal('0'),
             )
         )
 
         for market in markets:
             ticker = market.ticker
-            bid = Decimal(str(market.best_bid)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            ask = Decimal(str(market.best_ask)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            bid = Decimal(str(market.best_bid)).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
+            ask = Decimal(str(market.best_ask)).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
             ob = OrderBook()
-            bids = [Level(price=bid, size=Decimal("1000"))] if bid > 0 else []
-            asks = [Level(price=ask, size=Decimal("1000"))] if ask < 1 else []
+            bids = [Level(price=bid, size=Decimal('1000'))] if bid > 0 else []
+            asks = [Level(price=ask, size=Decimal('1000'))] if ask < 1 else []
             ob.update(asks=asks, bids=bids)
             self.market_data.update_order_book(ticker, ob)
 
@@ -435,8 +457,13 @@ class BacktestContext:
 
 
 class MomentumStrategy:
-    def __init__(self, window: int = 20, buy_threshold: float = -0.03,
-                 sell_threshold: float = 0.03, trade_size: Decimal = Decimal("50")):
+    def __init__(
+        self,
+        window: int = 20,
+        buy_threshold: float = -0.03,
+        sell_threshold: float = 0.03,
+        trade_size: Decimal = Decimal('50'),
+    ):
         self.window = window
         self.buy_threshold = buy_threshold
         self.sell_threshold = sell_threshold
@@ -484,8 +511,13 @@ class MomentumStrategy:
 class LLMNewsSentimentStrategy:
     """Real LLM news analysis — single call per news event."""
 
-    def __init__(self, model: str = FAST_MODEL, confidence_threshold: float = 0.40,
-                 trade_size: Decimal = Decimal("80"), cooldown: int = 10):
+    def __init__(
+        self,
+        model: str = FAST_MODEL,
+        confidence_threshold: float = 0.40,
+        trade_size: Decimal = Decimal('80'),
+        cooldown: int = 10,
+    ):
         self.model = model
         self.conf_threshold = confidence_threshold
         self.trade_size = trade_size
@@ -507,7 +539,8 @@ class LLMNewsSentimentStrategy:
         ticker = event.ticker
         pos = ctx.position_manager.get_position(ticker)
         cash = sum(
-            (p.quantity for p in ctx.position_manager.get_cash_positions()), Decimal("0")
+            (p.quantity for p in ctx.position_manager.get_cash_positions()),
+            Decimal('0'),
         )
         best_bid = ctx.trader.market_data.get_best_bid(ticker)
         best_ask = ctx.trader.market_data.get_best_ask(ticker)
@@ -536,15 +569,15 @@ Respond with ONLY this JSON:
         if not parsed:
             return
 
-        action = parsed.get("action", "hold").lower()
-        confidence = float(parsed.get("confidence", 0))
+        action = parsed.get('action', 'hold').lower()
+        confidence = float(parsed.get('confidence', 0))
 
-        if confidence < self.conf_threshold or action == "hold":
+        if confidence < self.conf_threshold or action == 'hold':
             return
 
         self._last_trade[sym] = self._event_count
 
-        if action == "buy":
+        if action == 'buy':
             level = ctx.trader.market_data.get_best_ask(ticker)
             if level:
                 result = await ctx.trader.place_order(
@@ -553,7 +586,7 @@ Respond with ONLY this JSON:
                 if result.order:
                     for t in result.order.trades:
                         ctx.analyzer.add_trade(t)
-        elif action == "sell":
+        elif action == 'sell':
             if pos and pos.quantity > 0:
                 level = ctx.trader.market_data.get_best_bid(ticker)
                 if level:
@@ -574,10 +607,16 @@ Respond with ONLY this JSON:
 class LLMDebateStrategy:
     """Full 3-call debate: bull argues higher, bear argues lower, judge decides."""
 
-    def __init__(self, bull_model: str = FAST_MODEL, bear_model: str = FAST_MODEL,
-                 judge_model: str = JUDGE_MODEL, confidence_threshold: float = 0.50,
-                 edge_threshold: float = 0.05, trade_size: Decimal = Decimal("80"),
-                 cooldown: int = 15):
+    def __init__(
+        self,
+        bull_model: str = FAST_MODEL,
+        bear_model: str = FAST_MODEL,
+        judge_model: str = JUDGE_MODEL,
+        confidence_threshold: float = 0.50,
+        edge_threshold: float = 0.05,
+        trade_size: Decimal = Decimal('80'),
+        cooldown: int = 15,
+    ):
         self.bull_model = bull_model
         self.bear_model = bear_model
         self.judge_model = judge_model
@@ -602,7 +641,7 @@ class LLMDebateStrategy:
             return
 
         sym = event.ticker.symbol
-        self._news_buf[sym].append(f"{event.title}: {event.news[:200]}")
+        self._news_buf[sym].append(f'{event.title}: {event.news[:200]}')
         self._news_buf[sym] = self._news_buf[sym][-5:]  # keep last 5
 
         if self._event_count - self._last_trade.get(sym, 0) < self.cooldown:
@@ -616,12 +655,13 @@ class LLMDebateStrategy:
         mid = float((best_bid.price + best_ask.price) / 2)
         pos = ctx.position_manager.get_position(ticker)
         cash = sum(
-            (p.quantity for p in ctx.position_manager.get_cash_positions()), Decimal("0")
+            (p.quantity for p in ctx.position_manager.get_cash_positions()),
+            Decimal('0'),
         )
 
-        news_block = "\n".join(f"- {n}" for n in self._news_buf[sym])
+        news_block = '\n'.join(f'- {n}' for n in self._news_buf[sym])
         prices = self._prices.get(sym, deque())
-        price_trend = "flat"
+        price_trend = 'flat'
         if len(prices) >= 5:
             pct = (prices[-1] - prices[0]) / prices[0] if prices[0] else 0
             price_trend = f"{'up' if pct > 0 else 'down'} {abs(pct)*100:.1f}%"
@@ -692,17 +732,21 @@ Respond ONLY with JSON:
         if not parsed:
             return
 
-        action = parsed.get("action", "hold").lower()
-        confidence = float(parsed.get("confidence", 0))
-        fair_prob = float(parsed.get("fair_probability", mid))
+        action = parsed.get('action', 'hold').lower()
+        confidence = float(parsed.get('confidence', 0))
+        fair_prob = float(parsed.get('fair_probability', mid))
         edge = fair_prob - mid
 
-        if confidence < self.conf_threshold or abs(edge) < self.edge_threshold or action == "hold":
+        if (
+            confidence < self.conf_threshold
+            or abs(edge) < self.edge_threshold
+            or action == 'hold'
+        ):
             return
 
         self._last_trade[sym] = self._event_count
 
-        if action == "buy" and edge > 0:
+        if action == 'buy' and edge > 0:
             level = ctx.trader.market_data.get_best_ask(ticker)
             if level:
                 result = await ctx.trader.place_order(
@@ -711,7 +755,7 @@ Respond ONLY with JSON:
                 if result.order:
                     for t in result.order.trades:
                         ctx.analyzer.add_trade(t)
-        elif action == "sell" and edge < 0:
+        elif action == 'sell' and edge < 0:
             if pos and pos.quantity > 0:
                 level = ctx.trader.market_data.get_best_bid(ticker)
                 if level:
@@ -732,10 +776,17 @@ Respond ONLY with JSON:
 class LLMDebateKellyStrategy:
     """Debate strategy with Kelly criterion position sizing."""
 
-    def __init__(self, bull_model: str = FAST_MODEL, bear_model: str = FAST_MODEL,
-                 judge_model: str = JUDGE_MODEL, kelly_fraction: float = 0.25,
-                 max_position_pct: float = 0.15, confidence_threshold: float = 0.50,
-                 edge_threshold: float = 0.05, cooldown: int = 15):
+    def __init__(
+        self,
+        bull_model: str = FAST_MODEL,
+        bear_model: str = FAST_MODEL,
+        judge_model: str = JUDGE_MODEL,
+        kelly_fraction: float = 0.25,
+        max_position_pct: float = 0.15,
+        confidence_threshold: float = 0.50,
+        edge_threshold: float = 0.05,
+        cooldown: int = 15,
+    ):
         self.bull_model = bull_model
         self.bear_model = bear_model
         self.judge_model = judge_model
@@ -750,25 +801,27 @@ class LLMDebateKellyStrategy:
         self._event_count = 0
         self.llm_calls = 0
 
-    def _kelly_size(self, fair_prob: float, market_price: float, portfolio: Decimal) -> Decimal:
+    def _kelly_size(
+        self, fair_prob: float, market_price: float, portfolio: Decimal
+    ) -> Decimal:
         if market_price <= 0 or market_price >= 1:
-            return Decimal("0")
+            return Decimal('0')
         if fair_prob > market_price:
             p, b = fair_prob, (1.0 / market_price) - 1.0
         else:
             p, b = 1.0 - fair_prob, (1.0 / (1.0 - market_price)) - 1.0
         if b <= 0:
-            return Decimal("0")
+            return Decimal('0')
         q = 1.0 - p
         f_star = (p * b - q) / b
         if f_star <= 0:
-            return Decimal("0")
+            return Decimal('0')
         fraction = min(f_star * self.kelly_fraction, self.max_position_pct)
         dollar = Decimal(str(fraction)) * portfolio
         share_price = Decimal(str(market_price))
         if share_price <= 0:
-            return Decimal("0")
-        return max((dollar / share_price).quantize(Decimal("1")), Decimal("0"))
+            return Decimal('0')
+        return max((dollar / share_price).quantize(Decimal('1')), Decimal('0'))
 
     async def on_event(self, event: Event, ctx: BacktestContext) -> None:
         self._event_count += 1
@@ -781,7 +834,7 @@ class LLMDebateKellyStrategy:
             return
 
         sym = event.ticker.symbol
-        self._news_buf[sym].append(f"{event.title}: {event.news[:200]}")
+        self._news_buf[sym].append(f'{event.title}: {event.news[:200]}')
         self._news_buf[sym] = self._news_buf[sym][-5:]
 
         if self._event_count - self._last_trade.get(sym, 0) < self.cooldown:
@@ -795,12 +848,13 @@ class LLMDebateKellyStrategy:
         mid = float((best_bid.price + best_ask.price) / 2)
         pos = ctx.position_manager.get_position(ticker)
         cash = sum(
-            (p.quantity for p in ctx.position_manager.get_cash_positions()), Decimal("0")
+            (p.quantity for p in ctx.position_manager.get_cash_positions()),
+            Decimal('0'),
         )
 
-        news_block = "\n".join(f"- {n}" for n in self._news_buf[sym])
+        news_block = '\n'.join(f'- {n}' for n in self._news_buf[sym])
         prices = self._prices.get(sym, deque())
-        price_trend = "flat"
+        price_trend = 'flat'
         if len(prices) >= 5:
             pct = (prices[-1] - prices[0]) / prices[0] if prices[0] else 0
             price_trend = f"{'up' if pct > 0 else 'down'} {abs(pct)*100:.1f}%"
@@ -871,12 +925,16 @@ Consider calibration. Respond ONLY with JSON:
         if not parsed:
             return
 
-        action = parsed.get("action", "hold").lower()
-        confidence = float(parsed.get("confidence", 0))
-        fair_prob = float(parsed.get("fair_probability", mid))
+        action = parsed.get('action', 'hold').lower()
+        confidence = float(parsed.get('confidence', 0))
+        fair_prob = float(parsed.get('fair_probability', mid))
         edge = fair_prob - mid
 
-        if confidence < self.conf_threshold or abs(edge) < self.edge_threshold or action == "hold":
+        if (
+            confidence < self.conf_threshold
+            or abs(edge) < self.edge_threshold
+            or action == 'hold'
+        ):
             return
 
         self._last_trade[sym] = self._event_count
@@ -887,11 +945,11 @@ Consider calibration. Respond ONLY with JSON:
         if qty <= 0:
             return
 
-        if edge > 0 and action == "buy":
+        if edge > 0 and action == 'buy':
             level = ctx.trader.market_data.get_best_ask(ticker)
             if level:
-                existing = pos.quantity if pos else Decimal("0")
-                buy_qty = max(qty - existing, Decimal("0"))
+                existing = pos.quantity if pos else Decimal('0')
+                buy_qty = max(qty - existing, Decimal('0'))
                 if buy_qty > 0:
                     result = await ctx.trader.place_order(
                         TradeSide.BUY, ticker, level.price, buy_qty
@@ -899,7 +957,7 @@ Consider calibration. Respond ONLY with JSON:
                     if result.order:
                         for t in result.order.trades:
                             ctx.analyzer.add_trade(t)
-        elif edge < 0 and action == "sell":
+        elif edge < 0 and action == 'sell':
             if pos and pos.quantity > 0:
                 level = ctx.trader.market_data.get_best_bid(ticker)
                 if level:
@@ -919,12 +977,15 @@ Consider calibration. Respond ONLY with JSON:
 
 
 async def run_single_round(
-    strategy_name: str, strategy: Any, markets: list[MarketInfo], timeline: list[Event],
+    strategy_name: str,
+    strategy: Any,
+    markets: list[MarketInfo],
+    timeline: list[Event],
 ) -> RoundResult:
     ctx = BacktestContext(markets)
     snapshots: list[tuple[datetime, Decimal]] = []
     peak = INITIAL_CAPITAL
-    max_dd = Decimal("0")
+    max_dd = Decimal('0')
     snap_interval = max(1, len(timeline) // 100)
 
     for i, event in enumerate(timeline):
@@ -934,10 +995,11 @@ async def run_single_round(
 
         if i % snap_interval == 0 or i == len(timeline) - 1:
             pv = ctx.position_manager.get_portfolio_value(ctx.market_data)
-            total_val = sum(pv.values(), Decimal("0"))
+            total_val = sum(pv.values(), Decimal('0'))
             ts = (
-                event.timestamp if isinstance(event, PriceChangeEvent)
-                else getattr(event, "published_at", datetime.now(timezone.utc))
+                event.timestamp
+                if isinstance(event, PriceChangeEvent)
+                else getattr(event, 'published_at', datetime.now(timezone.utc))
             )
             snapshots.append((ts, total_val))
             if total_val > peak:
@@ -947,7 +1009,7 @@ async def run_single_round(
                 max_dd = max(max_dd, dd)
 
     pv = ctx.position_manager.get_portfolio_value(ctx.market_data)
-    final_value = sum(pv.values(), Decimal("0"))
+    final_value = sum(pv.values(), Decimal('0'))
     realized = ctx.position_manager.get_total_realized_pnl()
     unrealized = ctx.position_manager.get_total_unrealized_pnl(ctx.market_data)
 
@@ -962,7 +1024,8 @@ async def run_single_round(
     stats = ctx.analyzer.get_stats()
     return_pct = (
         (final_value - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100
-        if INITIAL_CAPITAL > 0 else Decimal("0")
+        if INITIAL_CAPITAL > 0
+        else Decimal('0')
     )
     avg_pnl = (realized + unrealized) / Decimal(str(max(len(trades), 1)))
 
@@ -982,7 +1045,7 @@ async def run_single_round(
         profit_factor=stats.profit_factor,
         win_rate=stats.win_rate,
         avg_trade_pnl=avg_pnl,
-        llm_calls=getattr(strategy, "llm_calls", 0),
+        llm_calls=getattr(strategy, 'llm_calls', 0),
         timeline=snapshots,
     )
 
@@ -992,75 +1055,83 @@ async def run_single_round(
 # ---------------------------------------------------------------------------
 
 
-def print_report(markets: list[MarketInfo], results: list[RoundResult], timeframe: str) -> None:
-    sep = "=" * 105
+def print_report(
+    markets: list[MarketInfo], results: list[RoundResult], timeframe: str
+) -> None:
+    sep = '=' * 105
 
-    print(f"\n{sep}")
-    print("  REAL LLM BACKTEST REPORT — POLYMARKET")
+    print(f'\n{sep}')
+    print('  REAL LLM BACKTEST REPORT — POLYMARKET')
     print(sep)
 
-    print("\n--- Configuration ---")
-    print(f"  Initial Capital:  ${INITIAL_CAPITAL:,.2f}")
-    print(f"  Fast Model:       {FAST_MODEL}")
-    print(f"  Judge Model:      {JUDGE_MODEL}")
-    print(f"  Markets:          {len(markets)}")
-    print(f"  Timeframe:        {timeframe}")
-    print(f"  LLM Calls Total:  {_llm_call_count}")
-    print(f"  LLM Cache Hits:   {len(_llm_cache)}")
+    print('\n--- Configuration ---')
+    print(f'  Initial Capital:  ${INITIAL_CAPITAL:,.2f}')
+    print(f'  Fast Model:       {FAST_MODEL}')
+    print(f'  Judge Model:      {JUDGE_MODEL}')
+    print(f'  Markets:          {len(markets)}')
+    print(f'  Timeframe:        {timeframe}')
+    print(f'  LLM Calls Total:  {_llm_call_count}')
+    print(f'  LLM Cache Hits:   {len(_llm_cache)}')
 
-    print("\n--- Markets ---")
+    print('\n--- Markets ---')
     for m in markets:
         mid = (m.best_bid + m.best_ask) / 2
         print(
-            f"  [{m.ticker.symbol}] {m.question[:55]:<55} "
-            f"mid={mid:.2f}  vol=${m.volume:>12,.0f}  pts={len(m.price_history)}"
+            f'  [{m.ticker.symbol}] {m.question[:55]:<55} '
+            f'mid={mid:.2f}  vol=${m.volume:>12,.0f}  pts={len(m.price_history)}'
         )
 
-    print("\n--- Strategy Comparison ---")
+    print('\n--- Strategy Comparison ---')
     header = (
         f"  {'Strategy':<28} {'Return%':>9} {'Sharpe':>8} "
         f"{'MaxDD%':>8} {'WinRate':>8} {'PF':>6} "
         f"{'Trades':>7} {'LLM#':>6} {'P&L':>12}"
     )
     print(header)
-    print("  " + "-" * 102)
+    print('  ' + '-' * 102)
 
     sorted_results = sorted(results, key=lambda r: r.return_pct, reverse=True)
     for r in sorted_results:
-        pf_str = f"{r.profit_factor:.2f}" if r.profit_factor < Decimal("100") else "INF"
+        pf_str = f'{r.profit_factor:.2f}' if r.profit_factor < Decimal('100') else 'INF'
         print(
-            f"  {r.name:<28} {r.return_pct:>+8.2f}% {r.sharpe_ratio:>8.3f} "
-            f"{r.max_drawdown * 100:>7.2f}% {r.win_rate * 100:>7.1f}% {pf_str:>6} "
-            f"{r.total_trades:>7} {r.llm_calls:>6} ${r.total_pnl:>+10.2f}"
+            f'  {r.name:<28} {r.return_pct:>+8.2f}% {r.sharpe_ratio:>8.3f} '
+            f'{r.max_drawdown * 100:>7.2f}% {r.win_rate * 100:>7.1f}% {pf_str:>6} '
+            f'{r.total_trades:>7} {r.llm_calls:>6} ${r.total_pnl:>+10.2f}'
         )
 
     for r in sorted_results:
-        print(f"\n--- {r.name} (Detail) ---")
-        print(f"  Trades:       {r.total_trades} (buy={r.buy_trades}, sell={r.sell_trades})")
-        print(f"  Realized:     ${r.realized_pnl:+.4f}")
-        print(f"  Unrealized:   ${r.unrealized_pnl:+.4f}")
-        print(f"  Commission:   ${r.total_commission:.4f}")
-        print(f"  Final Value:  ${r.final_value:,.2f}")
-        print(f"  LLM Calls:    {r.llm_calls}")
+        print(f'\n--- {r.name} (Detail) ---')
+        print(
+            f'  Trades:       {r.total_trades} (buy={r.buy_trades}, sell={r.sell_trades})'
+        )
+        print(f'  Realized:     ${r.realized_pnl:+.4f}')
+        print(f'  Unrealized:   ${r.unrealized_pnl:+.4f}')
+        print(f'  Commission:   ${r.total_commission:.4f}')
+        print(f'  Final Value:  ${r.final_value:,.2f}')
+        print(f'  LLM Calls:    {r.llm_calls}')
 
         if r.timeline:
             step = max(1, len(r.timeline) // 8)
             pts = r.timeline[::step]
             if pts[-1] != r.timeline[-1]:
                 pts.append(r.timeline[-1])
-            print("  Portfolio curve:")
+            print('  Portfolio curve:')
             for ts, val in pts:
                 bar_len = max(0, int((float(val) / float(INITIAL_CAPITAL) - 0.9) * 200))
-                bar = "█" * min(bar_len, 40)
-                print(f"    {ts:%m-%d %H:%M}  ${val:>10,.2f}  {bar}")
+                bar = '█' * min(bar_len, 40)
+                print(f'    {ts:%m-%d %H:%M}  ${val:>10,.2f}  {bar}')
 
     best = sorted_results[0]
     worst = sorted_results[-1]
-    print(f"\n{sep}")
-    print(f"  BEST:  {best.name} ({best.return_pct:+.2f}%, Sharpe={best.sharpe_ratio:.3f})")
-    print(f"  WORST: {worst.name} ({worst.return_pct:+.2f}%, Sharpe={worst.sharpe_ratio:.3f})")
-    print(f"  TOTAL LLM CALLS: {_llm_call_count}  |  CACHE ENTRIES: {len(_llm_cache)}")
-    print(f"{sep}\n")
+    print(f'\n{sep}')
+    print(
+        f'  BEST:  {best.name} ({best.return_pct:+.2f}%, Sharpe={best.sharpe_ratio:.3f})'
+    )
+    print(
+        f'  WORST: {worst.name} ({worst.return_pct:+.2f}%, Sharpe={worst.sharpe_ratio:.3f})'
+    )
+    print(f'  TOTAL LLM CALLS: {_llm_call_count}  |  CACHE ENTRIES: {len(_llm_cache)}')
+    print(f'{sep}\n')
 
 
 # ---------------------------------------------------------------------------
@@ -1069,25 +1140,25 @@ def print_report(markets: list[MarketInfo], results: list[RoundResult], timefram
 
 
 async def main() -> None:
-    logger.info(f"Using claude CLI with models: fast={FAST_MODEL}, judge={JUDGE_MODEL}")
+    logger.info(f'Using claude CLI with models: fast={FAST_MODEL}, judge={JUDGE_MODEL}')
 
     # Quick connectivity test via claude CLI
-    logger.info("Testing claude CLI connectivity...")
+    logger.info('Testing claude CLI connectivity...')
     test = await call_llm(FAST_MODEL, "Reply with just the word 'ok'")
     if test is None:
         print("ERROR: claude CLI test failed. Make sure 'claude' is installed.")
         sys.exit(1)
-    logger.info(f"Claude CLI test OK: {test.strip()[:50]}")
+    logger.info(f'Claude CLI test OK: {test.strip()[:50]}')
 
     # Fetch real market data
     async with httpx.AsyncClient(
         follow_redirects=True,
-        headers={"User-Agent": "swm-agent-backtest/1.0"},
+        headers={'User-Agent': 'swm-agent-backtest/1.0'},
     ) as client:
         try:
             raw = await fetch_markets(client)
         except Exception as e:
-            logger.error(f"Market fetch failed: {e}")
+            logger.error(f'Market fetch failed: {e}')
             raw = []
 
         markets = select_markets(raw) if raw else []
@@ -1099,7 +1170,7 @@ async def main() -> None:
 
     markets = [m for m in markets if m.price_history]
     if not markets:
-        logger.error("No markets with price history. Check API.")
+        logger.error('No markets with price history. Check API.')
         sys.exit(1)
 
     for m in markets:
@@ -1107,7 +1178,7 @@ async def main() -> None:
 
     timeline = build_timeline(markets)
     if not timeline:
-        logger.error("Empty timeline, aborting.")
+        logger.error('Empty timeline, aborting.')
         return
 
     first_ts = last_ts = None
@@ -1116,65 +1187,79 @@ async def main() -> None:
             if first_ts is None:
                 first_ts = e.timestamp
             last_ts = e.timestamp
-    timeframe = "N/A"
+    timeframe = 'N/A'
     if first_ts and last_ts:
-        timeframe = f"{first_ts:%Y-%m-%d %H:%M} -> {last_ts:%Y-%m-%d %H:%M} UTC"
+        timeframe = f'{first_ts:%Y-%m-%d %H:%M} -> {last_ts:%Y-%m-%d %H:%M} UTC'
 
     news_count = sum(1 for e in timeline if isinstance(e, NewsEvent))
-    logger.info(f"Total news events for LLM analysis: {news_count}")
+    logger.info(f'Total news events for LLM analysis: {news_count}')
 
     # Define strategies
     strategies: list[tuple[str, Any]] = [
-        ("Momentum (no LLM)", MomentumStrategy(
-            window=20, buy_threshold=-0.03, sell_threshold=0.03,
-            trade_size=Decimal("50"),
-        )),
-        ("LLM News Sentiment", LLMNewsSentimentStrategy(
-            model=FAST_MODEL,
-            confidence_threshold=0.40,
-            trade_size=Decimal("80"),
-            cooldown=200,  # ~15 LLM calls total for this strategy
-        )),
-        ("LLM Debate (fixed size)", LLMDebateStrategy(
-            bull_model=FAST_MODEL,
-            bear_model=FAST_MODEL,
-            judge_model=JUDGE_MODEL,
-            confidence_threshold=0.50,
-            edge_threshold=0.05,
-            trade_size=Decimal("80"),
-            cooldown=350,  # ~3 calls each × ~10 triggers = ~30 LLM calls
-        )),
-        ("LLM Debate + Kelly", LLMDebateKellyStrategy(
-            bull_model=FAST_MODEL,
-            bear_model=FAST_MODEL,
-            judge_model=JUDGE_MODEL,
-            kelly_fraction=0.25,
-            max_position_pct=0.15,
-            confidence_threshold=0.50,
-            edge_threshold=0.05,
-            cooldown=350,
-        )),
+        (
+            'Momentum (no LLM)',
+            MomentumStrategy(
+                window=20,
+                buy_threshold=-0.03,
+                sell_threshold=0.03,
+                trade_size=Decimal('50'),
+            ),
+        ),
+        (
+            'LLM News Sentiment',
+            LLMNewsSentimentStrategy(
+                model=FAST_MODEL,
+                confidence_threshold=0.40,
+                trade_size=Decimal('80'),
+                cooldown=200,  # ~15 LLM calls total for this strategy
+            ),
+        ),
+        (
+            'LLM Debate (fixed size)',
+            LLMDebateStrategy(
+                bull_model=FAST_MODEL,
+                bear_model=FAST_MODEL,
+                judge_model=JUDGE_MODEL,
+                confidence_threshold=0.50,
+                edge_threshold=0.05,
+                trade_size=Decimal('80'),
+                cooldown=350,  # ~3 calls each × ~10 triggers = ~30 LLM calls
+            ),
+        ),
+        (
+            'LLM Debate + Kelly',
+            LLMDebateKellyStrategy(
+                bull_model=FAST_MODEL,
+                bear_model=FAST_MODEL,
+                judge_model=JUDGE_MODEL,
+                kelly_fraction=0.25,
+                max_position_pct=0.15,
+                confidence_threshold=0.50,
+                edge_threshold=0.05,
+                cooldown=350,
+            ),
+        ),
     ]
 
     # Run strategies sequentially (LLM calls need to be paced)
-    logger.info(f"Running {len(strategies)} strategies...")
+    logger.info(f'Running {len(strategies)} strategies...')
     results: list[RoundResult] = []
 
     for name, strat in strategies:
-        logger.info(f"  Running: {name}...")
+        logger.info(f'  Running: {name}...')
         random.seed(42)
         start_time = time.time()
         result = await run_single_round(name, strat, markets, timeline)
         elapsed = time.time() - start_time
         results.append(result)
         logger.info(
-            f"  {name}: return={result.return_pct:+.2f}%, "
-            f"trades={result.total_trades}, llm_calls={result.llm_calls}, "
-            f"time={elapsed:.1f}s"
+            f'  {name}: return={result.return_pct:+.2f}%, '
+            f'trades={result.total_trades}, llm_calls={result.llm_calls}, '
+            f'time={elapsed:.1f}s'
         )
 
     print_report(markets, results, timeframe)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())

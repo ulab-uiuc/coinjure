@@ -41,7 +41,7 @@ class PolyMarketTicker(Ticker):
     def get_no_ticker(self) -> PolyMarketTicker | None:
         """Return a ticker for the NO side of this market, if available.
 
-        The returned ticker must match the one stored in MarketDataManager
+        The returned ticker must match the one stored in DataManager
         by the data source, so we use the same ``name`` (not appending
         " (NO)") — ``PolyMarketTicker`` equality compares all fields.
         """

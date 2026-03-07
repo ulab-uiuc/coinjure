@@ -15,12 +15,12 @@ Use this skill when the user asks to have the agent design and code a strategy.
 
 ## Code Entry Points
 
-- Arbitrage strategy base class: `coinjure/strategy/strategy.py` (`Strategy`)
-- Existing arbitrage strategy references:
+- Strategy base class: `coinjure/strategy/strategy.py` (`Strategy`)
+- Existing strategy references:
   - `examples/strategies/direct_arb_strategy.py` — cross-platform two-leg arbitrage
   - `examples/strategies/event_sum_arb_strategy.py` — single-platform event-sum arbitrage
   - `examples/strategies/multi_leg_arb_strategy.py` — multi-leg arbitrage
-- Quant strategy base class: `coinjure/strategy/quant_strategy.py` (`QuantStrategy`)
+  - `examples/strategies/spread_arb_strategy.py` — spread mean-reversion
 - New strategy directory: `strategies/` or `examples/strategies/`
 
 ## Arbitrage Strategy Key Constraints
@@ -60,24 +60,14 @@ coinjure strategy backtest \
   --json
 ```
 
-4. Batch backtest
+4. Paper trading
 
 ```bash
-coinjure strategy batch \
-  --history-file <history.jsonl> \
+coinjure engine run --mode paper \
+  --exchange polymarket \
   --strategy-ref strategies/<name>.py:<ClassName> \
-  --limit 20 \
-  --output data/research/batch_result.json \
-  --json
-```
-
-5. Full pipeline (validate + backtest + gate)
-
-```bash
-coinjure strategy alpha-pipeline \
-  --history-file <history.jsonl> \
-  --strategy-ref strategies/<name>.py:<ClassName> \
-  --json
+  --strategy-kwargs-json '<json>' \
+  --monitor
 ```
 
 ## Hard Rules

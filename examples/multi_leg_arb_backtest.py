@@ -29,13 +29,13 @@ import json
 import os
 from decimal import Decimal
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager
+from coinjure.data.data_manager import DataManager
+from coinjure.data.data_source import DataSource
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager
 from coinjure.engine.trading_engine import TradingEngine
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.market.data_source import DataSource
-from coinjure.market.market_data_manager import MarketDataManager
 from coinjure.ticker import CashTicker, PolyMarketTicker
 from examples.strategies.multi_leg_arb_strategy import MultiLegArbStrategy
 
@@ -243,7 +243,7 @@ async def run_backtest() -> None:
 
     data_source = CrossPlatformDataSource(data_path)
 
-    market_data = MarketDataManager()
+    market_data = DataManager()
 
     position_manager = PositionManager()
     position_manager.update_position(

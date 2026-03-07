@@ -2,16 +2,16 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import (
+from coinjure.data.data_manager import DataManager
+from coinjure.data.order_book import Level, OrderBook
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import (
     AggressiveRiskManager,
     ConservativeRiskManager,
     NoRiskManager,
     StandardRiskManager,
 )
-from coinjure.engine.execution.types import TradeSide
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.market.order_book import Level, OrderBook
+from coinjure.engine.trader.types import TradeSide
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
@@ -43,9 +43,9 @@ def position_manager() -> PositionManager:
 
 
 @pytest.fixture
-def market_data(test_ticker: PolyMarketTicker) -> MarketDataManager:
+def market_data(test_ticker: PolyMarketTicker) -> DataManager:
     """Create market data with test order book."""
-    mdm = MarketDataManager()
+    mdm = DataManager()
     order_book = OrderBook()
     order_book.update(
         asks=[Level(price=Decimal('0.55'), size=Decimal('1000'))],
@@ -83,7 +83,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test trade that is within all limits."""
         rm = StandardRiskManager(
@@ -104,7 +104,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test trade that exceeds single trade size limit."""
         rm = StandardRiskManager(
@@ -124,7 +124,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test trade that would exceed position size limit."""
         rm = StandardRiskManager(
@@ -145,7 +145,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test that sells pass position limit checks."""
         # Add existing position
@@ -176,7 +176,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test maximum number of positions limit."""
         # Add existing positions and their order books
@@ -219,7 +219,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test that adding to an existing position is allowed even at max positions."""
         # Add existing position for test ticker
@@ -271,7 +271,7 @@ class TestStandardRiskManager:
     async def test_cash_ticker_bypasses_checks(
         self,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test that cash tickers bypass risk checks."""
         rm = StandardRiskManager(
@@ -290,7 +290,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test drawdown calculation."""
         rm = StandardRiskManager(
@@ -307,7 +307,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test remaining exposure calculation."""
         rm = StandardRiskManager(
@@ -324,7 +324,7 @@ class TestStandardRiskManager:
         self,
         test_ticker: PolyMarketTicker,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test resetting daily tracking."""
         rm = StandardRiskManager(
@@ -341,7 +341,7 @@ class TestConservativeRiskManager:
     def test_conservative_limits(
         self,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test that conservative manager has tighter limits."""
         rm = ConservativeRiskManager(
@@ -361,7 +361,7 @@ class TestAggressiveRiskManager:
     def test_aggressive_limits(
         self,
         position_manager: PositionManager,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test that aggressive manager has looser limits."""
         rm = AggressiveRiskManager(

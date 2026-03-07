@@ -10,17 +10,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from coinjure.engine.execution.risk_manager import StandardRiskManager
-from coinjure.engine.execution.trader import Trader
-from coinjure.engine.execution.types import OrderStatus
+from coinjure.data.data_source import DataSource
 from coinjure.engine.performance import PerformanceAnalyzer
+from coinjure.engine.trader.risk_manager import StandardRiskManager
+from coinjure.engine.trader.trader import Trader
+from coinjure.engine.trader.types import OrderStatus
 from coinjure.events import NewsEvent, OrderBookEvent, PriceChangeEvent
-from coinjure.market.data_source import DataSource
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker
 
 if TYPE_CHECKING:
-    from coinjure.engine.execution.alerter import Alerter
+    from coinjure.engine.trader.alerter import Alerter
     from coinjure.storage.state_store import StateStore
 
 logger = logging.getLogger(__name__)
@@ -145,6 +145,7 @@ class TradingEngine:
         self._start_time: datetime | None = None
         self._event_count: int = 0
         self._last_orders_idx: int = 0
+        self._last_trade_count: int = 0
         self._order_times: list[str] = []
         self._perf = PerformanceAnalyzer(initial_capital=initial_capital)
         self._news: deque[dict[str, str]] = deque(maxlen=300)
@@ -193,6 +194,9 @@ class TradingEngine:
         elif isinstance(event, PriceChangeEvent):
             self.market_data.process_price_change_event(event)
             logger.debug('Price %s → %s', event.ticker.symbol, event.price)
+        # Try filling resting orders after each market update
+        if hasattr(self.trader, 'try_fill_resting_orders'):
+            self.trader.try_fill_resting_orders()
 
     def _log_event_milestone(self) -> None:
         if self._event_count in (1, 10, 50, 100) or self._event_count % 500 == 0:
@@ -339,7 +343,7 @@ class TradingEngine:
                 removed = self.market_data.prune_stale_tickers(set(known.keys()))
                 if removed:
                     logger.info(
-                        'Pruned %d stale order books from MarketDataManager',
+                        'Pruned %d stale order books from DataManager',
                         removed,
                     )
 
@@ -355,6 +359,12 @@ class TradingEngine:
         if not self._ds_started:
             self._ds_started = True
             await self.data_source.start()
+
+        # Register strategy's priority tokens with the data source
+        watch = getattr(self.data_source, 'watch_token', None)
+        if watch:
+            for token_id in self.strategy.watch_tokens():
+                watch(token_id)
 
         if self._alerter:
             try:
@@ -487,39 +497,51 @@ class TradingEngine:
     # ------------------------------------------------------------------ #
 
     async def _sync_trades(self) -> None:
-        """Feed newly-appeared orders into the performance analyser.
+        """Feed newly-appeared orders/trades into the performance analyser.
 
         Also persists new trades/orders to the state store and fires
         alerter.on_trade() for filled orders.
+        Handles both new orders and resting orders that fill later.
         """
-        # [M3] Now that Trader base-class declares ``orders``, we can
-        # access it directly instead of using getattr().
         orders = self.trader.orders
         now_str = datetime.now().strftime('%H:%M:%S')
+
+        # Process new orders
         while self._last_orders_idx < len(orders):
-            order = orders[self._last_orders_idx]
             self._order_times.append(now_str)
-            for trade in order.trades:
-                self._perf.add_trade(trade)
-                if self._state_store:
-                    try:
-                        self._state_store.append_trade(trade)
-                    except Exception:
-                        logger.debug('state_store.append_trade() failed', exc_info=True)
-                if self._alerter and order.status in (
-                    OrderStatus.FILLED,
-                    OrderStatus.PARTIALLY_FILLED,
-                ):
-                    try:
-                        await self._alerter.on_trade(trade)
-                    except Exception:
-                        logger.debug('alerter.on_trade() failed', exc_info=True)
             if self._state_store:
                 try:
-                    self._state_store.append_order(order)
+                    self._state_store.append_order(orders[self._last_orders_idx])
                 except Exception:
                     logger.debug('state_store.append_order() failed', exc_info=True)
             self._last_orders_idx += 1
+
+        # Scan all orders for new trades (handles resting order fills)
+        total_trades = sum(len(o.trades) for o in orders)
+        if total_trades > self._last_trade_count:
+            # Find and record new trades
+            seen = 0
+            for order in orders:
+                for trade in order.trades:
+                    seen += 1
+                    if seen > self._last_trade_count:
+                        self._perf.add_trade(trade)
+                        if self._state_store:
+                            try:
+                                self._state_store.append_trade(trade)
+                            except Exception:
+                                logger.debug(
+                                    'state_store.append_trade() failed', exc_info=True
+                                )
+                        if self._alerter and order.status in (
+                            OrderStatus.FILLED,
+                            OrderStatus.PARTIALLY_FILLED,
+                        ):
+                            try:
+                                await self._alerter.on_trade(trade)
+                            except Exception:
+                                logger.debug('alerter.on_trade() failed', exc_info=True)
+            self._last_trade_count = total_trades
 
     async def _check_drawdown_alert(self) -> None:
         """Fire a drawdown alert if the current drawdown exceeds the threshold."""

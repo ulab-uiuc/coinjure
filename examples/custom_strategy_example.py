@@ -13,19 +13,19 @@ the Coinjure framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager
-from coinjure.engine.execution.trader import Trader
-from coinjure.engine.execution.types import TradeSide
+from coinjure.data.data_manager import DataManager
+from coinjure.data.order_book import Level, OrderBook
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager
+from coinjure.engine.trader.trader import Trader
+from coinjure.engine.trader.types import TradeSide
 from coinjure.events import (
     Event,
     NewsEvent,
     OrderBookEvent,
     PriceChangeEvent,
 )
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.market.order_book import Level, OrderBook
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
@@ -326,7 +326,7 @@ def create_test_environment():
         event_id='event123',
     )
 
-    market_data = MarketDataManager()
+    market_data = DataManager()
     order_book = OrderBook()
     order_book.update(
         asks=[Level(price=Decimal('0.55'), size=Decimal('10000'))],

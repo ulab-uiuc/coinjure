@@ -71,7 +71,7 @@ qfj/
 │   │   └── trading_engine.py    # Trading engine (event loop and driver)
 │   ├── strategy/                # Strategy layer
 │   │   ├── strategy.py         # Strategy abstract base class
-│   │   ├── simple_strategy.py  # LLM strategy
+│   │   ├── agent_strategy.py   # Agent strategy (LLM/tool-driven)
 │   │   └── test_strategy.py    # Test strategy
 │   ├── trader/                  # Trade execution layer
 │   │   ├── trader.py           # Trader abstract base class
@@ -84,7 +84,7 @@ qfj/
 │   │   ├── backtest/
 │   │   │   └── historical_data_source.py # Historical backtest data source
 │   │   └── live/
-│   │       └── live_data_source.py # Live data sources (Polymarket/News/RSS)
+│   │       └── polymarket_data_source.py # Polymarket live data source
 │   ├── events/                  # Event system
 │   │   └── events.py           # OrderBookEvent, NewsEvent, PriceChangeEvent
 │   ├── ticker/                  # Instrument identifiers
@@ -203,7 +203,7 @@ python examples/live_paper_trading_example.py
 python -c "
 import asyncio
 from decimal import Decimal
-from coinjure.data.live.live_data_source import LiveRSSNewsDataSource
+from coinjure.data.live.polymarket_data_source import LiveRSSNewsDataSource
 from coinjure.live.live_trader import run_live_paper_trading
 from coinjure.strategy.test_strategy import TestStrategy
 

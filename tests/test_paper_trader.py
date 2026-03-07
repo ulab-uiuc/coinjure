@@ -2,12 +2,12 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.engine.execution.paper_trader import PaperTrader
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.risk_manager import NoRiskManager, StandardRiskManager
-from coinjure.engine.execution.types import OrderFailureReason, OrderStatus, TradeSide
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.market.order_book import Level, OrderBook
+from coinjure.data.data_manager import DataManager
+from coinjure.data.order_book import Level, OrderBook
+from coinjure.engine.trader.paper_trader import PaperTrader
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.risk_manager import NoRiskManager, StandardRiskManager
+from coinjure.engine.trader.types import OrderFailureReason, OrderStatus, TradeSide
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
@@ -24,9 +24,9 @@ def test_ticker() -> PolyMarketTicker:
 
 
 @pytest.fixture
-def market_data(test_ticker: PolyMarketTicker) -> MarketDataManager:
+def market_data(test_ticker: PolyMarketTicker) -> DataManager:
     """Create market data with test order book."""
-    mdm = MarketDataManager()
+    mdm = DataManager()
     order_book = OrderBook()
     order_book.update(
         asks=[
@@ -59,7 +59,7 @@ def position_manager(test_ticker: PolyMarketTicker) -> PositionManager:
 
 @pytest.fixture
 def paper_trader(
-    market_data: MarketDataManager, position_manager: PositionManager
+    market_data: DataManager, position_manager: PositionManager
 ) -> PaperTrader:
     """Create a paper trader."""
     return PaperTrader(
@@ -224,7 +224,7 @@ class TestPaperTrader:
     @pytest.mark.asyncio
     async def test_risk_check_failure(
         self,
-        market_data: MarketDataManager,
+        market_data: DataManager,
         position_manager: PositionManager,
         test_ticker: PolyMarketTicker,
     ):
@@ -258,7 +258,7 @@ class TestPaperTrader:
     async def test_trade_scope_rejects_unapproved_market(
         self,
         paper_trader: PaperTrader,
-        market_data: MarketDataManager,
+        market_data: DataManager,
         test_ticker: PolyMarketTicker,
     ):
         other_ticker = PolyMarketTicker(
@@ -348,7 +348,7 @@ class TestPaperTrader:
     @pytest.mark.asyncio
     async def test_no_liquidity_order_placed(
         self,
-        market_data: MarketDataManager,
+        market_data: DataManager,
         position_manager: PositionManager,
         test_ticker: PolyMarketTicker,
     ):
@@ -379,7 +379,7 @@ class TestPaperTraderVariableFillRate:
     @pytest.mark.asyncio
     async def test_partial_fill(
         self,
-        market_data: MarketDataManager,
+        market_data: DataManager,
         position_manager: PositionManager,
         test_ticker: PolyMarketTicker,
     ):

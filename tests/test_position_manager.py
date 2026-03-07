@@ -2,10 +2,10 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.engine.execution.position_manager import Position, PositionManager
-from coinjure.engine.execution.types import Trade, TradeSide
-from coinjure.market.market_data_manager import MarketDataManager
-from coinjure.market.order_book import Level, OrderBook
+from coinjure.data.data_manager import DataManager
+from coinjure.data.order_book import Level, OrderBook
+from coinjure.engine.trader.position_manager import Position, PositionManager
+from coinjure.engine.trader.types import Trade, TradeSide
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
@@ -28,9 +28,9 @@ def test_ticker() -> PolyMarketTicker:
 
 
 @pytest.fixture
-def market_data(test_ticker: PolyMarketTicker) -> MarketDataManager:
+def market_data(test_ticker: PolyMarketTicker) -> DataManager:
     """Create market data manager with test data."""
-    mdm = MarketDataManager()
+    mdm = DataManager()
     order_book = OrderBook()
     order_book.update(
         asks=[Level(price=Decimal('0.55'), size=Decimal('1000'))],
@@ -247,7 +247,7 @@ class TestPositionManager:
         self,
         position_manager: PositionManager,
         test_ticker: PolyMarketTicker,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test getting unrealized PnL."""
         position_manager.update_position(
@@ -267,7 +267,7 @@ class TestPositionManager:
         self,
         position_manager: PositionManager,
         test_ticker: PolyMarketTicker,
-        market_data: MarketDataManager,
+        market_data: DataManager,
     ):
         """Test getting total portfolio value."""
         position_manager.update_position(
