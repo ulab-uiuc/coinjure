@@ -162,12 +162,16 @@ class MarketRelation:
     def get_token_id(self, leg: str = 'a') -> str:
         """Get the first YES-side CLOB token_id for leg 'a' or 'b'.
 
-        Falls back to the market dict's 'id' field if token_ids is empty.
+        Checks token_ids (list), then token_id (singular), then falls back
+        to the market dict's 'id' field.
         """
         m = self.market_a if leg == 'a' else self.market_b
         token_ids = m.get('token_ids', [])
         if token_ids:
             return str(token_ids[0])
+        token_id = m.get('token_id', '')
+        if token_id:
+            return str(token_id)
         return str(m.get('id', ''))
 
     def to_dict(self) -> dict[str, Any]:
