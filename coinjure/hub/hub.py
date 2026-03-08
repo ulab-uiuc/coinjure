@@ -6,8 +6,10 @@ Runs a Unix socket server that accepts two kinds of connections:
   - Control clients (send JSON within 0.1 s):    get a single JSON response, then close.
 
 Supported control commands:
-  {"cmd": "status"}   → {"ok": true, "subscribers": N, "events_total": M, "uptime_s": T}
-  {"cmd": "stop"}     → {"ok": true, "status": "stopping"}  (then hub shuts down)
+  {"cmd": "status"}                  → {"ok": true, "subscribers": N, "events_total": M, "uptime_s": T}
+  {"cmd": "stop"}                    → {"ok": true, "status": "stopping"}  (then hub shuts down)
+  {"cmd": "watch_token", "token_id": "..."}   → relays to source.watch_token()
+  {"cmd": "unwatch_token", "token_id": "..."} → relays to source.unwatch_token()
 """
 
 from __future__ import annotations
@@ -260,6 +262,14 @@ class MarketDataHub:
                     'events_total': self._events_total,
                     'uptime_s': round(uptime, 1),
                 }
+            elif cmd in ('watch_token', 'unwatch_token'):
+                token_id = req.get('token_id', '')
+                method = getattr(self._source, cmd, None)
+                if method and token_id:
+                    method(token_id)
+                    resp = {'ok': True, 'cmd': cmd, 'token_id': token_id}
+                else:
+                    resp = {'ok': False, 'error': f'source has no {cmd} or missing token_id'}
             elif cmd == 'stop':
                 resp = {'ok': True, 'status': 'stopping'}
                 writer.write((json.dumps(resp) + '\n').encode())

@@ -50,6 +50,45 @@ class HubDataSource(DataSource):
             return None
 
     # ------------------------------------------------------------------
+    # Watch / unwatch relay
+    # ------------------------------------------------------------------
+
+    def watch_token(self, token_id: str) -> None:
+        """Relay watch_token to hub via a control message."""
+        self._send_control({'cmd': 'watch_token', 'token_id': token_id})
+
+    def unwatch_token(self, token_id: str) -> None:
+        """Relay unwatch_token to hub via a control message."""
+        self._send_control({'cmd': 'unwatch_token', 'token_id': token_id})
+
+    def _send_control(self, msg: dict) -> None:
+        """Send a control command to the hub (fire-and-forget)."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            loop.create_task(self._send_control_async(msg))
+        else:
+            logger.debug('HubDataSource: no running loop, cannot send control %s', msg)
+
+    async def _send_control_async(self, msg: dict) -> None:
+        try:
+            reader, writer = await asyncio.open_unix_connection(
+                str(self.socket_path)
+            )
+            writer.write((json.dumps(msg) + '\n').encode())
+            await writer.drain()
+            raw = await asyncio.wait_for(reader.readline(), timeout=2.0)
+            resp = json.loads(raw.decode()) if raw.strip() else {}
+            if not resp.get('ok'):
+                logger.warning('HubDataSource: control %s failed: %s', msg.get('cmd'), resp)
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            logger.warning('HubDataSource: failed to send control %s', msg.get('cmd'), exc_info=True)
+
+    # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 

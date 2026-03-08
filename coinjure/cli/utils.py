@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 import click
 
-from coinjure.cli.control import SOCKET_PATH, ControlServer
+from coinjure.cli.control import SOCKET_DIR, ControlServer
 from coinjure.cli.monitor import TradingMonitor
 from coinjure.engine.trading_engine import TradingEngine
 
@@ -58,7 +59,7 @@ class MonitoredTradingEngine:
         self.exchange_name = exchange_name
         self.monitor: TradingMonitor | None = None  # used by display_snapshot()
         self.control_server: ControlServer = ControlServer(
-            engine, socket_path=socket_path or SOCKET_PATH
+            engine, socket_path=socket_path or SOCKET_DIR / f'engine-{os.getpid()}.sock'
         )
 
     async def start(self) -> None:

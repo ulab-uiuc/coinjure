@@ -220,7 +220,7 @@ def engine_run(  # noqa: C901
     strategy_mode = 'active' if strategy_ref else 'idle'
     capital = Decimal(initial_capital)
 
-    _socket_path = Path(socket_path) if socket_path else None
+    _socket_path = Path(socket_path) if socket_path else SOCKET_DIR / f'engine-{os.getpid()}.sock'
 
     exchange_label = {
         'polymarket': 'Polymarket',
