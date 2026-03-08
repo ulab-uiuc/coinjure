@@ -34,7 +34,7 @@ def serialize_ticker(ticker: Ticker) -> dict:
             'token_id': ticker.token_id,
             'market_id': ticker.market_id,
             'event_id': ticker.event_id,
-            'no_token_id': ticker.no_token_id,
+            'token_side': ticker.token_side,
         }
     if isinstance(ticker, KalshiTicker):
         return {
@@ -44,7 +44,7 @@ def serialize_ticker(ticker: Ticker) -> dict:
             'market_ticker': ticker.market_ticker,
             'event_ticker': ticker.event_ticker,
             'series_ticker': ticker.series_ticker,
-            'is_no_side': ticker.is_no_side,
+            'token_side': ticker.token_side,
         }
     if isinstance(ticker, CashTicker):
         return {
@@ -65,7 +65,7 @@ def deserialize_ticker(d: dict) -> Ticker:
             token_id=d.get('token_id', ''),
             market_id=d.get('market_id', ''),
             event_id=d.get('event_id', ''),
-            no_token_id=d.get('no_token_id', ''),
+            token_side=d.get('token_side', 'YES'),
         )
     if ticker_type == 'KalshiTicker':
         return KalshiTicker(
@@ -74,7 +74,7 @@ def deserialize_ticker(d: dict) -> Ticker:
             market_ticker=d.get('market_ticker', ''),
             event_ticker=d.get('event_ticker', ''),
             series_ticker=d.get('series_ticker', ''),
-            is_no_side=d.get('is_no_side', False),
+            token_side=d.get('token_side', 'YES'),
         )
     if ticker_type == 'CashTicker':
         symbol = d['symbol']

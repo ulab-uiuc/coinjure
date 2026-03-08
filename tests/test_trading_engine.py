@@ -2,14 +2,14 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.data_manager import DataManager
-from coinjure.data.data_source import DataSource
+from coinjure.data.manager import DataManager
+from coinjure.data.source import DataSource
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.engine.trader.paper_trader import PaperTrader
 from coinjure.engine.trader.position_manager import Position, PositionManager
 from coinjure.engine.trader.risk_manager import NoRiskManager
 from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trading_engine import TradingEngine
+from coinjure.engine.engine import TradingEngine
 from coinjure.events import (
     Event,
     NewsEvent,
@@ -340,7 +340,7 @@ class TestTradingEngineWithRealStrategy:
         market_data: DataManager,
     ):
         """Test engine with the actual TestStrategy."""
-        from coinjure.strategy.test_strategy import TestStrategy
+        from coinjure.strategy.demo_strategy import TestStrategy
 
         # Create price change events that trigger the strategy
         events = [

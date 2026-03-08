@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.engine.trader.paper_trader import PaperTrader
 from coinjure.engine.trader.position_manager import Position, PositionManager
 from coinjure.engine.trader.risk_manager import NoRiskManager
@@ -27,7 +27,7 @@ def test_ticker() -> PolyMarketTicker:
         token_id='token123',
         market_id='market123',
         event_id='event123',
-        no_token_id='TEST_TOKEN_NO',
+        token_side='YES',
     )
 
 

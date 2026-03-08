@@ -17,7 +17,7 @@ from py_clob_client.exceptions import PolyApiException
 from py_clob_client.order_builder.constants import BUY, SELL
 from py_order_utils.model import EOA
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.engine.trader.position_manager import Position, PositionManager
 from coinjure.engine.trader.risk_manager import RiskManager
 from coinjure.engine.trader.trader import Trader

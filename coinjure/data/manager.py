@@ -7,7 +7,7 @@ from typing import Any
 
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.events import OrderBookEvent, PriceChangeEvent
-from coinjure.ticker import Ticker
+from coinjure.ticker import KalshiTicker, Ticker
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,38 @@ class DataManager:
         self._market_history: dict[Ticker, deque[DataPoint]] = {}
         self._market_timeline: deque[DataPoint] = deque(maxlen=max_timeline_events)
         self._next_market_sequence = 1
+        # (market_id, side) -> Ticker for complement lookup
+        self._market_tickers: dict[tuple[str, str], Ticker] = {}
+
+    def _market_key(self, ticker: Ticker) -> str:
+        return getattr(ticker, 'market_id', '') or getattr(ticker, 'market_ticker', '')
+
+    def _register_ticker(self, ticker: Ticker) -> None:
+        key = self._market_key(ticker)
+        token_side = getattr(ticker, 'token_side', '')
+        if not key or not token_side:
+            return
+        self._market_tickers[(key, token_side)] = ticker
+        # Kalshi has no separate NO data stream — derive complement on registration
+        if isinstance(ticker, KalshiTicker) and token_side == 'YES':
+            comp = KalshiTicker(
+                symbol=f'{ticker.symbol}_NO',
+                name=ticker.name,
+                market_ticker=ticker.market_ticker,
+                event_ticker=ticker.event_ticker,
+                series_ticker=ticker.series_ticker,
+                token_side='NO',
+            )
+            self._market_tickers[(key, 'NO')] = comp
+
+    def get_complement_ticker(self, ticker: Ticker) -> Ticker | None:
+        """Look up the complement (opposite side) ticker."""
+        key = self._market_key(ticker)
+        token_side = getattr(ticker, 'token_side', '')
+        if not key or not token_side:
+            return None
+        comp_side = 'NO' if token_side == 'YES' else 'YES'
+        return self._market_tickers.get((key, comp_side))
 
     def update_order_book(self, ticker: Ticker, order_book: OrderBook) -> None:
         self.order_books[ticker] = order_book
@@ -56,6 +88,7 @@ class DataManager:
         Each event carries a single price level with its current size and side.
         We merge it into the existing order book, keeping levels sorted.
         """
+        self._register_ticker(event.ticker)
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
 
@@ -97,6 +130,7 @@ class DataManager:
         only record the price history — do NOT overwrite the real orderbook
         with synthetic levels.
         """
+        self._register_ticker(event.ticker)
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
 
@@ -117,26 +151,29 @@ class DataManager:
             order_book = self.order_books[event.ticker]
             order_book.update(asks=asks, bids=bids)
 
-            # Bootstrap No-side order book on first encounter so PaperTrader
-            # can fill No orders before the first No PriceChangeEvent arrives.
-            # Subsequent updates come from the No events emitted by the data source.
-            no_ticker = getattr(event.ticker, 'get_no_ticker', lambda: None)()
-            if no_ticker is not None and no_ticker not in self.order_books:
-                self.order_books[no_ticker] = OrderBook()
+            # Bootstrap complement-side order book on first encounter so
+            # PaperTrader can fill complement orders before events arrive.
+            complement = self.get_complement_ticker(event.ticker)
+            if complement is not None and complement not in self.order_books:
+                self.order_books[complement] = OrderBook()
 
-                no_price = Decimal('1') - event.price
-                no_bid = max(Decimal('0'), no_price - half_spread)
-                no_ask = min(Decimal('1'), no_price + half_spread)
+                comp_price = Decimal('1') - event.price
+                comp_bid = max(Decimal('0'), comp_price - half_spread)
+                comp_ask = min(Decimal('1'), comp_price + half_spread)
 
-                no_bids = (
-                    [Level(price=no_bid, size=size)] if no_bid > Decimal('0') else []
+                comp_bids = (
+                    [Level(price=comp_bid, size=size)]
+                    if comp_bid > Decimal('0')
+                    else []
                 )
-                no_asks = (
-                    [Level(price=no_ask, size=size)] if no_ask < Decimal('1') else []
+                comp_asks = (
+                    [Level(price=comp_ask, size=size)]
+                    if comp_ask < Decimal('1')
+                    else []
                 )
 
-                no_ob = self.order_books[no_ticker]
-                no_ob.update(asks=no_asks, bids=no_bids)
+                comp_ob = self.order_books[complement]
+                comp_ob.update(asks=comp_asks, bids=comp_bids)
 
         self._record_market_point(
             ticker=event.ticker,

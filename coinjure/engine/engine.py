@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from coinjure.data.data_source import DataSource
+from coinjure.data.source import DataSource
 from coinjure.engine.performance import PerformanceAnalyzer
 from coinjure.engine.trader.risk_manager import StandardRiskManager
 from coinjure.engine.trader.trader import Trader
@@ -292,9 +292,9 @@ class TradingEngine:
                         watch = getattr(self.data_source, 'watch_token', None)
                         if watch:
                             watch(order.ticker.token_id)
-                            no_token_id = getattr(order.ticker, 'no_token_id', '')
-                            if no_token_id:
-                                watch(no_token_id)
+                            comp = self.market_data.get_complement_ticker(order.ticker)
+                            if comp is not None:
+                                watch(getattr(comp, 'token_id', ''))
                     elif order.side.value.upper() == 'SELL':
                         pos = self.trader.position_manager.get_position(order.ticker)
                         if pos is None or pos.quantity <= 0:

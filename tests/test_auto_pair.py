@@ -2,25 +2,21 @@
 
 from __future__ import annotations
 
-import json
-import tempfile
 from datetime import date
-from pathlib import Path
 
 import pytest
 
 from coinjure.market.auto_pair import (
     AutoPairResult,
+    _compute_current_arb,
+    _compute_mid_price,
     auto_pair_markets,
-    detect_cross_event_correlation,
-    detect_cross_event_implications,
+    detect_complementary,
     detect_date_nesting,
     detect_exclusivity,
-    extract_subject_verb,
-    extract_theme,
     parse_deadline,
 )
-from coinjure.market.relations import RelationStore
+from coinjure.market.relations import MarketRelation
 
 
 # ---------------------------------------------------------------------------
@@ -52,49 +48,6 @@ class TestParseDeadline:
 
 
 # ---------------------------------------------------------------------------
-# extract_theme
-# ---------------------------------------------------------------------------
-
-
-class TestExtractTheme:
-    def test_strips_by_date(self):
-        assert extract_theme('Ukraine election called by March 31, 2025?') == 'ukraine election called'
-
-    def test_strips_by_dots(self):
-        assert extract_theme('MicroStrategy sells any Bitcoin by ...?') == 'microstrategy sells any bitcoin'
-
-    def test_strips_by_underscores(self):
-        assert extract_theme('Will Trump resign by ___?') == 'trump resign'
-
-    def test_strips_will(self):
-        assert extract_theme('Will Russia invade Finland in 2025?') == 'russia invade finland'
-
-    def test_plain_title(self):
-        assert extract_theme('Super Bowl Winner') == 'super bowl winner'
-
-
-# ---------------------------------------------------------------------------
-# extract_subject_verb
-# ---------------------------------------------------------------------------
-
-
-class TestExtractSubjectVerb:
-    def test_simple(self):
-        result = extract_subject_verb('ukraine election called')
-        assert result == ('ukraine election', 'called', '')
-
-    def test_with_object(self):
-        result = extract_subject_verb('russia capture kostyantynivka')
-        assert result == ('russia', 'capture', 'kostyantynivka')
-
-    def test_no_verb(self):
-        assert extract_subject_verb('super bowl winner') is None
-
-    def test_no_subject(self):
-        assert extract_subject_verb('called early') is None
-
-
-# ---------------------------------------------------------------------------
 # detect_date_nesting
 # ---------------------------------------------------------------------------
 
@@ -105,8 +58,7 @@ def _make_market(mid: str, question: str, event_id: str = '1', event_title: str 
         'question': question,
         'event_id': event_id,
         'event_title': event_title,
-        'token_id': f'tok-{mid}',
-        'no_token_id': f'notok-{mid}',
+        'token_ids': [f'tok-{mid}', f'notok-{mid}'],
         'best_bid': '0.5',
         'best_ask': '0.6',
         'volume': '1000',
@@ -138,105 +90,6 @@ class TestDetectDateNesting:
             _make_market('m2', 'Who loses?'),
         ]
         rels = detect_date_nesting(markets, 'Test Event', 'polymarket')
-        assert len(rels) == 0
-
-
-# ---------------------------------------------------------------------------
-# detect_cross_event_implications
-# ---------------------------------------------------------------------------
-
-
-class TestDetectCrossEventImplications:
-    def test_called_implies_held(self):
-        theme_groups = {
-            'ukraine election called': [
-                {
-                    'event_id': '1',
-                    'event_title': 'Ukraine election called by...',
-                    'markets': [_make_market('m1', 'Will election be called by June 30, 2025?')],
-                }
-            ],
-            'ukraine election held': [
-                {
-                    'event_id': '2',
-                    'event_title': 'Ukraine election held by...',
-                    'markets': [_make_market('m2', 'Will election be held by December 31, 2025?')],
-                }
-            ],
-        }
-        rels = detect_cross_event_implications(theme_groups, 'polymarket')
-        assert len(rels) >= 1
-        assert rels[0].spread_type == 'implication'
-        assert 'called' in rels[0].reasoning
-        assert 'held' in rels[0].reasoning
-
-    def test_no_matching_verbs(self):
-        theme_groups = {
-            'ukraine election called': [
-                {
-                    'event_id': '1',
-                    'event_title': 'Ukraine election called by...',
-                    'markets': [_make_market('m1', 'Will X by June 30, 2025?')],
-                }
-            ],
-            'russia invades finland': [
-                {
-                    'event_id': '2',
-                    'event_title': 'Russia invades Finland',
-                    'markets': [_make_market('m2', 'Will Y by December 31, 2025?')],
-                }
-            ],
-        }
-        rels = detect_cross_event_implications(theme_groups, 'polymarket')
-        assert len(rels) == 0
-
-
-# ---------------------------------------------------------------------------
-# detect_cross_event_correlation
-# ---------------------------------------------------------------------------
-
-
-class TestDetectCrossEventCorrelation:
-    def test_same_verb_different_objects(self):
-        theme_groups = {
-            'russia capture kostyantynivka': [
-                {
-                    'event_id': '1',
-                    'event_title': 'Russia capture Kostyantynivka',
-                    'markets': [_make_market('m1', 'Will Russia capture Kostyantynivka by June 30, 2025?')],
-                }
-            ],
-            'russia capture pokrovsk': [
-                {
-                    'event_id': '2',
-                    'event_title': 'Russia capture Pokrovsk',
-                    'markets': [_make_market('m2', 'Will Russia capture Pokrovsk by June 30, 2025?')],
-                }
-            ],
-        }
-        rels = detect_cross_event_correlation(theme_groups, 'polymarket')
-        # Same deadline → temporal correlation
-        assert len(rels) >= 1
-        assert rels[0].spread_type == 'temporal'
-
-    def test_different_deadlines_no_match(self):
-        theme_groups = {
-            'russia capture kostyantynivka': [
-                {
-                    'event_id': '1',
-                    'event_title': 'Russia capture Kostyantynivka',
-                    'markets': [_make_market('m1', 'Will Russia capture Kostyantynivka by March 31, 2025?')],
-                }
-            ],
-            'russia capture pokrovsk': [
-                {
-                    'event_id': '2',
-                    'event_title': 'Russia capture Pokrovsk',
-                    'markets': [_make_market('m2', 'Will Russia capture Pokrovsk by June 30, 2025?')],
-                }
-            ],
-        }
-        rels = detect_cross_event_correlation(theme_groups, 'polymarket')
         assert len(rels) == 0
 
 
@@ -273,48 +126,223 @@ class TestDetectExclusivity:
 
 
 # ---------------------------------------------------------------------------
+# detect_complementary
+# ---------------------------------------------------------------------------
+
+
+class TestDetectComplementary:
+    def test_two_outcomes_sum_to_one(self):
+        markets = [
+            {**_make_market('m1', 'Will Alice win?', '1', 'Election'), 'best_bid': '0.55', 'best_ask': '0.60'},
+            {**_make_market('m2', 'Will Bob win?', '1', 'Election'), 'best_bid': '0.35', 'best_ask': '0.40'},
+        ]
+        rels = detect_complementary(markets, 'Election', 'polymarket')
+        assert len(rels) == 1
+        assert rels[0].spread_type == 'complementary'
+        assert 'sum=' in rels[0].reasoning
+
+    def test_three_outcomes_sum_to_one(self):
+        markets = [
+            {**_make_market('m1', 'A wins?', '1', 'E'), 'best_bid': '0.45', 'best_ask': '0.50'},
+            {**_make_market('m2', 'B wins?', '1', 'E'), 'best_bid': '0.25', 'best_ask': '0.30'},
+            {**_make_market('m3', 'C wins?', '1', 'E'), 'best_bid': '0.18', 'best_ask': '0.22'},
+        ]
+        rels = detect_complementary(markets, 'E', 'polymarket')
+        # 3 choose 2 = 3 pairs
+        assert len(rels) == 3
+        assert all(r.spread_type == 'complementary' for r in rels)
+
+    def test_sum_too_far_from_one(self):
+        markets = [
+            {**_make_market('m1', 'A?', '1', 'E'), 'best_bid': '0.80', 'best_ask': '0.85'},
+            {**_make_market('m2', 'B?', '1', 'E'), 'best_bid': '0.70', 'best_ask': '0.75'},
+        ]
+        # sum ≈ 1.55, too far from 1.0
+        rels = detect_complementary(markets, 'E', 'polymarket')
+        assert len(rels) == 0
+
+    def test_single_market(self):
+        markets = [
+            {**_make_market('m1', 'A?', '1', 'E'), 'best_bid': '0.50', 'best_ask': '0.55'},
+        ]
+        rels = detect_complementary(markets, 'E', 'polymarket')
+        assert len(rels) == 0
+
+    def test_too_many_markets(self):
+        markets = [
+            {**_make_market(f'm{i}', f'O{i}?', '1', 'E'), 'best_bid': '0.01', 'best_ask': '0.02'}
+            for i in range(35)
+        ]
+        rels = detect_complementary(markets, 'E', 'polymarket', max_event_size=30)
+        assert len(rels) == 0
+
+
+# ---------------------------------------------------------------------------
 # auto_pair_markets (integration)
 # ---------------------------------------------------------------------------
 
 
 class TestAutoPairMarkets:
-    def _make_store(self, tmp_path: Path) -> RelationStore:
-        return RelationStore(path=tmp_path / 'relations.json')
-
-    def test_deduplicates(self, tmp_path):
-        store = self._make_store(tmp_path)
+    def test_deduplicates_within_run(self):
+        # Earlier deadline priced higher → implication violation → candidate kept
         poly = [
-            _make_market('m1', 'Will X happen by March 31, 2025?', '1', 'Test Event'),
-            _make_market('m2', 'Will X happen by June 30, 2025?', '1', 'Test Event'),
+            {**_make_market('m1', 'Will X happen by March 31, 2025?', '1', 'Test Event'),
+             'best_bid': '0.6', 'best_ask': '0.7'},
+            {**_make_market('m2', 'Will X happen by June 30, 2025?', '1', 'Test Event'),
+             'best_bid': '0.3', 'best_ask': '0.4'},
         ]
-        r1 = auto_pair_markets(poly, [], store)
-        assert len(r1.created) >= 1
+        r = auto_pair_markets(poly, [])
+        # Same pair should only appear once
+        pair_keys = [frozenset([c.market_a['id'], c.market_b['id']]) for c in r.candidates]
+        assert len(pair_keys) == len(set(pair_keys))
 
-        # Run again — should skip duplicates
-        r2 = auto_pair_markets(poly, [], store)
-        assert len(r2.created) == 0
-        assert r2.skipped_duplicate >= 1
-
-    def test_skip_exclusivity(self, tmp_path):
-        store = self._make_store(tmp_path)
+    def test_skip_exclusivity(self):
         poly = [
             _make_market('m1', 'Will Alice win?', '1', 'Election'),
             _make_market('m2', 'Will Bob win?', '1', 'Election'),
         ]
-        r = auto_pair_markets(poly, [], store, skip_exclusivity=True)
-        excl_count = sum(1 for rel in r.created if rel.spread_type == 'exclusivity')
+        r = auto_pair_markets(poly, [], skip_exclusivity=True)
+        excl_count = sum(1 for rel in r.candidates if rel.spread_type == 'exclusivity')
         assert excl_count == 0
 
-    def test_persists_to_store(self, tmp_path):
-        store = self._make_store(tmp_path)
+    def test_does_not_persist(self):
+        """auto_pair_markets returns candidates without writing to any store."""
+        # Earlier deadline priced higher → implication violation → candidate kept
         poly = [
-            _make_market('m1', 'Will X happen by March 31, 2025?', '1', 'Test Event'),
-            _make_market('m2', 'Will X happen by June 30, 2025?', '1', 'Test Event'),
+            {**_make_market('m1', 'Will X happen by March 31, 2025?', '1', 'Test Event'),
+             'best_bid': '0.6', 'best_ask': '0.7'},
+            {**_make_market('m2', 'Will X happen by June 30, 2025?', '1', 'Test Event'),
+             'best_bid': '0.3', 'best_ask': '0.4'},
         ]
-        auto_pair_markets(poly, [], store)
-        saved = store.list()
-        assert len(saved) >= 1
-        assert saved[0].spread_type == 'implication'
+        r = auto_pair_markets(poly, [])
+        assert len(r.candidates) >= 1
+        assert r.candidates[0].spread_type == 'implication'
+
+    def test_complementary_integrated(self):
+        # Mids sum to 1.025 > 1.0 → complementary arb exists → candidate kept
+        poly = [
+            {**_make_market('m1', 'Will Alice win?', '1', 'Election'), 'best_bid': '0.60', 'best_ask': '0.65'},
+            {**_make_market('m2', 'Will Bob win?', '1', 'Election'), 'best_bid': '0.38', 'best_ask': '0.42'},
+        ]
+        r = auto_pair_markets(poly, [], skip_exclusivity=True)
+        comp = [rel for rel in r.candidates if rel.spread_type == 'complementary']
+        assert len(comp) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Snapshot arb filtering
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotArbFilter:
+    """Tests for snapshot-based arb filtering in auto_pair_markets."""
+
+    def test_implication_with_violation_passes(self):
+        """Earlier deadline priced above later → arb exists → candidate kept."""
+        poly = [
+            {**_make_market('m1', 'Will X happen by March 31, 2025?', '1', 'E'),
+             'best_bid': '0.50', 'best_ask': '0.60'},  # mid=0.55
+            {**_make_market('m2', 'Will X happen by June 30, 2025?', '1', 'E'),
+             'best_bid': '0.30', 'best_ask': '0.40'},  # mid=0.35
+        ]
+        r = auto_pair_markets(poly, [])
+        assert len(r.candidates) == 1
+        assert r.candidates[0].spread_type == 'implication'
+        assert r.total_detected == 1
+        assert r.candidates[0].market_a.get('current_arb', 0) > 0
+
+    def test_implication_without_violation_filtered(self):
+        """Earlier deadline priced below later → no arb → candidate removed."""
+        poly = [
+            {**_make_market('m1', 'Will X happen by March 31, 2025?', '1', 'E'),
+             'best_bid': '0.10', 'best_ask': '0.15'},  # mid=0.125
+            {**_make_market('m2', 'Will X happen by June 30, 2025?', '1', 'E'),
+             'best_bid': '0.30', 'best_ask': '0.40'},  # mid=0.35
+        ]
+        r = auto_pair_markets(poly, [])
+        assert len(r.candidates) == 0
+        assert r.total_detected == 1  # detected but filtered
+
+    def test_complementary_with_violation_passes(self):
+        """Two outcomes sum > 1.0 → arb exists → kept."""
+        poly = [
+            {**_make_market('m1', 'Will Alice win?', '1', 'Election'),
+             'best_bid': '0.60', 'best_ask': '0.65'},  # mid=0.625
+            {**_make_market('m2', 'Will Bob win?', '1', 'Election'),
+             'best_bid': '0.38', 'best_ask': '0.42'},  # mid=0.400
+        ]
+        r = auto_pair_markets(poly, [], skip_exclusivity=True)
+        comp = [c for c in r.candidates if c.spread_type == 'complementary']
+        assert len(comp) == 1
+        assert comp[0].market_a.get('current_arb', 0) > 0
+
+    def test_complementary_without_violation_filtered(self):
+        """Two outcomes sum < 1.0 → no arb → filtered."""
+        poly = [
+            {**_make_market('m1', 'Will Alice win?', '1', 'Election'),
+             'best_bid': '0.40', 'best_ask': '0.45'},  # mid=0.425
+            {**_make_market('m2', 'Will Bob win?', '1', 'Election'),
+             'best_bid': '0.30', 'best_ask': '0.35'},  # mid=0.325
+        ]
+        r = auto_pair_markets(poly, [], skip_exclusivity=True)
+        comp = [c for c in r.candidates if c.spread_type == 'complementary']
+        assert len(comp) == 0
+        assert r.total_detected >= 1  # detected but filtered
+
+    def test_total_detected_counts_all(self):
+        """total_detected includes pairs that were filtered out."""
+        # All markets have same mid=0.55 → implication arb = 0 → all filtered
+        poly = [
+            _make_market('m1', 'Will X happen by March 31, 2025?', '1', 'Event'),
+            _make_market('m2', 'Will X happen by June 30, 2025?', '1', 'Event'),
+            _make_market('m3', 'Will X happen by December 31, 2025?', '1', 'Event'),
+        ]
+        r = auto_pair_markets(poly, [])
+        # 3 choose 2 = 3 implication pairs detected, but all same mid → no arb
+        assert r.total_detected == 3
+        assert len(r.candidates) == 0
+
+    def test_compute_mid_price_basic(self):
+        assert _compute_mid_price({'best_bid': '0.40', 'best_ask': '0.60'}) == 0.5
+        assert _compute_mid_price({'best_bid': '', 'best_ask': ''}) is None
+        assert _compute_mid_price({}) is None
+
+    def test_compute_current_arb_implication(self):
+        rel = MarketRelation(
+            relation_id='t',
+            market_a={'best_bid': '0.60', 'best_ask': '0.70'},  # mid=0.65
+            market_b={'best_bid': '0.30', 'best_ask': '0.40'},  # mid=0.35
+            spread_type='implication',
+        )
+        assert _compute_current_arb(rel) == pytest.approx(0.30)
+
+    def test_compute_current_arb_no_violation(self):
+        rel = MarketRelation(
+            relation_id='t',
+            market_a={'best_bid': '0.10', 'best_ask': '0.20'},  # mid=0.15
+            market_b={'best_bid': '0.50', 'best_ask': '0.60'},  # mid=0.55
+            spread_type='implication',
+        )
+        assert _compute_current_arb(rel) == 0.0
+
+    def test_compute_current_arb_complementary(self):
+        rel = MarketRelation(
+            relation_id='t',
+            market_a={'best_bid': '0.60', 'best_ask': '0.70'},  # mid=0.65
+            market_b={'best_bid': '0.40', 'best_ask': '0.50'},  # mid=0.45
+            spread_type='complementary',
+        )
+        # 0.65 + 0.45 - 1.0 = 0.10
+        assert _compute_current_arb(rel) == pytest.approx(0.10)
+
+    def test_compute_current_arb_non_structural(self):
+        rel = MarketRelation(
+            relation_id='t',
+            market_a={'best_bid': '0.50', 'best_ask': '0.60'},
+            market_b={'best_bid': '0.50', 'best_ask': '0.60'},
+            spread_type='correlated',
+        )
+        assert _compute_current_arb(rel) == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -325,26 +353,22 @@ class TestAutoPairMarkets:
 class TestEdgeCases:
     """Edge cases that were missing from initial test coverage."""
 
-    def test_empty_markets(self, tmp_path):
-        store = RelationStore(path=tmp_path / 'relations.json')
-        r = auto_pair_markets([], [], store)
-        assert len(r.created) == 0
-        assert r.skipped_duplicate == 0
+    def test_empty_markets(self):
+        r = auto_pair_markets([], [])
+        assert len(r.candidates) == 0
 
-    def test_markets_without_event_id(self, tmp_path):
-        store = RelationStore(path=tmp_path / 'relations.json')
+    def test_markets_without_event_id(self):
         poly = [_make_market('m1', 'Will X happen by March 31, 2025?', '', '')]
-        r = auto_pair_markets(poly, [], store)
+        r = auto_pair_markets(poly, [])
         # No event_id → can't group → no pairs
-        assert len(r.created) == 0
+        assert len(r.candidates) == 0
 
-    def test_markets_without_questions(self, tmp_path):
-        store = RelationStore(path=tmp_path / 'relations.json')
+    def test_markets_without_questions(self):
         m1 = _make_market('m1', '', '1', 'Test')
         m2 = _make_market('m2', '', '1', 'Test')
-        r = auto_pair_markets([m1, m2], [], store)
+        r = auto_pair_markets([m1, m2], [])
         # No parseable dates → no date nesting pairs
-        assert sum(1 for rel in r.created if rel.spread_type == 'implication') == 0
+        assert sum(1 for rel in r.candidates if rel.spread_type == 'implication') == 0
 
     def test_parse_deadline_invalid_date(self):
         # February 30 doesn't exist

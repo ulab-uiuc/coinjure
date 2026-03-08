@@ -13,7 +13,7 @@ the Coinjure framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.engine.trader.paper_trader import PaperTrader
 from coinjure.engine.trader.position_manager import Position, PositionManager

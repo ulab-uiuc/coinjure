@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from coinjure.data.data_source import DataSource
+from coinjure.data.source import DataSource
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
 
@@ -156,7 +156,7 @@ class MarketDataHub:
                 'token_id': ticker.token_id,
                 'market_id': ticker.market_id,
                 'event_id': ticker.event_id,
-                'no_token_id': ticker.no_token_id,
+                'token_side': ticker.token_side,
             }
             ticker_type = 'polymarket'
         elif isinstance(ticker, KalshiTicker):
@@ -166,7 +166,7 @@ class MarketDataHub:
                 'market_ticker': ticker.market_ticker,
                 'event_ticker': ticker.event_ticker,
                 'series_ticker': ticker.series_ticker,
-                'is_no_side': ticker.is_no_side,
+                'token_side': ticker.token_side,
             }
             ticker_type = 'kalshi'
         else:
@@ -284,3 +284,32 @@ class MarketDataHub:
             await writer.drain()
         except Exception:
             pass
+
+
+def send_hub_command(socket: Path, cmd: str) -> dict:
+    """Send a JSON control command to the hub and return the parsed response."""
+
+    async def _query() -> dict:
+        reader, writer = await asyncio.open_unix_connection(str(socket))
+        payload = (json.dumps({'cmd': cmd}) + '\n').encode()
+        writer.write(payload)
+        await writer.drain()
+        writer.write_eof()
+        try:
+            raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            result = json.loads(raw.decode())
+        except asyncio.TimeoutError:
+            result = {'ok': False, 'error': 'timeout waiting for hub response'}
+        except json.JSONDecodeError as exc:
+            result = {'ok': False, 'error': f'invalid response: {exc}'}
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        return result
+
+    try:
+        return asyncio.run(_query())
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)}

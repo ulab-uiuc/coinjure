@@ -7,146 +7,91 @@ description: Discover related or identical market pairs with spread/arb opportun
 
 Use this skill when the user asks to find spread or arbitrage opportunities.
 
-## Relation Types & How to Find Them
+## 8 Relation Types & Their Strategies
 
-Different relation types require fundamentally different search strategies and analysis methods. When discovering pairs, think about **which type** each candidate pair is, then use the correct analysis.
+Each relation type has a dedicated arbitrage strategy. Knowing the type determines the strategy.
 
-### 1. Implication (structural)
+| Type | Strategy | Constraint | Auto-pair? |
+|------|----------|-----------|------------|
+| `implication` | ImplicationArbStrategy | A <= B | Yes (date nesting) |
+| `exclusivity` | ExclusivityArbStrategy | A + B <= 1 | Yes (winner-take-all) |
+| `complementary` | EventSumArbStrategy | Sum ~= 1 | Yes (outcome sum) |
+| `same_event` | DirectArbStrategy | A ~= B | No — agent judges |
+| `correlated` | CointSpreadStrategy | Cointegrated | No — agent judges |
+| `structural` | StructuralArbStrategy | p(A) = slope*p(B) + intercept | No — agent judges |
+| `conditional` | ConditionalArbStrategy | Conditional probability bounds | No — agent judges |
+| `temporal` | LeadLagStrategy | A leads/lags B | No — agent judges |
 
-**What**: A implies B — if A is true, B must also be true. Pricing constraint: `p(A) <= p(B)`.
+## What Auto-pair Can Do (rules only)
 
-**How to find**: Look for same-topic markets with **nested timeframes** or **prerequisite relationships** within the same event series.
+Auto-pair only detects **intra-event structural relations** — pure math, no semantic understanding needed:
 
-- "X by March" vs "X by June" — earlier deadline implies later deadline
-- "election called" vs "election held" — held implies called
-- "in 2025" vs "before 2027" — subset implies superset
+1. **Date nesting** -> `implication`: Same event, deadline A < deadline B -> P(A) <= P(B)
+2. **Winner-take-all** -> `exclusivity`: Same event, <=20 markets, 80%+ "will X win" pattern
+3. **Outcome sum** -> `complementary`: Same event, mid-prices sum ~= 1.0
 
-**Search strategy**: Discover with a topic keyword, then scan results for the same `event_id` or similar question text with different dates.
+Auto-pair also filters by **snapshot arb**: only candidates with current pricing violations (arb > 0) are returned. This reduces noise (e.g., 78 candidates -> 3 with actual mispricing).
 
-```bash
-coinjure market discover -q "Ukraine election" --exchange polymarket --limit 30 --json (optional)
-# Look for: "called by March" vs "called by June" vs "held by June" vs "held by Dec"
-```
+## What the Agent Must Do (semantic judgment)
 
-**Analysis**: Use `--relation-type implication`. Validates `A <= B` (auto-detects direction).
+Everything else requires the agent to search, read context, and decide:
 
-```bash
-coinjure market analyze --market-id <earlier> --compare <later> --relation-type implication --json (optional)
-```
-
-**Key metrics**: `constraint_holds` (boolean), `violation_count`, `violation_rate`. Valid if 0 violations.
-
-### 2. Same Event (structural)
-
-**What**: Identical market on two different platforms. Pricing constraint: `p_A ~= p_B`.
-
-**How to find**: Search the **same keywords on both exchanges** and look for matching questions.
+### same_event (cross-platform)
+Search the same keywords on both exchanges, compare resolution rules.
 
 ```bash
 coinjure market discover -q "Trump resign" --exchange both --with-rules --limit 20
 # Compare resolution rules between platforms to confirm same event
 ```
 
-Use `--with-rules` to include resolution criteria in output. Even if titles differ, the resolution rules may be substantially the same. Compare the rules text to decide if two markets are truly the same event.
-
-**Analysis**: Use `--relation-type same_event`. Validates `A <= B` (prices should be near-equal).
-
-**Reality**: Polymarket (geopolitics, pop culture) and Kalshi (economic data) have very little overlap. Cross-platform same_event pairs are rare — use `--with-rules` to find near-matches.
-
-### 3. Complementary / Exclusivity (structural)
-
-**What**: Mutually exclusive outcomes within the same event. Constraint: `p(A) + p(B) <= 1`.
-
-**How to find**: Look for markets within the **same event** that represent different outcomes (e.g., different winners of the same election).
+### correlated (cross-event)
+Find markets on related topics with shared fundamental drivers.
 
 ```bash
-coinjure market discover -q "2028 presidential" --exchange polymarket --limit 40 --json (optional)
-# Look for: multiple candidates in the same event_id where sum of prices should <= 1
-```
-
-**Analysis**: Use `--relation-type complementary` or `--relation-type exclusivity`.
-
-```bash
-coinjure market analyze --market-id <outcome_a> --compare <outcome_b> --relation-type complementary --json (optional)
-```
-
-**Key metrics**: `constraint_holds`, `violation_count`. Violations = arb opportunities (sum > 1).
-
-### 4. Temporal / Semantic / Conditional (cointegration)
-
-**What**: Markets that move together due to shared fundamental drivers, but have NO structural pricing constraint.
-
-**How to find**: Search for markets on **related but distinct topics** that share causal drivers.
-
-- "ceasefire" vs "election called" — peace process might enable elections
-- "inflation" vs "Fed rate hike" — macro causation
-- "tariffs" vs "recession" — economic chain reaction
-
-```bash
-coinjure market discover -q "ceasefire" --exchange polymarket --limit 20 --json (optional)
-coinjure market discover -q "Ukraine election" --exchange polymarket --limit 20 --json (optional)
+coinjure market discover -q "ceasefire" --exchange polymarket --limit 20
+coinjure market discover -q "Ukraine election" --exchange polymarket --limit 20
 # Cross-reference: do any pairs have shared fundamental drivers?
 ```
 
-**Analysis**: Use `--relation-type temporal` (or `semantic` / `conditional`). Runs cointegration + ADF + half-life.
-
-```bash
-coinjure market analyze --market-id <id_a> --compare <id_b> --relation-type temporal --json (optional)
-```
-
-**Key metrics**: `is_cointegrated` (Engle-Granger p < 0.05), `is_stationary` (ADF), `half_life` (mean-reversion speed), `hedge_ratio` (OLS beta). Valid only if cointegrated AND spread is stationary.
-
-**Reality**: Most semantic pairs fail cointegration on prediction markets because mid-prices rarely move (thick $0.01 tick walls). These are the hardest to find but most valuable if validated.
-
-### 5. Lead-Lag (supplementary)
-
-**What**: Market A's price changes predict Market B's price changes with a time delay.
-
-**Not a standalone type** — lead-lag is checked automatically for ALL relation types. Look for `lead_lag_significant: true` in the output of any analysis.
-
-**Key metrics**: `lead_lag` (positive = A leads B by N steps), `lead_lag_corr` (significant if |corr| > 0.3).
+### structural / conditional / temporal
+These require deeper analysis — look for markets with known mathematical relationships, conditional dependencies, or price lead-lag patterns.
 
 ## Full Workflow
 
-### Step 1: Discover candidates across categories
+### Step 1: Discover candidates
 
 ```bash
-coinjure market discover -q "keyword1" -q "keyword2" --exchange both --limit 40 --json (optional)
+coinjure market discover -q "keyword1" -q "keyword2" --exchange both --limit 40
 ```
 
-Search multiple topic areas: elections, crypto, geopolitics, macro, sports, etc.
+Auto-pair candidates (implication/exclusivity/complementary with current arb > 0) are shown automatically. For other relation types, the agent must identify candidates from the market list.
 
-### Step 2: Identify candidate pairs and determine relation type FIRST
+### Step 2: Determine relation type
 
-Before analyzing, decide the type:
-- Same event series with nested deadlines? -> `implication`
+Before adding, decide the type:
+- Auto-pair found implication/exclusivity/complementary? -> verify pricing
 - Same question on two platforms? -> `same_event`
-- Different outcomes in same event? -> `complementary`
-- Related topics with shared drivers? -> `temporal` or `semantic`
+- Related topics with shared drivers? -> `correlated`
+- Known mathematical relationship? -> `structural`
+- Conditional dependency? -> `conditional`
+- Price lead-lag? -> `temporal`
 
-### Step 3: Analyze with the correct relation type
+### Step 3: Get market info if needed
 
 ```bash
-coinjure market analyze --market-id <a> --compare <b> --relation-type <type> --json (optional)
+coinjure market info --market-id <id> --json
 ```
 
-### Step 4: Add validated pairs as relations
+### Step 4: Add pairs with actual opportunities
 
 ```bash
-coinjure market relations add --market-id-a <a> --market-id-b <b> --spread-type <type> --json (optional)
+coinjure market relations add --market-id-a <a> --market-id-b <b> --spread-type <type>
 ```
 
-### Step 5: Run quantitative validation on stored relations
+### Step 5: Review all relations
 
 ```bash
-coinjure market relations validate <relation_id> --json (optional)
-```
-
-### Step 6: Review all relations
-
-```bash
-coinjure market relations list --json (optional)
-coinjure market relations list --status validated --json (optional)
+coinjure market relations list
 ```
 
 ## Validation Criteria by Type
@@ -157,9 +102,10 @@ coinjure market relations list --status validated --json (optional)
 | same_event | structural constraint | `violation_count == 0` |
 | complementary | structural constraint (A+B<=1) | `violation_count == 0` |
 | exclusivity | structural constraint (A+B<=1) | `violation_count == 0` |
-| temporal | cointegration + ADF | `is_cointegrated == true` |
-| semantic | cointegration + ADF | `is_cointegrated == true` |
-| conditional | cointegration + ADF | `is_cointegrated == true` |
+| correlated | cointegration + ADF | `is_cointegrated == true` |
+| structural | residual analysis | spread stationary around model |
+| conditional | conditional bounds | bounds hold with low violation rate |
+| temporal | cross-correlation | `lead_lag_significant == true` |
 
 Note: structural pairs with low violation rates (< 3%) are still interesting — the violations themselves are the arb opportunities.
 

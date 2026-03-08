@@ -8,310 +8,15 @@ import os
 from typing import Any
 
 import click
-import httpx
 
-# ---------------------------------------------------------------------------
-# Polymarket helpers (via Gamma API — no auth required)
-# ---------------------------------------------------------------------------
-
-GAMMA_EVENTS_URL = 'https://gamma-api.polymarket.com/events'
-GAMMA_MARKETS_URL = 'https://gamma-api.polymarket.com/markets'
-CLOB_PRICES_HISTORY_URL = 'https://clob.polymarket.com/prices-history'
-
-
-def _parse_clob_ids(mkt: dict) -> list[str]:
-    """Return the parsed list of CLOB token IDs from a market dict (handles JSON-string encoding)."""
-    raw = mkt.get('clobTokenIds') or mkt.get('clob_token_ids') or []
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            raw = []
-    return list(raw)
-
-
-async def _polymarket_list_markets(
-    limit: int,
-    *,
-    tag: str | None = None,
-    with_rules: bool = False,
-) -> list[dict]:
-    markets: list[dict[str, Any]] = []
-    offset = 0
-    page_size = 100  # Gamma API max per request
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        while len(markets) < limit:
-            params: dict[str, Any] = {
-                'active': 'true',
-                'closed': 'false',
-                'limit': page_size,
-                'offset': offset,
-            }
-            if tag:
-                params['tag'] = tag
-            resp = await client.get(GAMMA_EVENTS_URL, params=params)
-            if resp.status_code != 200:
-                if offset == 0:
-                    raise click.ClickException(
-                        f'Polymarket API returned HTTP {resp.status_code}: {resp.text[:200]}'
-                    )
-                break
-            events = resp.json()
-            if not events:
-                break
-            for event in events:
-                tags_list = [
-                    t.get('label', '') for t in event.get('tags', []) if t.get('label')
-                ]
-                category = event.get('category', '')
-                for mkt in event.get('markets', []):
-                    if len(markets) >= limit:
-                        break
-                    clob_ids = _parse_clob_ids(mkt)
-                    entry: dict[str, Any] = {
-                        'id': mkt.get('id', ''),
-                        'question': mkt.get('question', ''),
-                        'event_id': str(event.get('id', '')),
-                        'event_title': event.get('title', ''),
-                        'token_id': clob_ids[0] if clob_ids else '',
-                        'no_token_id': clob_ids[1] if len(clob_ids) > 1 else '',
-                        'best_bid': mkt.get('bestBid', ''),
-                        'best_ask': mkt.get('bestAsk', ''),
-                        'volume': mkt.get('volume', ''),
-                        'end_date': mkt.get('endDate', ''),
-                        'tags': tags_list,
-                        'category': category,
-                    }
-                    if with_rules:
-                        entry['description'] = mkt.get('description', '')
-                    markets.append(entry)
-                if len(markets) >= limit:
-                    break
-            offset += len(events)
-            if len(events) < page_size:
-                break  # No more pages
-
-    return markets[:limit]
-
-
-async def _polymarket_search_markets(
-    query: str,
-    limit: int,
-    *,
-    tag: str | None = None,
-    with_rules: bool = False,
-) -> list[dict]:
-    all_markets = await _polymarket_list_markets(500, tag=tag, with_rules=with_rules)
-    q = query.lower()
-    filtered = [
-        m
-        for m in all_markets
-        if q in m.get('question', '').lower() or q in m.get('event_title', '').lower()
-    ]
-    return filtered[:limit]
-
-
-async def _polymarket_market_info(market_id: str) -> dict | None:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(GAMMA_MARKETS_URL, params={'id': market_id})
-    if resp.status_code != 200:
-        return None
-    data = resp.json()
-    if isinstance(data, list) and data:
-        mkt = data[0]
-    elif isinstance(data, dict):
-        mkt = data
-    else:
-        return None
-
-    clob_ids = _parse_clob_ids(mkt)
-    # eventId is often None in Gamma Markets API; fall back to events[0].id
-    event_id = mkt.get('eventId') or ''
-    if not event_id:
-        events = mkt.get('events') or []
-        if events and isinstance(events, list):
-            event_id = events[0].get('id', '')
-    return {
-        'id': mkt.get('id', ''),
-        'question': mkt.get('question', ''),
-        'event_id': str(event_id),
-        'token_id': clob_ids[0] if clob_ids else '',
-        'no_token_id': clob_ids[1] if len(clob_ids) > 1 else '',
-        'best_bid': mkt.get('bestBid', ''),
-        'best_ask': mkt.get('bestAsk', ''),
-        'volume': mkt.get('volume', ''),
-        'end_date': mkt.get('endDate', ''),
-        'description': mkt.get('description', ''),
-        'active': mkt.get('active', True),
-        'closed': mkt.get('closed', False),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Kalshi helpers
-# ---------------------------------------------------------------------------
-
-KALSHI_API_URL = 'https://api.elections.kalshi.com/trade-api/v2'
-
-
-async def _kalshi_list_markets(
-    limit: int, api_key_id: str | None, private_key_path: str | None
-) -> list[dict]:
-    from kalshi_python import Configuration
-    from kalshi_python.api.markets_api import MarketsApi
-    from kalshi_python.api_client import ApiClient
-
-    config = Configuration(host=KALSHI_API_URL)
-    key_id = api_key_id or os.environ.get('KALSHI_API_KEY_ID')
-    pk_path = private_key_path or os.environ.get('KALSHI_PRIVATE_KEY_PATH')
-
-    api_client = ApiClient(configuration=config)
-    if key_id and pk_path:
-        api_client.set_kalshi_auth(key_id, pk_path)
-
-    markets_api = MarketsApi(api_client)
-
-    kwargs: dict[str, Any] = {'status': 'open', 'limit': min(limit, 200)}
-    response = await asyncio.to_thread(lambda: markets_api.get_markets(**kwargs))
-    raw = response.markets if hasattr(response, 'markets') else []
-    markets = []
-    for m in (raw or [])[:limit]:
-        d = m.to_dict() if hasattr(m, 'to_dict') else dict(m)
-        markets.append(
-            {
-                'ticker': d.get('ticker', ''),
-                'title': d.get('title', ''),
-                'event_ticker': d.get('event_ticker', ''),
-                'series_ticker': d.get('series_ticker', ''),
-                'yes_bid': d.get('yes_bid', 0),
-                'yes_ask': d.get('yes_ask', 0),
-                'volume': d.get('volume', 0),
-                'close_time': str(d.get('close_time', '')),
-                'status': d.get('status', ''),
-            }
-        )
-    return markets
-
-
-async def _kalshi_search_via_events(
-    query: str,
-    limit: int,
-    with_rules: bool = False,
-) -> list[dict]:
-    """Search Kalshi events by keyword via raw HTTP and extract nested markets.
-
-    The SDK's EventsApi crashes due to a pydantic validation bug, and the
-    SDK's get_markets endpoint is dominated by sports parlays with no
-    server-side text search.  Hitting the events endpoint directly with
-    httpx (read-only, no auth required) and filtering by title is the
-    most reliable approach.
-    """
-    q = query.lower()
-    matched_markets: list[dict] = []
-    cursor: str | None = None
-    pages = 0
-    max_pages = 20  # up to 4 000 events
-
-    while pages < max_pages and len(matched_markets) < limit:
-        params: dict[str, Any] = {
-            'status': 'open',
-            'limit': 200,
-            'with_nested_markets': 'true',
-        }
-        if cursor:
-            params['cursor'] = cursor
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(
-                f'{KALSHI_API_URL}/events',
-                params=params,
-            )
-        if resp.status_code != 200:
-            break
-
-        data = resp.json()
-        events = data.get('events', [])
-        if not events:
-            break
-
-        for event in events:
-            title = event.get('title', '').lower()
-            if q not in title:
-                continue
-            for mkt in event.get('markets', []) or []:
-                if len(matched_markets) >= limit:
-                    break
-                entry = {
-                    'ticker': mkt.get('ticker', ''),
-                    'title': mkt.get('title', ''),
-                    'event_ticker': mkt.get('event_ticker', ''),
-                    'series_ticker': mkt.get('series_ticker', ''),
-                    'yes_bid': mkt.get('yes_bid', 0),
-                    'yes_ask': mkt.get('yes_ask', 0),
-                    'volume': mkt.get('volume', 0),
-                    'close_time': str(mkt.get('close_time', '')),
-                    'status': mkt.get('status', ''),
-                }
-                if with_rules:
-                    entry['rules_primary'] = mkt.get('rules_primary', '')
-                matched_markets.append(entry)
-            if len(matched_markets) >= limit:
-                break
-
-        cursor = data.get('cursor')
-        pages += 1
-        if not cursor:
-            break
-
-    return matched_markets[:limit]
-
-
-async def _kalshi_search_markets(
-    query: str,
-    limit: int,
-    api_key_id: str | None,
-    private_key_path: str | None,
-    with_rules: bool = False,
-) -> list[dict]:
-    return await _kalshi_search_via_events(query, limit, with_rules=with_rules)
-
-
-async def _kalshi_market_info(
-    market_ticker: str, api_key_id: str | None, private_key_path: str | None
-) -> dict | None:
-    from kalshi_python import Configuration
-    from kalshi_python.api.markets_api import MarketsApi
-    from kalshi_python.api_client import ApiClient
-
-    config = Configuration(host=KALSHI_API_URL)
-    key_id = api_key_id or os.environ.get('KALSHI_API_KEY_ID')
-    pk_path = private_key_path or os.environ.get('KALSHI_PRIVATE_KEY_PATH')
-
-    api_client = ApiClient(configuration=config)
-    if key_id and pk_path:
-        api_client.set_kalshi_auth(key_id, pk_path)
-
-    markets_api = MarketsApi(api_client)
-
-    response = await asyncio.to_thread(lambda: markets_api.get_market(market_ticker))
-    if not response:
-        return None
-    m = response.market if hasattr(response, 'market') else response
-    d = m.to_dict() if hasattr(m, 'to_dict') else dict(m)  # type: ignore[union-attr, call-overload]
-    return {
-        'ticker': d.get('ticker', ''),
-        'title': d.get('title', ''),
-        'event_ticker': d.get('event_ticker', ''),
-        'series_ticker': d.get('series_ticker', ''),
-        'yes_bid': d.get('yes_bid', 0),
-        'yes_ask': d.get('yes_ask', 0),
-        'volume': d.get('volume', 0),
-        'close_time': str(d.get('close_time', '')),
-        'status': d.get('status', ''),
-        'rules_primary': d.get('rules_primary', ''),
-    }
-
+from coinjure.data.fetcher import (
+    kalshi_list_markets,
+    kalshi_market_info,
+    kalshi_search_markets,
+    polymarket_list_markets,
+    polymarket_market_info,
+    polymarket_search_markets,
+)
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
@@ -329,393 +34,63 @@ def market() -> None:
 
 
 # ---------------------------------------------------------------------------
-# market analyze (quantitative single-market or pair analysis)
+# market info (fetch detailed market information)
 # ---------------------------------------------------------------------------
 
 
-@market.command('analyze')
+@market.command('info')
 @click.option('--market-id', required=True, help='Market ID or ticker.')
-@click.option(
-    '--compare',
-    default=None,
-    help='Second market ID for pair analysis (correlation, cointegration, spread stats).',
-)
 @click.option(
     '--exchange',
     type=click.Choice(['polymarket', 'kalshi']),
     default='polymarket',
     show_default=True,
 )
-@click.option(
-    '--interval',
-    type=click.Choice(['1h', '6h', '1d', 'max']),
-    default='max',
-    show_default=True,
-    help='Price history interval.',
-)
 @click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
 @click.option(
     '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
 )
-@click.option(
-    '--relation-type',
-    type=click.Choice([
-        'same_event', 'complementary', 'implication', 'exclusivity',
-        'temporal', 'semantic', 'conditional',
-    ]),
-    default=None,
-    help='Relation type — determines analysis method (structural vs cointegration).',
-)
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
-def market_analyze(
+def market_info(
     market_id: str,
-    compare: str | None,
     exchange: str,
-    interval: str,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
-    relation_type: str | None,
     as_json: bool,
 ) -> None:
-    """Quantitative analysis of a market or pair of markets.
-
-    Single market: returns market info + price series statistics.
-
-    With --compare: runs pair analysis. The method depends on --relation-type:
-
-    \b
-      structural (same_event/implication/complementary/exclusivity):
-        checks pricing constraint violations (A≤B, A+B≤1)
-      cointegration (temporal/semantic/conditional):
-        ADF, Engle-Granger, hedge ratio, half-life
-      unspecified: defaults to cointegration analysis
-
-    Lead-lag detection runs for all types.
-    """
-    import math
-
-    # Fetch market info
+    """Fetch detailed information for a single market."""
     try:
         if exchange == 'polymarket':
-            info_a = asyncio.run(_polymarket_market_info(market_id))
+            info = asyncio.run(polymarket_market_info(market_id))
         else:
-            info_a = asyncio.run(
-                _kalshi_market_info(
+            info = asyncio.run(
+                kalshi_market_info(
                     market_id, kalshi_api_key_id, kalshi_private_key_path
                 )
             )
     except Exception as exc:
-        raise click.ClickException(f'Failed to fetch market A: {exc}') from exc
-    if info_a is None:
+        raise click.ClickException(f'Failed to fetch market: {exc}') from exc
+    if info is None:
         raise click.ClickException(f'Market not found: {market_id}')
 
-    # Fetch price history for market A
-    try:
-        if exchange == 'polymarket':
-            hist_a = asyncio.run(_polymarket_price_history(market_id, interval, None))
-        else:
-            hist_a = {'series': []}  # Kalshi has no public price history API
-    except Exception:
-        hist_a = {'series': []}
-
-    prices_a = [float(p['p']) for p in hist_a.get('series', []) if 'p' in p]
-    # Kalshi fallback: use current mid-price as a single data point
-    if not prices_a and exchange == 'kalshi':
-        bid = info_a.get('yes_bid', 0)
-        ask = info_a.get('yes_ask', 0)
-        if bid or ask:
-            prices_a = [(bid + ask) / 2 / 100]  # Kalshi prices are in cents
-
-    # Single-market stats
-    stats_a = _compute_series_stats(prices_a, info_a)
-
-    if compare is None:
-        # Single market analysis
-        result: dict[str, Any] = {
-            'ok': True,
-            'market_id': market_id,
-            'exchange': exchange,
-            'market_info': info_a,
-            'series_length': len(prices_a),
-            'stats': stats_a,
-        }
-        if as_json:
-            click.echo(json.dumps(result, default=str))
-            return
-        click.echo(f'\nAnalysis for {exchange} market: {market_id}')
-        click.echo(f'  Question: {info_a.get("question", "?")}')
-        click.echo(f'  Series points: {len(prices_a)}')
-        click.echo('=' * 60)
-        for key, val in stats_a.items():
-            if isinstance(val, float):
-                click.echo(f'  {key}: {val:.6f}')
-            else:
-                click.echo(f'  {key}: {val}')
-        click.echo()
-        return
-
-    # ── Pair analysis ─────────────────────────────────────────────────
-    if not as_json:
-        click.echo(f'Analyzing pair: {market_id} vs {compare} ...')
-
-    try:
-        if exchange == 'polymarket':
-            info_b = asyncio.run(_polymarket_market_info(compare))
-        else:
-            info_b = asyncio.run(
-                _kalshi_market_info(compare, kalshi_api_key_id, kalshi_private_key_path)
-            )
-    except Exception as exc:
-        raise click.ClickException(f'Failed to fetch market B: {exc}') from exc
-    if info_b is None:
-        raise click.ClickException(f'Market not found: {compare}')
-
-    try:
-        if exchange == 'polymarket':
-            hist_b = asyncio.run(_polymarket_price_history(compare, interval, None))
-        else:
-            hist_b = {'series': []}
-    except Exception:
-        hist_b = {'series': []}
-
-    prices_b = [float(p['p']) for p in hist_b.get('series', []) if 'p' in p]
-    # Kalshi fallback: use current mid-price as a single data point
-    if not prices_b and exchange == 'kalshi':
-        bid = info_b.get('yes_bid', 0)
-        ask = info_b.get('yes_ask', 0)
-        if bid or ask:
-            prices_b = [(bid + ask) / 2 / 100]
-    stats_b = _compute_series_stats(prices_b, info_b)
-
-    # Pair quantitative analysis (method depends on relation type)
-    pair_stats = _compute_pair_stats(prices_a, prices_b, relation_type=relation_type)
-
-    result = {
-        'ok': True,
-        'market_a': {
-            'market_id': market_id,
-            'info': info_a,
-            'series_length': len(prices_a),
-            'stats': stats_a,
-        },
-        'market_b': {
-            'market_id': compare,
-            'info': info_b,
-            'series_length': len(prices_b),
-            'stats': stats_b,
-        },
-        'exchange': exchange,
-        'pair_stats': pair_stats,
-    }
+    result: dict[str, Any] = {'ok': True, 'exchange': exchange, **info}
 
     if as_json:
         click.echo(json.dumps(result, default=str))
         return
 
-    click.echo(f'\nPair Analysis ({relation_type or "auto"})')
-    click.echo('=' * 70)
-    q_a = info_a.get('question') or info_a.get('title') or '?'
-    q_b = info_b.get('question') or info_b.get('title') or '?'
-    bid_a = info_a.get('best_bid') or info_a.get('yes_bid') or '?'
-    ask_a = info_a.get('best_ask') or info_a.get('yes_ask') or '?'
-    bid_b = info_b.get('best_bid') or info_b.get('yes_bid') or '?'
-    ask_b = info_b.get('best_ask') or info_b.get('yes_ask') or '?'
-    click.echo(f'  A: {q_a[:65]}')
-    click.echo(f'     id={market_id}  bid={bid_a}  ask={ask_a}  pts={len(prices_a)}')
-    click.echo(f'  B: {q_b[:65]}')
-    click.echo(f'     id={compare}  bid={bid_b}  ask={ask_b}  pts={len(prices_b)}')
+    question = info.get('question') or info.get('title') or '?'
+    click.echo(f'\n[{exchange}] {question}')
+    click.echo(f'  ID: {market_id}')
+    for key in ('best_bid', 'best_ask', 'yes_bid', 'yes_ask', 'volume',
+                'end_date', 'token_ids', 'event_id'):
+        val = info.get(key)
+        if val not in (None, '', []):
+            click.echo(f'  {key}: {val}')
+    desc = info.get('description', '')
+    if desc:
+        click.echo(f'  description: {desc[:200]}{"..." if len(desc) > 200 else ""}')
     click.echo()
-
-    ps = pair_stats
-    at = ps.get('analysis_type', '?')
-    click.echo(f'  {"Metric":<22} {"Value":>10}')
-    click.echo(f'  {"─"*22} {"─"*10}')
-    click.echo(f'  {"Analysis type":<22} {at:>10}')
-    click.echo(f'  {"Correlation":<22} {ps.get("correlation", 0):>10.3f}')
-    click.echo(f'  {"Aligned points":<22} {ps.get("aligned_points", 0):>10}')
-    click.echo(f'  {"Mean spread":<22} {ps.get("mean_spread", 0):>10.4f}')
-    click.echo(f'  {"Current spread":<22} {ps.get("current_spread", 0):>10.4f}')
-    click.echo(f'  {"Spread zscore":<22} {ps.get("spread_zscore", 0):>10.2f}')
-
-    if at == 'structural':
-        click.echo()
-        click.echo(f'  {"Constraint":<22} {ps.get("constraint", "?"):>10}')
-        holds = ps.get('constraint_holds')
-        click.echo(f'  {"Holds":<22} {"YES" if holds else "NO":>10}')
-        click.echo(f'  {"Violations":<22} {ps.get("violation_count", 0):>10}')
-        click.echo(f'  {"Violation rate":<22} {ps.get("violation_rate", 0)*100:>9.1f}%')
-        click.echo(f'  {"Current arb":<22} {ps.get("current_arb", 0):>10.4f}')
-        click.echo(f'  {"Mean arb":<22} {ps.get("mean_arb", 0):>10.4f}')
-    elif at == 'cointegration':
-        click.echo()
-        click.echo(f'  {"Cointegrated":<22} {"YES" if ps.get("is_cointegrated") else "NO":>10}')
-        click.echo(f'  {"Coint p-value":<22} {ps.get("coint_pvalue", 1):>10.4f}')
-        click.echo(f'  {"ADF stationary":<22} {"YES" if ps.get("is_stationary") else "NO":>10}')
-        click.echo(f'  {"ADF p-value":<22} {ps.get("adf_pvalue", 1):>10.4f}')
-        hl = ps.get('half_life')
-        click.echo(f'  {"Half-life (bars)":<22} {hl:>10.1f}' if hl else f'  {"Half-life":<22} {"N/A":>10}')
-        click.echo(f'  {"Hedge ratio":<22} {ps.get("hedge_ratio", 0):>10.3f}')
-
-    ll_sig = ps.get('lead_lag_significant')
-    ll = ps.get('lead_lag')
-    ll_corr = ps.get('lead_lag_corr')
-    if ll is not None:
-        click.echo()
-        click.echo(f'  {"Lead-lag (steps)":<22} {ll:>10}')
-        click.echo(f'  {"Lead-lag corr":<22} {ll_corr:>10.3f}' if ll_corr else '')
-        click.echo(f'  {"Significant":<22} {"YES" if ll_sig else "NO":>10}')
-    click.echo()
-
-
-def _compute_pair_stats(
-    prices_a: list[float],
-    prices_b: list[float],
-    relation_type: str | None = None,
-) -> dict[str, Any]:
-    """Compute pair statistics using the appropriate method for the relation type.
-
-    - same_event / implication: structural constraint (A ≤ B)
-    - complementary / exclusivity: structural constraint (A + B ≤ 1)
-    - temporal / semantic / conditional: cointegration + ADF + half-life
-    - None (unspecified): runs cointegration (backward compat)
-    - All types also check lead-lag
-    """
-    n = min(len(prices_a), len(prices_b))
-    # Structural types only need 1 point (current snapshot); cointegration needs 5+
-    structural_types = {'same_event', 'implication', 'complementary', 'exclusivity'}
-    min_points = 1 if relation_type in structural_types else 5
-    if n < min_points:
-        return {
-            'error': 'insufficient_data',
-            'points_a': len(prices_a),
-            'points_b': len(prices_b),
-        }
-
-    a = prices_a[-n:]
-    b = prices_b[-n:]
-
-    # Basic stats (always computed, no deps)
-    mean_a = sum(a) / n
-    mean_b = sum(b) / n
-    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n)) / n
-    std_a = (sum((x - mean_a) ** 2 for x in a) / n) ** 0.5
-    std_b = (sum((x - mean_b) ** 2 for x in b) / n) ** 0.5
-    correlation = cov / (std_a * std_b) if std_a > 0 and std_b > 0 else 0.0
-
-    spread = [a[i] - b[i] for i in range(n)]
-    mean_spread = sum(spread) / n
-    std_spread = (sum((s - mean_spread) ** 2 for s in spread) / n) ** 0.5
-
-    result: dict[str, Any] = {
-        'aligned_points': n,
-        'correlation': correlation,
-        'mean_spread': mean_spread,
-        'std_spread': std_spread,
-        'current_spread': spread[-1] if spread else None,
-        'spread_zscore': (spread[-1] - mean_spread) / std_spread
-        if std_spread > 0
-        else 0.0,
-    }
-
-    # Type-dispatched validation
-    try:
-        from coinjure.market.validation import (
-            validate_by_type,
-            validate_cointegration,
-            validate_lead_lag,
-        )
-
-        if relation_type:
-            vr = validate_by_type(a, b, relation_type)
-        else:
-            vr = validate_cointegration(a, b)
-
-        # Structural fields
-        if vr.analysis_type == 'structural':
-            result.update(
-                {
-                    'analysis_type': 'structural',
-                    'constraint': vr.constraint,
-                    'constraint_holds': vr.constraint_holds,
-                    'violation_count': vr.violation_count,
-                    'violation_rate': vr.violation_rate,
-                    'current_arb': vr.current_arb,
-                    'mean_arb': vr.mean_arb,
-                }
-            )
-        else:
-            # Cointegration fields
-            result.update(
-                {
-                    'analysis_type': 'cointegration',
-                    'hedge_ratio': vr.hedge_ratio,
-                    'adf_statistic': vr.adf_statistic,
-                    'adf_pvalue': vr.adf_pvalue,
-                    'is_stationary': vr.is_stationary,
-                    'coint_statistic': vr.coint_statistic,
-                    'coint_pvalue': vr.coint_pvalue,
-                    'is_cointegrated': vr.is_cointegrated,
-                    'half_life': vr.half_life,
-                }
-            )
-
-        # Always add lead-lag (supplementary for all types)
-        ll = validate_lead_lag(a, b)
-        result.update(
-            {
-                'lead_lag': ll.lead_lag,
-                'lead_lag_corr': ll.lead_lag_corr,
-                'lead_lag_significant': ll.lead_lag_significant,
-            }
-        )
-    except Exception:
-        result['note'] = 'install statsmodels+scipy for advanced analysis'
-
-    return result
-
-
-def _compute_series_stats(prices: list[float], info: dict) -> dict[str, Any]:
-    """Compute single-series statistics (no external deps beyond stdlib)."""
-    if not prices:
-        return {'error': 'no_price_data'}
-
-    n = len(prices)
-    mean_price = sum(prices) / n
-    variance = sum((p - mean_price) ** 2 for p in prices) / n if n > 1 else 0.0
-    std_price = variance**0.5
-
-    returns = [prices[i] - prices[i - 1] for i in range(1, n)]
-    mean_return = sum(returns) / len(returns) if returns else 0.0
-    vol = (
-        (sum((r - mean_return) ** 2 for r in returns) / len(returns)) ** 0.5
-        if returns
-        else 0.0
-    )
-
-    bid_raw = info.get('best_bid')
-    ask_raw = info.get('best_ask')
-    try:
-        bid = float(bid_raw) if bid_raw not in (None, '') else None
-    except (ValueError, TypeError):
-        bid = None
-    try:
-        ask = float(ask_raw) if ask_raw not in (None, '') else None
-    except (ValueError, TypeError):
-        ask = None
-    ba_spread = ask - bid if bid is not None and ask is not None else None
-
-    trend = prices[-1] - prices[0] if n >= 2 else 0.0
-
-    return {
-        'mean_price': mean_price,
-        'std_price': std_price,
-        'volatility': vol,
-        'min_price': min(prices),
-        'max_price': max(prices),
-        'last_price': prices[-1],
-        'trend': trend,
-        'bid_ask_spread': ba_spread,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -740,9 +115,9 @@ def market_relations_group() -> None:
 )
 @click.option(
     '--spread-type',
-    default='semantic',
+    default='correlated',
     show_default=True,
-    help='Relation type (semantic, same_event, implication).',
+    help='Relation type (same_event, complementary, implication, exclusivity, correlated).',
 )
 @click.option('--hypothesis', default='', help='Price relationship hypothesis.')
 @click.option('--reasoning', default='', help='Why these markets are related.')
@@ -759,13 +134,11 @@ def relations_add(
     """Create a relation between two markets.
 
     Fetches market info from the API and persists the relation.
-    Use ``market analyze --compare`` first to verify correlation.
 
     \b
-      coinjure market analyze --market-id 610380 --compare 610381 --json
       coinjure market relations add \\
         --market-id-a 610380 --market-id-b 610381 \\
-        --spread-type semantic \\
+        --spread-type correlated \\
         --hypothesis "p_A ~ p_B (positive)" \\
         --reasoning "election called is prerequisite for held" --json
     """
@@ -773,9 +146,9 @@ def relations_add(
 
     async def _fetch_info(mid: str) -> dict:
         if exc == 'polymarket':
-            info = await _polymarket_market_info(mid)
+            info = await polymarket_market_info(mid)
         else:
-            info = await _kalshi_market_info(
+            info = await kalshi_market_info(
                 mid,
                 api_key_id=None,
                 private_key_path=None,
@@ -891,119 +264,6 @@ def relations_remove(relation_id: str) -> None:
         raise click.ClickException(f'Relation not found: {relation_id}')
 
 
-@market_relations_group.command('validate')
-@click.argument('relation_id')
-@click.option(
-    '--interval',
-    type=click.Choice(['1h', '6h', '1d', 'max']),
-    default='max',
-    show_default=True,
-    help='Price history interval.',
-)
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
-def relations_validate(relation_id: str, interval: str, as_json: bool) -> None:
-    """Validate a relation with type-specific quantitative analysis.
-
-    Fetches price history for both legs and runs the appropriate validation
-    based on the relation's spread_type.
-    """
-    from coinjure.market.relations import RelationStore, ValidationResult
-
-    store = RelationStore()
-    rel = store.get(relation_id)
-    if rel is None:
-        raise click.ClickException(f'Relation not found: {relation_id}')
-
-    platform_a = rel.market_a.get('platform', 'polymarket')
-    platform_b = rel.market_b.get('platform', 'polymarket')
-    mid_a = rel.market_a.get('id', '')
-    mid_b = rel.market_b.get('id', '')
-
-    if not mid_a or not mid_b:
-        raise click.ClickException('Relation is missing market IDs')
-
-    # Fetch price history
-    try:
-        if platform_a == 'polymarket':
-            hist_a = asyncio.run(_polymarket_price_history(mid_a, interval, None))
-        else:
-            hist_a = {'series': []}
-        if platform_b == 'polymarket':
-            hist_b = asyncio.run(_polymarket_price_history(mid_b, interval, None))
-        else:
-            hist_b = {'series': []}
-    except Exception as exc:
-        raise click.ClickException(f'Failed to fetch price history: {exc}') from exc
-
-    prices_a = [float(p['p']) for p in hist_a.get('series', []) if 'p' in p]
-    prices_b = [float(p['p']) for p in hist_b.get('series', []) if 'p' in p]
-
-    if len(prices_a) < 5 or len(prices_b) < 5:
-        raise click.ClickException(
-            f'Insufficient price data: A={len(prices_a)}, B={len(prices_b)}'
-        )
-
-    # Run type-dispatched analysis
-    pair_stats = _compute_pair_stats(prices_a, prices_b, relation_type=rel.spread_type)
-
-    # Build ValidationResult from pair_stats
-    vr = ValidationResult(
-        analysis_type=pair_stats.get('analysis_type'),
-        constraint=pair_stats.get('constraint'),
-        constraint_holds=pair_stats.get('constraint_holds'),
-        violation_count=pair_stats.get('violation_count'),
-        violation_rate=pair_stats.get('violation_rate'),
-        current_arb=pair_stats.get('current_arb'),
-        mean_arb=pair_stats.get('mean_arb'),
-        adf_statistic=pair_stats.get('adf_statistic'),
-        adf_pvalue=pair_stats.get('adf_pvalue'),
-        is_stationary=pair_stats.get('is_stationary'),
-        coint_statistic=pair_stats.get('coint_statistic'),
-        coint_pvalue=pair_stats.get('coint_pvalue'),
-        is_cointegrated=pair_stats.get('is_cointegrated'),
-        half_life=pair_stats.get('half_life'),
-        hedge_ratio=pair_stats.get('hedge_ratio'),
-        correlation=pair_stats.get('correlation'),
-        mean_spread=pair_stats.get('mean_spread'),
-        std_spread=pair_stats.get('std_spread'),
-        lead_lag=pair_stats.get('lead_lag'),
-        lead_lag_corr=pair_stats.get('lead_lag_corr'),
-        lead_lag_significant=pair_stats.get('lead_lag_significant'),
-    )
-
-    rel.set_validation(vr)
-    store.update(rel)
-
-    if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    'ok': True,
-                    'relation_id': relation_id,
-                    'status': rel.status,
-                    'validation': rel.validation,
-                },
-                default=str,
-            )
-        )
-        return
-
-    click.echo(f'\nValidated relation: {relation_id}')
-    click.echo(f'  Status: {rel.status}')
-    click.echo(f'  Analysis type: {vr.analysis_type}')
-    if vr.analysis_type == 'structural':
-        click.echo(f'  Constraint: {vr.constraint}')
-        click.echo(f'  Holds: {vr.constraint_holds}')
-        click.echo(f'  Violations: {vr.violation_count} ({(vr.violation_rate or 0)*100:.1f}%)')
-    else:
-        click.echo(f'  Cointegrated: {vr.is_cointegrated}')
-        click.echo(f'  ADF p-value: {vr.adf_pvalue}')
-        click.echo(f'  Half-life: {vr.half_life}')
-    if vr.lead_lag_significant:
-        click.echo(f'  Lead-lag: {vr.lead_lag} (corr={vr.lead_lag_corr:.3f})')
-    click.echo()
-
-
 # ---------------------------------------------------------------------------
 # market discover (multi-keyword search + structural pair detection)
 # ---------------------------------------------------------------------------
@@ -1052,15 +312,10 @@ def relations_validate(relation_id: str, interval: str, as_json: bool) -> None:
 @click.option(
     '--auto-pair/--no-auto-pair',
     'auto_pair',
-    default=False,
+    default=True,
     show_default=True,
-    help='Auto-detect and persist market relations (implication, exclusivity, etc.).',
-)
-@click.option(
-    '--skip-exclusivity',
-    is_flag=True,
-    default=False,
-    help='Skip intra-event exclusivity detection (reduces pair count).',
+    help='Auto-detect and persist intra-event structural relations '
+    '(implication, exclusivity, complementary). Use --no-auto-pair to disable.',
 )
 def market_discover(
     exchange: str,
@@ -1072,16 +327,14 @@ def market_discover(
     with_rules: bool,
     as_json: bool,
     auto_pair: bool,
-    skip_exclusivity: bool,
 ) -> None:
     """Fetch markets from exchanges for agent analysis.
 
     Searches multiple keywords and/or tags, merges unique markets, and returns
-    the raw data. The agent decides which markets are related and adds them
-    to the relation store via ``market relations add``.
-
-    Use --with-rules to include resolution criteria (for cross-platform
-    same_event comparison).
+    the raw data. Automatically detects intra-event structural relations
+    (date nesting, verb implication, exclusivity, complementary). Cross-event
+    and cross-platform semantic relations are left for the agent to decide
+    via ``market relations add``.
 
     \b
       coinjure market discover -q "election" -q "Trump" --json
@@ -1116,12 +369,12 @@ def market_discover(
         if has_filters:
             for q in query:
                 if exchange in ('polymarket', 'both'):
-                    _merge_poly(await _polymarket_search_markets(
+                    _merge_poly(await polymarket_search_markets(
                         q, limit, with_rules=with_rules,
                     ))
                 if exchange in ('kalshi', 'both'):
                     _merge_kalshi(
-                        await _kalshi_search_markets(
+                        await kalshi_search_markets(
                             q,
                             limit,
                             kalshi_api_key_id,
@@ -1131,16 +384,16 @@ def market_discover(
                     )
             for t in tag:
                 if exchange in ('polymarket', 'both'):
-                    _merge_poly(await _polymarket_list_markets(
+                    _merge_poly(await polymarket_list_markets(
                         limit, tag=t, with_rules=with_rules,
                     ))
         else:
             if exchange in ('polymarket', 'both'):
-                poly_markets = await _polymarket_list_markets(
+                poly_markets = await polymarket_list_markets(
                     limit, with_rules=with_rules,
                 )
             if exchange in ('kalshi', 'both'):
-                kalshi_markets = await _kalshi_list_markets(
+                kalshi_markets = await kalshi_list_markets(
                     limit,
                     kalshi_api_key_id,
                     kalshi_private_key_path,
@@ -1202,25 +455,37 @@ def market_discover(
     if auto_pair:
         from coinjure.market.auto_pair import auto_pair_markets
 
-        result = auto_pair_markets(
-            poly_markets, kalshi_markets, store,
-            skip_exclusivity=skip_exclusivity,
-        )
+        result = auto_pair_markets(poly_markets, kalshi_markets)
+
+        # Persist candidates to relation store
+        stored_new = 0
+        if result.candidates:
+            from coinjure.market.relations import RelationStore
+
+            store = RelationStore()
+            stored_new = store.add_batch(result.candidates)
+
         auto_pair_summary = {
-            'created_count': len(result.created),
-            'skipped_duplicate': result.skipped_duplicate,
+            'total_detected': result.total_detected,
+            'candidate_count': len(result.candidates),
+            'stored_new': stored_new,
             'by_type': result.by_type,
             'by_layer': result.by_layer,
-            'created': [
+            'candidates': [
                 {
                     'relation_id': r.relation_id,
                     'type': r.spread_type,
                     'confidence': r.confidence,
                     'reasoning': r.reasoning,
+                    'market_a_id': r.market_a.get('id', ''),
+                    'market_b_id': r.market_b.get('id', ''),
                     'market_a': r.market_a.get('question', '')[:60],
                     'market_b': r.market_b.get('question', '')[:60],
+                    'current_mid_a': r.market_a.get('current_mid'),
+                    'current_mid_b': r.market_b.get('current_mid'),
+                    'current_arb': r.market_a.get('current_arb', 0),
                 }
-                for r in result.created
+                for r in result.candidates
             ],
         }
 
@@ -1290,88 +555,38 @@ def market_discover(
 
     if auto_pair_summary:
         s = auto_pair_summary
-        click.echo(f'  Auto-pair: {s["created_count"]} relations created, '
-                    f'{s["skipped_duplicate"]} duplicates skipped')
+        td = s['total_detected']
+        wc = s['candidate_count']
+        sn = s.get('stored_new', 0)
+        click.echo(f'  Auto-pair: {td} structural pairs detected, {wc} with current opportunity')
+        if wc > 0:
+            click.echo(f'    Stored {sn} new relation(s) ({wc - sn} already in store)')
         if s['by_type']:
             click.echo(f'    By type: {s["by_type"]}')
-        if s['by_layer']:
-            click.echo(f'    By layer: {s["by_layer"]}')
-        for r in s['created'][:20]:
-            click.echo(f'    [{r["type"]}] {r["relation_id"]}  '
-                        f'{r["market_a"]}  <->  {r["market_b"]}')
-        if len(s['created']) > 20:
-            click.echo(f'    ... and {len(s["created"]) - 20} more')
         click.echo()
-
-
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Polymarket price history
-# ---------------------------------------------------------------------------
-
-_INTERVAL_FIDELITY: dict[str, int] = {
-    'max': 1,
-    '1d': 1440,
-    '6h': 360,
-    '1h': 60,
-}
-
-
-async def _polymarket_price_history(
-    market_id: str, interval: str, limit: int | None
-) -> dict:
-    fidelity = _INTERVAL_FIDELITY.get(interval, 1440)
-
-    # Resolve the CLOB token ID from the numeric market ID.
-    info = await _polymarket_market_info(market_id)
-    if info is None:
-        raise click.ClickException(f'Market not found: {market_id}')
-    token_id = info.get('token_id', '')
-    if not token_id:
-        raise click.ClickException(f'No CLOB token ID for market: {market_id}')
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            CLOB_PRICES_HISTORY_URL,
-            params={'market': token_id, 'interval': interval, 'fidelity': fidelity},
-        )
-    if resp.status_code != 200:
-        raise click.ClickException(
-            f'Polymarket CLOB API returned HTTP {resp.status_code}: {resp.text[:200]}'
-        )
-    data = resp.json()
-
-    # Response is {"history": [{"t": ..., "p": ...}, ...]}
-    raw_history = data.get('history') if isinstance(data, dict) else data
-    points: list[dict[str, Any]] = []
-    if isinstance(raw_history, list):
-        for item in raw_history:
-            if isinstance(item, dict) and 't' in item and 'p' in item:
-                points.append({'t': item['t'], 'p': item['p']})
-
-    if limit and limit > 0:
-        points = points[-limit:]
-
-    first_price = points[0]['p'] if points else None
-    last_price = points[-1]['p'] if points else None
-    total_move: Any = None
-    if first_price is not None and last_price is not None:
-        try:
-            total_move = round(float(last_price) - float(first_price), 6)
-        except (TypeError, ValueError):
-            total_move = None
-
-    return {
-        'market_id': market_id,
-        'token_id': token_id,
-        'interval': interval,
-        'points': len(points),
-        'series': points,
-        'first_price': first_price,
-        'last_price': last_price,
-        'total_move': total_move,
-    }
+        for r in s['candidates'][:20]:
+            arb = r.get('current_arb', 0)
+            arb_s = f'   arb={arb:.3f}' if arb else ''
+            click.echo(f'    [{r["type"]}]  {r["market_a_id"]} <-> {r["market_b_id"]}{arb_s}')
+            mid_a = r.get('current_mid_a')
+            mid_b = r.get('current_mid_b')
+            mid_a_s = f'  mid={mid_a:.3f}' if mid_a is not None else ''
+            mid_b_s = f'  mid={mid_b:.3f}' if mid_b is not None else ''
+            click.echo(f'      A: {r["market_a"]}{mid_a_s}')
+            click.echo(f'      B: {r["market_b"]}{mid_b_s}')
+            if r['type'] == 'implication' and mid_a is not None and mid_b is not None:
+                click.echo(f'      Violation: A ({mid_a:.3f}) > B ({mid_b:.3f}), arb = {arb:.3f}')
+            elif r['type'] in ('exclusivity', 'complementary') and mid_a is not None and mid_b is not None:
+                click.echo(
+                    f'      Violation: A ({mid_a:.3f}) + B ({mid_b:.3f})'
+                    f' = {mid_a + mid_b:.3f} > 1, arb = {arb:.3f}'
+                )
+            else:
+                click.echo(f'      {r["reasoning"]}')
+            click.echo()
+        if len(s['candidates']) > 20:
+            click.echo(f'    ... and {len(s["candidates"]) - 20} more')
+            click.echo()
 
 
 # ---------------------------------------------------------------------------
@@ -1401,26 +616,26 @@ def market_news(
     source: str, query: str | None, limit: int, api_token: str | None, as_json: bool
 ) -> None:
     """Fetch news headlines from a specified source."""
-    from coinjure.cli.news_commands import (
-        _fetch_google_news,
-        _fetch_rss,
-        _fetch_thenewsapi,
-        _format_article,
+    from coinjure.data.news import (
+        fetch_google_news,
+        fetch_rss,
+        fetch_thenewsapi,
+        format_article,
     )
 
     token = api_token or os.environ.get('THENEWSAPI_TOKEN', '')
 
     try:
         if source == 'google':
-            articles = asyncio.run(_fetch_google_news(query, limit))
+            articles = asyncio.run(fetch_google_news(query, limit))
         elif source == 'rss':
-            articles = asyncio.run(_fetch_rss(query, limit))
+            articles = asyncio.run(fetch_rss(query, limit))
         else:
             if not token:
                 raise click.ClickException(
                     'TheNewsAPI requires a token. Pass --api-token or set THENEWSAPI_TOKEN.'
                 )
-            articles = asyncio.run(_fetch_thenewsapi(query, limit, token))
+            articles = asyncio.run(fetch_thenewsapi(query, limit, token))
     except click.ClickException:
         raise
     except Exception as exc:
@@ -1439,5 +654,5 @@ def market_news(
     click.echo(f'Fetched {len(articles)} article(s) from {source}:\n')
     for i, article in enumerate(articles, 1):
         click.echo(f'[{i}]')
-        click.echo(_format_article(article))
+        click.echo(format_article(article))
         click.echo()

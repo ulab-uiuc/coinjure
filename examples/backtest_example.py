@@ -15,12 +15,12 @@ import os
 from decimal import Decimal
 
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.engine.trader.paper_trader import PaperTrader
 from coinjure.engine.trader.position_manager import Position, PositionManager
 from coinjure.engine.trader.risk_manager import NoRiskManager, StandardRiskManager
-from coinjure.engine.trading_engine import TradingEngine
-from coinjure.strategy.test_strategy import TestStrategy
+from coinjure.engine.engine import TradingEngine
+from coinjure.strategy.demo_strategy import TestStrategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 

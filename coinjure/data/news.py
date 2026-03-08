@@ -1,17 +1,15 @@
-"""CLI commands for standalone news fetching."""
+"""News fetching utilities for prediction market analysis."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 
-import click
 import feedparser
 import httpx
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Constants
 # ---------------------------------------------------------------------------
 
 GOOGLE_NEWS_RSS_BASE = 'https://news.google.com/rss'
@@ -25,8 +23,12 @@ WSJ_RSS_FEEDS = {
     'https://feeds.content.dowjones.io/public/rss/socialpoliticsfeed': ['politics'],
 }
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def _format_article(article: dict) -> str:
+
+def format_article(article: dict) -> str:
     lines = []
     title = article.get('title', '(no title)')
     source = article.get('source', '')
@@ -40,7 +42,7 @@ def _format_article(article: dict) -> str:
     if published:
         lines.append(f'  Published: {published}')
     if description:
-        snippet = description[:120] + ('…' if len(description) > 120 else '')
+        snippet = description[:120] + ('...' if len(description) > 120 else '')
         lines.append(f'  Snippet:   {snippet}')
     if url:
         lines.append(f'  URL:       {url}')
@@ -52,8 +54,8 @@ def _format_article(article: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def _fetch_google_news(query: str | None, limit: int) -> list[dict]:
-    """Fetch from Google News RSS — general or search feed."""
+async def fetch_google_news(query: str | None, limit: int) -> list[dict]:
+    """Fetch from Google News RSS -- general or search feed."""
     feedparser.CACHE_DIRECTORY = None
     feedparser._check_cache = lambda *a, **kw: None  # noqa: SLF001
 
@@ -94,7 +96,7 @@ async def _fetch_google_news(query: str | None, limit: int) -> list[dict]:
     return articles
 
 
-async def _fetch_rss(query: str | None, limit: int) -> list[dict]:
+async def fetch_rss(query: str | None, limit: int) -> list[dict]:
     """Fetch from WSJ RSS feeds, optionally filtering by query string."""
     feedparser.CACHE_DIRECTORY = None
     feedparser._check_cache = lambda *a, **kw: None  # noqa: SLF001
@@ -138,7 +140,7 @@ async def _fetch_rss(query: str | None, limit: int) -> list[dict]:
     return articles
 
 
-async def _fetch_thenewsapi(
+async def fetch_thenewsapi(
     query: str | None, limit: int, api_token: str
 ) -> list[dict]:
     """Fetch from TheNewsAPI."""
@@ -157,7 +159,7 @@ async def _fetch_thenewsapi(
         response = await client.get(url, params=params)
 
     if response.status_code != 200:
-        raise click.ClickException(
+        raise RuntimeError(
             f'TheNewsAPI returned HTTP {response.status_code}: {response.text[:200]}'
         )
     data = response.json()
@@ -175,72 +177,3 @@ async def _fetch_thenewsapi(
             }
         )
     return articles
-
-
-# ---------------------------------------------------------------------------
-# Click group + commands
-# ---------------------------------------------------------------------------
-
-
-@click.group()
-def news() -> None:
-    """Standalone news fetching commands."""
-
-
-@news.command('fetch')
-@click.option(
-    '--source',
-    type=click.Choice(['google', 'rss', 'thenewsapi']),
-    default='google',
-    show_default=True,
-    help='News source to fetch from.',
-)
-@click.option('--query', default=None, help='Optional search/filter query.')
-@click.option(
-    '--limit', default=10, show_default=True, type=int, help='Max articles to fetch.'
-)
-@click.option(
-    '--api-token',
-    default=None,
-    help='TheNewsAPI token (or THENEWSAPI_TOKEN env var). Required for --source thenewsapi.',
-)
-@click.option('--json', 'as_json', is_flag=True, default=False, help='Output as JSON.')
-def news_fetch(
-    source: str, query: str | None, limit: int, api_token: str | None, as_json: bool
-) -> None:
-    """Fetch news headlines from a specified source."""
-    import os
-
-    token = api_token or os.environ.get('THENEWSAPI_TOKEN', '')
-
-    try:
-        if source == 'google':
-            articles = asyncio.run(_fetch_google_news(query, limit))
-        elif source == 'rss':
-            articles = asyncio.run(_fetch_rss(query, limit))
-        else:
-            if not token:
-                raise click.ClickException(
-                    'TheNewsAPI requires a token. Pass --api-token or set THENEWSAPI_TOKEN.'
-                )
-            articles = asyncio.run(_fetch_thenewsapi(query, limit, token))
-    except click.ClickException:
-        raise
-    except Exception as exc:
-        raise click.ClickException(f'Failed to fetch news: {exc}') from exc
-
-    if as_json:
-        click.echo(
-            json.dumps({'source': source, 'count': len(articles), 'articles': articles})
-        )
-        return
-
-    if not articles:
-        click.echo('No articles found.')
-        return
-
-    click.echo(f'Fetched {len(articles)} article(s) from {source}:\n')
-    for i, article in enumerate(articles, 1):
-        click.echo(f'[{i}]')
-        click.echo(_format_article(article))
-        click.echo()

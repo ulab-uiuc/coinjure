@@ -134,33 +134,49 @@ class TestKalshiTicker:
     def test_creation_defaults(self):
         ticker = KalshiTicker(symbol='MKT')
         assert ticker.symbol == 'MKT'
-        assert ticker.is_no_side is False
+        assert ticker.token_side == 'YES'
 
     def test_collateral(self):
         ticker = KalshiTicker(symbol='MKT')
         assert ticker.collateral == CashTicker.KALSHI_USD
 
-    def test_get_no_ticker(self):
+    def test_complement_via_data_manager(self):
+        from coinjure.data.manager import DataManager
+
+        dm = DataManager()
         yes = KalshiTicker(symbol='MKT', name='Market', market_ticker='MKT-T1')
-        no = yes.get_no_ticker()
+        dm._register_ticker(yes)
+        no = dm.get_complement_ticker(yes)
         assert no is not None
         assert no.symbol == 'MKT_NO'
-        assert no.is_no_side is True
+        assert no.token_side == 'NO'
         assert no.market_ticker == 'MKT-T1'
         assert no.name == 'Market'
 
-    def test_get_no_ticker_returns_none_for_no_side(self):
-        no = KalshiTicker(symbol='MKT_NO', is_no_side=True)
-        assert no.get_no_ticker() is None
+    def test_complement_returns_none_for_no_side(self):
+        from coinjure.data.manager import DataManager
+
+        dm = DataManager()
+        no = KalshiTicker(symbol='MKT_NO', token_side='NO', market_ticker='MKT-T1')
+        dm._register_ticker(no)
+        assert dm.get_complement_ticker(no) is None
 
     def test_yes_no_not_equal(self):
+        from coinjure.data.manager import DataManager
+
+        dm = DataManager()
         yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
-        no = yes.get_no_ticker()
+        dm._register_ticker(yes)
+        no = dm.get_complement_ticker(yes)
         assert yes != no
 
     def test_yes_no_different_hash(self):
+        from coinjure.data.manager import DataManager
+
+        dm = DataManager()
         yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
-        no = yes.get_no_ticker()
+        dm._register_ticker(yes)
+        no = dm.get_complement_ticker(yes)
         assert hash(yes) != hash(no)
         # Both usable as dict keys simultaneously
         d = {yes: 'yes_val', no: 'no_val'}

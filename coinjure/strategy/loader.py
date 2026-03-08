@@ -7,6 +7,7 @@ import importlib.util
 import os
 import uuid
 from pathlib import Path
+from typing import Any
 
 from coinjure.strategy.strategy import Strategy
 
@@ -50,3 +51,20 @@ def load_strategy_class(strategy_ref: str) -> type[Strategy]:
             f'Class {class_name!r} must inherit from coinjure.strategy.strategy.Strategy'
         )
     return strategy_cls
+
+
+def load_strategy(
+    strategy_ref: str, strategy_kwargs: dict[str, Any] | None = None
+) -> Strategy:
+    """Load a Strategy subclass and instantiate it.
+
+    Raises :exc:`ValueError` on any loading or instantiation error.
+    """
+    kwargs = strategy_kwargs or {}
+    strategy_cls = load_strategy_class(strategy_ref)
+    try:
+        return strategy_cls(**kwargs)
+    except TypeError as exc:
+        raise ValueError(
+            f'Could not instantiate strategy {strategy_ref!r} with kwargs={kwargs}: {exc}'
+        ) from exc

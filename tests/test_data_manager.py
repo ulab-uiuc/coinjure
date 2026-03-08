@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.events import OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import PolyMarketTicker
@@ -263,18 +263,18 @@ class TestNoSideBootstrap:
         self, market_data: DataManager
     ):
         yes = PolyMarketTicker(
-            symbol='YES',
-            name='T',
-            token_id='YES',
-            no_token_id='NO',
-            market_id='M',
-            event_id='E',
+            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E', token_side='YES',
         )
-        no = yes.get_no_ticker()
+        no = PolyMarketTicker(
+            symbol='NO', name='T', token_id='NO', market_id='M', event_id='E', token_side='NO',
+        )
+        # Pre-register NO ticker so complement lookup works
+        market_data._register_ticker(no)
+
         event = PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
         market_data.process_price_change_event(event)
 
-        # No orderbook should exist with complement prices
+        # Complement orderbook should exist with derived prices
         no_bid = market_data.get_best_bid(no)
         no_ask = market_data.get_best_ask(no)
         assert no_bid is not None
@@ -286,14 +286,13 @@ class TestNoSideBootstrap:
         self, market_data: DataManager
     ):
         yes = PolyMarketTicker(
-            symbol='YES',
-            name='T',
-            token_id='YES',
-            no_token_id='NO',
-            market_id='M',
-            event_id='E',
+            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E', token_side='YES',
         )
-        no = yes.get_no_ticker()
+        no = PolyMarketTicker(
+            symbol='NO', name='T', token_id='NO', market_id='M', event_id='E', token_side='NO',
+        )
+        # Pre-register NO ticker so complement lookup works
+        market_data._register_ticker(no)
 
         # First Yes event bootstraps No OB
         market_data.process_price_change_event(

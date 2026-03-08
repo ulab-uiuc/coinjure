@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -19,16 +20,66 @@ from typing import Any
 
 import click
 
-from coinjure.cli.agent_commands import (
-    _build_market_source,
-    _confirm_live_trading,
-    _IdleStrategy,
-    _load_strategy,
-    _parse_strategy_kwargs_json,
-)
 from coinjure.cli.control import SOCKET_DIR, SOCKET_PATH, run_command
 from coinjure.cli.utils import _emit
+from coinjure.data.source import build_market_source as _domain_build_market_source
 from coinjure.engine.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
+from coinjure.hub.hub import HUB_PID_PATH, HUB_SOCKET_PATH, send_hub_command
+from coinjure.strategy.loader import load_strategy as _domain_load_strategy
+from coinjure.strategy.strategy import IdleStrategy
+
+# ── CLI helpers (formerly in agent_commands.py) ───────────────────────────────
+
+
+def _parse_strategy_kwargs_json(strategy_kwargs_json: str | None) -> dict[str, Any]:
+    if not strategy_kwargs_json:
+        return {}
+    try:
+        parsed = json.loads(strategy_kwargs_json)
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(
+            f'Invalid --strategy-kwargs-json: {exc.msg}'
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise click.ClickException('--strategy-kwargs-json must be a JSON object.')
+    return parsed
+
+
+def _confirm_live_trading(*, as_json: bool) -> None:
+    """Require explicit user confirmation before starting live trading."""
+    disclaimer = (
+        'DISCLAIMER: Live trading places real orders with real funds. '
+        'You are fully responsible for all losses, fees, and operational risk.'
+    )
+    if as_json:
+        raise click.ClickException(
+            'Live trading confirmation required in interactive mode.'
+        )
+    click.echo(click.style(disclaimer, fg='yellow'))
+    confirmed = click.confirm(
+        'Proceed with live trading?',
+        default=True,
+        show_default=True,
+    )
+    if not confirmed:
+        raise click.ClickException('Live trading cancelled by user.')
+
+
+def _build_market_source(exchange: str):
+    """Build a market data source, raising ClickException on error."""
+    try:
+        return _domain_build_market_source(exchange)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _load_strategy(strategy_ref: str, strategy_kwargs: dict[str, Any] | None = None):
+    """Load and instantiate a strategy, raising ClickException on error."""
+    try:
+        return _domain_load_strategy(strategy_ref, strategy_kwargs)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -120,16 +171,10 @@ def engine() -> None:
     """Running engine instances — paper & live trading, management, batch ops."""
 
 
-# ── run ────────────────────────────────────────────────────────────────────────
+# ── paper-run ─────────────────────────────────────────────────────────────────
 
 
-@engine.command('run')
-@click.option(
-    '--mode',
-    required=True,
-    type=click.Choice(['paper', 'live']),
-    help='Trading mode.',
-)
+@engine.command('paper-run')
 @click.option(
     '--exchange',
     type=click.Choice(['polymarket', 'kalshi', 'cross_platform']),
@@ -166,22 +211,7 @@ def engine() -> None:
     type=click.Path(),
     help='Connect to a running Market Data Hub.',
 )
-# Live-only options
-@click.option(
-    '--wallet-private-key',
-    default=None,
-    help='Polymarket wallet private key (or POLYMARKET_PRIVATE_KEY). Live only.',
-)
-@click.option('--signature-type', default=0, show_default=True, type=int)
-@click.option('--funder', default=None, help='Polymarket funder wallet. Live only.')
-@click.option('--kalshi-api-key-id', default=None, help='Kalshi API key id. Live only.')
-@click.option(
-    '--kalshi-private-key-path',
-    default=None,
-    help='Kalshi private key path. Live only.',
-)
-def engine_run(  # noqa: C901
-    mode: str,
+def engine_paper_run(
     exchange: str,
     duration: float | None,
     initial_capital: str,
@@ -191,20 +221,11 @@ def engine_run(  # noqa: C901
     monitor: bool,
     socket_path: str | None,
     hub_socket: str | None,
-    wallet_private_key: str | None,
-    signature_type: int,
-    funder: str | None,
-    kalshi_api_key_id: str | None,
-    kalshi_private_key_path: str | None,
 ) -> None:
-    """Run a trading engine instance in paper or live mode."""
-    from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-    from coinjure.data.live.polymarket_data_source import LivePolyMarketDataSource
+    """Run a paper trading engine instance."""
     from coinjure.engine.runner import (
         run_live_kalshi_paper_trading,
-        run_live_kalshi_trading,
         run_live_paper_trading,
-        run_live_polymarket_trading,
     )
 
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
@@ -215,11 +236,10 @@ def engine_run(  # noqa: C901
     strategy_obj = (
         _load_strategy(strategy_ref, strategy_kwargs)
         if strategy_ref
-        else _IdleStrategy()
+        else IdleStrategy()
     )
     strategy_mode = 'active' if strategy_ref else 'idle'
     capital = Decimal(initial_capital)
-
     _socket_path = Path(socket_path) if socket_path else None
 
     exchange_label = {
@@ -228,73 +248,6 @@ def engine_run(  # noqa: C901
         'cross_platform': 'Cross-Platform',
     }.get(exchange, exchange)
 
-    if mode == 'live':
-        if exchange == 'cross_platform':
-            raise click.ClickException(
-                'Live mode does not support cross_platform. Use paper mode for cross-platform arb.'
-            )
-        _confirm_live_trading(as_json=as_json)
-        _emit(
-            {
-                'mode': 'live',
-                'exchange': exchange,
-                'strategy_ref': strategy_ref,
-                'strategy_kwargs': strategy_kwargs,
-                'strategy_mode': strategy_mode,
-                'message': f'Starting live mode ({exchange})',
-            },
-            as_json=as_json,
-        )
-
-        if exchange == 'polymarket':
-            private_key = wallet_private_key or os.environ.get('POLYMARKET_PRIVATE_KEY')
-            if not private_key:
-                raise click.ClickException(
-                    'Missing Polymarket key. Pass --wallet-private-key or set POLYMARKET_PRIVATE_KEY.'
-                )
-            data_source = LivePolyMarketDataSource(
-                event_cache_file='events_cache.jsonl',
-                polling_interval=60.0,
-                orderbook_refresh_interval=10.0,
-                reprocess_on_start=False,
-            )
-            asyncio.run(
-                run_live_polymarket_trading(
-                    data_source=data_source,
-                    strategy=strategy_obj,
-                    wallet_private_key=private_key,
-                    signature_type=signature_type,
-                    funder=funder,
-                    duration=duration,
-                    continuous=True,
-                    monitor=monitor,
-                    exchange_name='Polymarket',
-                )
-            )
-        else:
-            kalshi_source = LiveKalshiDataSource(
-                api_key_id=kalshi_api_key_id,
-                private_key_path=kalshi_private_key_path,
-                event_cache_file='kalshi_events_cache.jsonl',
-                polling_interval=60.0,
-                reprocess_on_start=False,
-            )
-            asyncio.run(
-                run_live_kalshi_trading(
-                    data_source=kalshi_source,
-                    strategy=strategy_obj,
-                    api_key_id=kalshi_api_key_id,
-                    private_key_path=kalshi_private_key_path,
-                    duration=duration,
-                    continuous=True,
-                    monitor=monitor,
-                    exchange_name='Kalshi',
-                )
-            )
-        _emit({'mode': 'live', 'message': 'Live session ended'}, as_json=as_json)
-        return
-
-    # Paper mode
     _emit(
         {
             'mode': 'paper',
@@ -349,6 +302,131 @@ def engine_run(  # noqa: C901
         )
 
     _emit({'mode': 'paper', 'message': 'Paper session ended'}, as_json=as_json)
+
+
+# ── live-run ──────────────────────────────────────────────────────────────────
+
+
+@engine.command('live-run')
+@click.option(
+    '--exchange',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default='polymarket',
+    show_default=True,
+)
+@click.option(
+    '--duration', type=float, default=None, help='Seconds to run (default: forever)'
+)
+@click.option(
+    '--strategy-ref',
+    required=True,
+    help='Strategy ref: module:Class or /path/file.py:Class.',
+)
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON status')
+@click.option(
+    '--monitor', '-m', is_flag=True, default=False, help='Show live TUI dashboard'
+)
+@click.option(
+    '--wallet-private-key',
+    default=None,
+    help='Polymarket wallet private key (or POLYMARKET_PRIVATE_KEY).',
+)
+@click.option('--signature-type', default=0, show_default=True, type=int)
+@click.option('--funder', default=None, help='Polymarket funder wallet.')
+@click.option('--kalshi-api-key-id', default=None, help='Kalshi API key id.')
+@click.option(
+    '--kalshi-private-key-path',
+    default=None,
+    help='Kalshi private key path.',
+)
+def engine_live_run(
+    exchange: str,
+    duration: float | None,
+    strategy_ref: str,
+    strategy_kwargs_json: str | None,
+    as_json: bool,
+    monitor: bool,
+    wallet_private_key: str | None,
+    signature_type: int,
+    funder: str | None,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+) -> None:
+    """Run a live trading engine instance (real orders, real funds)."""
+    from coinjure.data.live.kalshi import LiveKalshiDataSource
+    from coinjure.data.live.polymarket import LivePolyMarketDataSource
+    from coinjure.engine.runner import (
+        run_live_kalshi_trading,
+        run_live_polymarket_trading,
+    )
+
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
+
+    _confirm_live_trading(as_json=as_json)
+    _emit(
+        {
+            'mode': 'live',
+            'exchange': exchange,
+            'strategy_ref': strategy_ref,
+            'strategy_kwargs': strategy_kwargs,
+            'message': f'Starting live mode ({exchange})',
+        },
+        as_json=as_json,
+    )
+
+    if exchange == 'polymarket':
+        private_key = wallet_private_key or os.environ.get('POLYMARKET_PRIVATE_KEY')
+        if not private_key:
+            raise click.ClickException(
+                'Missing Polymarket key. Pass --wallet-private-key or set POLYMARKET_PRIVATE_KEY.'
+            )
+        data_source = LivePolyMarketDataSource(
+            event_cache_file='events_cache.jsonl',
+            polling_interval=60.0,
+            orderbook_refresh_interval=10.0,
+            reprocess_on_start=False,
+        )
+        asyncio.run(
+            run_live_polymarket_trading(
+                data_source=data_source,
+                strategy=strategy_obj,
+                wallet_private_key=private_key,
+                signature_type=signature_type,
+                funder=funder,
+                duration=duration,
+                continuous=True,
+                monitor=monitor,
+                exchange_name='Polymarket',
+            )
+        )
+    else:
+        kalshi_source = LiveKalshiDataSource(
+            api_key_id=kalshi_api_key_id,
+            private_key_path=kalshi_private_key_path,
+            event_cache_file='kalshi_events_cache.jsonl',
+            polling_interval=60.0,
+            reprocess_on_start=False,
+        )
+        asyncio.run(
+            run_live_kalshi_trading(
+                data_source=kalshi_source,
+                strategy=strategy_obj,
+                api_key_id=kalshi_api_key_id,
+                private_key_path=kalshi_private_key_path,
+                duration=duration,
+                continuous=True,
+                monitor=monitor,
+                exchange_name='Kalshi',
+            )
+        )
+
+    _emit({'mode': 'live', 'message': 'Live session ended'}, as_json=as_json)
 
 
 # ── list ───────────────────────────────────────────────────────────────────────
@@ -1214,4 +1292,276 @@ def engine_allocate(
         click.echo('\n  Allocation recorded.')
 
 
-# ---------------------------------------------------------------------------
+# ── backtest ──────────────────────────────────────────────────────────────────
+
+
+@engine.command('backtest')
+@click.option(
+    '--relation',
+    'relation_ids',
+    multiple=True,
+    help='Relation ID to backtest. Repeat for multiple.',
+)
+@click.option(
+    '--all-relations',
+    is_flag=True,
+    default=False,
+    help='Backtest all active relations.',
+)
+@click.option(
+    '--parquet',
+    'parquet_paths',
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help='Parquet orderbook file(s) as data source override.',
+)
+@click.option('--initial-capital', default='10000', show_default=True)
+@click.option(
+    '--strategy-kwargs-json',
+    default=None,
+    help='JSON object for strategy constructor kwargs.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON output')
+def engine_backtest(
+    relation_ids: tuple[str, ...],
+    all_relations: bool,
+    parquet_paths: tuple[str, ...],
+    initial_capital: str,
+    strategy_kwargs_json: str | None,
+    as_json: bool,
+) -> None:
+    """Backtest relations using auto-selected strategies.
+
+    Each relation's spread_type determines the strategy. Results update the
+    relation lifecycle (backtest_passed / backtest_failed) in the store.
+    """
+    from coinjure.engine.backtester import run_backtest_relation
+    from coinjure.market.relations import RelationStore
+
+    if not relation_ids and not all_relations:
+        raise click.ClickException('Provide --relation <id> or --all-relations')
+
+    store = RelationStore()
+    strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
+    capital = Decimal(initial_capital)
+    parquet = (
+        list(parquet_paths) if len(parquet_paths) > 1
+        else parquet_paths[0] if parquet_paths
+        else None
+    )
+
+    # Resolve relations
+    if all_relations:
+        relations = [r for r in store.list() if r.status != 'retired']
+    else:
+        relations = []
+        for rid in relation_ids:
+            r = store.get(rid)
+            if r is None:
+                raise click.ClickException(f'Relation not found: {rid}')
+            relations.append(r)
+
+    if not relations:
+        raise click.ClickException('No relations to backtest')
+
+    _emit(
+        {
+            'mode': 'backtest',
+            'message': f'Backtesting {len(relations)} relation(s)',
+            'relation_count': len(relations),
+        },
+        as_json=as_json,
+    )
+
+    async def _run_all():
+        results = []
+        for rel in relations:
+            result = await run_backtest_relation(
+                rel,
+                initial_capital=capital,
+                parquet_path=parquet,
+                strategy_kwargs=strategy_kwargs,
+            )
+            # Update relation lifecycle
+            if result.error is None:
+                rel.set_backtest_result(
+                    passed=result.passed,
+                    pnl=float(result.total_pnl),
+                    trades=result.trade_count,
+                )
+                store.update(rel)
+            results.append(result)
+        return results
+
+    results = asyncio.run(_run_all())
+
+    # Output results
+    passed = sum(1 for r in results if r.passed)
+    failed = sum(1 for r in results if not r.passed and r.error is None)
+    errors = sum(1 for r in results if r.error is not None)
+
+    if as_json:
+        _emit_json([
+            {
+                'relation_id': r.relation_id,
+                'spread_type': r.spread_type,
+                'strategy': r.strategy_name,
+                'pnl': float(r.total_pnl),
+                'trades': r.trade_count,
+                'passed': r.passed,
+                'error': r.error,
+            }
+            for r in results
+        ])
+    else:
+        click.echo(f'\n  Backtest results: {passed} passed, {failed} failed, {errors} errors\n')
+        for r in results:
+            status = 'PASS' if r.passed else ('ERROR' if r.error else 'FAIL')
+            pnl_str = f'pnl={r.total_pnl:+.2f}' if r.error is None else r.error
+            click.echo(
+                f'  [{status}] {r.relation_id[:20]}  '
+                f'{r.spread_type}  {r.strategy_name}  '
+                f'{pnl_str}  trades={r.trade_count}'
+            )
+
+
+# ── hub ───────────────────────────────────────────────────────────────────────
+
+_DEFAULT_HUB_SOCKET = str(HUB_SOCKET_PATH)
+
+
+@engine.command('hub-start')
+@click.option(
+    '--socket-path', default=_DEFAULT_HUB_SOCKET, show_default=True, type=click.Path()
+)
+@click.option(
+    '--poly-interval',
+    default=60.0,
+    show_default=True,
+    type=float,
+    help='Polymarket polling interval in seconds.',
+)
+@click.option(
+    '--kalshi-interval',
+    default=60.0,
+    show_default=True,
+    type=float,
+    help='Kalshi polling interval in seconds.',
+)
+@click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
+@click.option(
+    '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
+)
+@click.option(
+    '--detach/--no-detach',
+    default=False,
+    help='Run as a detached background process (default: foreground).',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def engine_hub_start(
+    socket_path: str,
+    poly_interval: float,
+    kalshi_interval: float,
+    kalshi_api_key_id: str | None,
+    kalshi_private_key_path: str | None,
+    detach: bool,
+    as_json: bool,
+) -> None:
+    """Start the shared Market Data Hub (exchange poller)."""
+    socket = Path(socket_path).expanduser()
+
+    if detach:
+        coinjure_bin = shutil.which('coinjure')
+        if coinjure_bin:
+            cmd = [coinjure_bin, 'engine', 'hub-start']
+        else:
+            cmd = [sys.executable, '-m', 'coinjure.cli.cli', 'engine', 'hub-start']
+
+        cmd += [
+            '--socket-path',
+            str(socket),
+            '--poly-interval',
+            str(poly_interval),
+            '--kalshi-interval',
+            str(kalshi_interval),
+            '--no-detach',
+        ]
+        if kalshi_api_key_id:
+            cmd += ['--kalshi-api-key-id', kalshi_api_key_id]
+        if kalshi_private_key_path:
+            cmd += ['--kalshi-private-key-path', kalshi_private_key_path]
+
+        proc = subprocess.Popen(
+            cmd,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        HUB_PID_PATH.parent.mkdir(parents=True, exist_ok=True)
+        HUB_PID_PATH.write_text(str(proc.pid))
+
+        _emit({'ok': True, 'pid': proc.pid, 'socket': str(socket)}, as_json=as_json)
+        return
+
+    from coinjure.data.source import CompositeDataSource
+    from coinjure.data.live.kalshi import LiveKalshiDataSource
+    from coinjure.data.live.polymarket import LivePolyMarketDataSource
+    from coinjure.hub.hub import MarketDataHub
+
+    poly = LivePolyMarketDataSource(
+        event_cache_file='events_cache.jsonl',
+        polling_interval=poly_interval,
+        orderbook_refresh_interval=10.0,
+        reprocess_on_start=False,
+    )
+    kalshi = LiveKalshiDataSource(
+        api_key_id=kalshi_api_key_id,
+        private_key_path=kalshi_private_key_path,
+        event_cache_file='kalshi_events_cache.jsonl',
+        polling_interval=kalshi_interval,
+        reprocess_on_start=False,
+    )
+    source = CompositeDataSource([poly, kalshi])
+    hub_obj = MarketDataHub(socket_path=socket, source=source)
+
+    if not as_json:
+        click.echo(f'Starting Market Data Hub on {socket}  (Ctrl-C to stop)')
+    try:
+        asyncio.run(hub_obj.start())
+    except KeyboardInterrupt:
+        if not as_json:
+            click.echo('\nHub stopped.')
+
+
+@engine.command('hub-status')
+@click.option(
+    '--socket-path', default=_DEFAULT_HUB_SOCKET, show_default=True, type=click.Path()
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def engine_hub_status(socket_path: str, as_json: bool) -> None:
+    """Show hub status: subscriber count, uptime, events forwarded."""
+    socket = Path(socket_path).expanduser()
+    if not socket.exists():
+        _emit(
+            {'ok': False, 'error': f'Hub not running (socket not found: {socket})'},
+            as_json=as_json,
+        )
+        return
+    _emit(send_hub_command(socket, 'status'), as_json=as_json)
+
+
+@engine.command('hub-stop')
+@click.option(
+    '--socket-path', default=_DEFAULT_HUB_SOCKET, show_default=True, type=click.Path()
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def engine_hub_stop(socket_path: str, as_json: bool) -> None:
+    """Stop the running Market Data Hub."""
+    socket = Path(socket_path).expanduser()
+    if not socket.exists():
+        _emit(
+            {'ok': False, 'error': f'Hub not running (socket not found: {socket})'},
+            as_json=as_json,
+        )
+        return
+    _emit(send_hub_command(socket, 'stop'), as_json=as_json)

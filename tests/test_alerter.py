@@ -1,13 +1,12 @@
-"""Tests for alerts.alerter and alerts.telegram_alerter."""
+"""Tests for alerter module."""
 
 import json
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from coinjure.engine.trader.alerter import Alerter, CompositeAlerter, LogAlerter
-from coinjure.engine.trader.telegram_alerter import TelegramAlerter
 from coinjure.engine.trader.types import OrderFailureReason, Trade, TradeSide
 from coinjure.ticker import PolyMarketTicker
 
@@ -114,76 +113,6 @@ async def test_composite_on_trade_fans_out(sample_trade):
 
     a1.on_trade.assert_awaited_once_with(sample_trade)
     a2.on_trade.assert_awaited_once_with(sample_trade)
-
-
-# ---------------------------------------------------------------------------
-# TelegramAlerter — swallows network errors
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_telegram_alerter_swallows_network_error():
-    alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
-
-    with patch(
-        'coinjure.engine.trader.telegram_alerter.httpx.AsyncClient'
-    ) as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(side_effect=Exception('network failure'))
-        mock_client_cls.return_value = mock_client
-
-        # Must NOT raise
-        await alerter.send('test message', level='info')
-
-
-@pytest.mark.asyncio
-async def test_telegram_alerter_sends_correct_url():
-    alerter = TelegramAlerter(bot_token='MYTOKEN', chat_id='12345')
-    captured = {}
-
-    async def fake_post(url, **kwargs):
-        captured['url'] = url
-        captured['json'] = kwargs.get('json', {})
-        resp = MagicMock()
-        resp.status_code = 200
-        return resp
-
-    with patch(
-        'coinjure.engine.trader.telegram_alerter.httpx.AsyncClient'
-    ) as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.post = AsyncMock(side_effect=fake_post)
-        mock_client_cls.return_value = mock_client
-
-        await alerter.send('hello', level='warning')
-
-    assert 'MYTOKEN' in captured['url']
-    assert captured['json']['chat_id'] == '12345'
-    assert '⚠️' in captured['json']['text']
-    assert 'hello' in captured['json']['text']
-
-
-@pytest.mark.asyncio
-async def test_telegram_alerter_swallows_http_error_response():
-    alerter = TelegramAlerter(bot_token='FAKE', chat_id='-1')
-
-    with patch(
-        'coinjure.engine.trader.telegram_alerter.httpx.AsyncClient'
-    ) as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        response = MagicMock()
-        response.raise_for_status.side_effect = Exception('http 500')
-        mock_client.post = AsyncMock(return_value=response)
-        mock_client_cls.return_value = mock_client
-
-        # Must NOT raise
-        await alerter.send('test message', level='error')
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.engine.trader.position_manager import PositionManager
 from coinjure.engine.trader.risk_manager import RiskManager
 from coinjure.engine.trader.trader import Trader
@@ -265,7 +265,7 @@ class KalshiTrader(Trader):
             # Determine Kalshi API side based on ticker
             kalshi_side = (
                 'no'
-                if isinstance(ticker, KalshiTicker) and ticker.is_no_side
+                if isinstance(ticker, KalshiTicker) and ticker.token_side == 'NO'
                 else 'yes'
             )
 

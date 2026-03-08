@@ -13,7 +13,7 @@ import pyarrow.parquet as pq
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import PolyMarketTicker
 
-from ..data_source import DataSource
+from ..source import DataSource
 
 logger = logging.getLogger(__name__)
 

@@ -25,7 +25,7 @@ from textual.widgets import Button, DataTable, Footer, Header, Label, RichLog, S
 
 if TYPE_CHECKING:
     from coinjure.cli.control import ControlServer
-    from coinjure.engine.trading_engine import TradingEngine
+    from coinjure.engine.engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 
