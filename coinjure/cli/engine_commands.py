@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -210,6 +212,11 @@ def engine() -> None:
     default=False,
     help='Skip auto-connecting to the Market Data Hub even if running.',
 )
+@click.option(
+    '--detach/--no-detach',
+    default=False,
+    help='Run as a detached background process.',
+)
 def engine_paper_run(
     exchange: str,
     duration: float | None,
@@ -220,8 +227,57 @@ def engine_paper_run(
     monitor: bool,
     socket_path: str | None,
     no_hub: bool,
+    detach: bool,
 ) -> None:
     """Run a paper trading engine instance."""
+    if detach:
+        cmd = shlex.split(_coinjure_cmd()) + ['engine', 'paper-run', '--no-detach']
+        if strategy_ref:
+            cmd += ['--strategy-ref', strategy_ref]
+        if strategy_kwargs_json:
+            cmd += ['--strategy-kwargs-json', strategy_kwargs_json]
+        cmd += ['--exchange', exchange, '--initial-capital', initial_capital]
+        if duration is not None:
+            cmd += ['--duration', str(duration)]
+        if no_hub:
+            cmd += ['--no-hub']
+        if as_json:
+            cmd += ['--json']
+
+        proc = subprocess.Popen(
+            cmd,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Register in portfolio
+        reg = _load_registry()
+        sid = strategy_ref or f'paper-{proc.pid}'
+        entry = StrategyEntry(
+            strategy_id=sid,
+            strategy_ref=strategy_ref or 'idle',
+            lifecycle='paper_trading',
+            exchange=exchange,
+            pid=proc.pid,
+            socket_path=str(SOCKET_DIR / f'engine-{proc.pid}.sock'),
+        )
+        try:
+            reg.add(entry)
+        except ValueError:
+            reg.update(entry)
+
+        _emit(
+            {
+                'ok': True,
+                'pid': proc.pid,
+                'strategy_id': sid,
+                'socket': entry.socket_path,
+            },
+            as_json=as_json,
+        )
+        return
+
     from coinjure.engine.runner import (
         run_live_kalshi_paper_trading,
         run_live_paper_trading,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from click.testing import CliRunner
 
 from coinjure.cli.cli import cli
@@ -163,3 +165,44 @@ def test_build_strategy_ref_for_relation_unknown():
     rel = MarketRelation(relation_id='r-bad', spread_type='unknown_type')
     ref, kwargs = build_strategy_ref_for_relation(rel)
     assert ref is None
+
+
+def test_paper_run_detach(monkeypatch, tmp_path):
+    """--detach spawns a subprocess and registers in the registry."""
+    spawned = []
+
+    class FakeProcess:
+        pid = 12345
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    # Prevent hub auto-connect
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.HUB_SOCKET_PATH',
+        tmp_path / 'no-hub.sock',
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'paper-run',
+            '--strategy-ref',
+            'coinjure.strategy.demo:DemoStrategy',
+            '--detach',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    out = json.loads(result.output.strip().split('\n')[-1])
+    assert out['ok'] is True
+    assert out['pid'] == 12345
+    assert len(spawned) == 1
+    assert '--no-detach' in spawned[0]
