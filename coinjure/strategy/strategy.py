@@ -139,7 +139,7 @@ class StrategyContext:
             return None
         side_normalized = side.strip().lower()
         if side_normalized == 'no':
-            return getattr(ticker, 'get_no_ticker', lambda: None)()
+            return self.trader.market_data.find_complement(ticker)
         return ticker
 
     def positions(self) -> list[StrategyPositionView]:

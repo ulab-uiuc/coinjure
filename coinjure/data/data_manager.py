@@ -7,7 +7,7 @@ from typing import Any
 
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.events import OrderBookEvent, PriceChangeEvent
-from coinjure.ticker import Ticker
+from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
 
 
 @dataclass(frozen=True)
@@ -117,27 +117,6 @@ class DataManager:
             order_book = self.order_books[event.ticker]
             order_book.update(asks=asks, bids=bids)
 
-            # Bootstrap No-side order book on first encounter so PaperTrader
-            # can fill No orders before the first No PriceChangeEvent arrives.
-            # Subsequent updates come from the No events emitted by the data source.
-            no_ticker = getattr(event.ticker, 'get_no_ticker', lambda: None)()
-            if no_ticker is not None and no_ticker not in self.order_books:
-                self.order_books[no_ticker] = OrderBook()
-
-                no_price = Decimal('1') - event.price
-                no_bid = max(Decimal('0'), no_price - half_spread)
-                no_ask = min(Decimal('1'), no_price + half_spread)
-
-                no_bids = (
-                    [Level(price=no_bid, size=size)] if no_bid > Decimal('0') else []
-                )
-                no_asks = (
-                    [Level(price=no_ask, size=size)] if no_ask < Decimal('1') else []
-                )
-
-                no_ob = self.order_books[no_ticker]
-                no_ob.update(asks=no_asks, bids=no_bids)
-
         self._record_market_point(
             ticker=event.ticker,
             event_type='price_change',
@@ -245,3 +224,31 @@ class DataManager:
         fresh: deque[DataPoint] = deque(maxlen=self.max_history_per_ticker)
         self._market_history[ticker] = fresh
         return fresh
+
+    def find_complement(self, ticker: Ticker) -> Ticker | None:
+        """Find the opposite-side ticker (YES↔NO) for a given ticker.
+
+        Matches on market_id (Polymarket) or market_ticker (Kalshi)
+        with the opposite side value.
+        """
+        target_side = 'no' if getattr(ticker, 'side', 'yes') == 'yes' else 'yes'
+
+        if isinstance(ticker, PolyMarketTicker):
+            mid = ticker.market_id
+            for t in self.order_books:
+                if (
+                    isinstance(t, PolyMarketTicker)
+                    and t.market_id == mid
+                    and t.side == target_side
+                ):
+                    return t
+        elif isinstance(ticker, KalshiTicker):
+            mt = ticker.market_ticker
+            for t in self.order_books:
+                if (
+                    isinstance(t, KalshiTicker)
+                    and t.market_ticker == mt
+                    and t.side == target_side
+                ):
+                    return t
+        return None

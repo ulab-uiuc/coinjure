@@ -27,7 +27,7 @@ def test_ticker() -> PolyMarketTicker:
         token_id='token123',
         market_id='market123',
         event_id='event123',
-        no_token_id='TEST_TOKEN_NO',
+
     )
 
 
