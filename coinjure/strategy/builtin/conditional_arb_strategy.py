@@ -29,7 +29,7 @@ from decimal import Decimal
 from coinjure.engine.trader.trader import Trader
 from coinjure.engine.trader.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.strategy.builtin._relation_mixin import RelationArbMixin
+from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
 
 logger = logging.getLogger(__name__)
