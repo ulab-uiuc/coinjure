@@ -94,6 +94,13 @@ class DirectArbStrategy(Strategy):
 
         self._last_arb_time: float = 0.0
 
+    def watch_tokens(self) -> list[str]:
+        """Return CLOB token IDs so the data source prioritizes these markets."""
+        tokens = []
+        if self.poly_token_id:
+            tokens.append(self.poly_token_id)
+        return tokens
+
     async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
         if self.is_paused():
             return
