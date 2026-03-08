@@ -9,14 +9,13 @@ Use this skill when the user asks to run paper trading.
 
 ## Prerequisites
 
-- `strategy validate` passed
 - At least one backtest result is acceptable
 
 ## Start
 
 ```bash
-coinjure engine run \
-  --exchange <polymarket|kalshi|rss> --mode paper \
+coinjure engine paper-run \
+  --exchange <polymarket|kalshi|rss> \
   --strategy-ref <strategy_ref> \
   --strategy-kwargs-json '<json>' \
   --duration <seconds> --json
