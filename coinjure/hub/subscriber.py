@@ -126,7 +126,8 @@ class HubDataSource(DataSource):
                 token_id=ticker_data.get('token_id', ''),
                 market_id=ticker_data.get('market_id', ''),
                 event_id=ticker_data.get('event_id', ''),
-                no_token_id=ticker_data.get('no_token_id', ''),
+
+                side=ticker_data.get('side', 'yes'),
             )
         elif ticker_type == 'kalshi':
             ticker = KalshiTicker(
@@ -135,7 +136,7 @@ class HubDataSource(DataSource):
                 market_ticker=ticker_data.get('market_ticker', ''),
                 event_ticker=ticker_data.get('event_ticker', ''),
                 series_ticker=ticker_data.get('series_ticker', ''),
-                is_no_side=ticker_data.get('is_no_side', False),
+                side=ticker_data.get('side', 'yes'),
             )
         else:
             return None
