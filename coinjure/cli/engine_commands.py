@@ -230,6 +230,7 @@ def _run_batch_paper(
         cmd = shlex.split(_coinjure_cmd()) + [
             'engine',
             'paper-run',
+            '--exchange', 'cross_platform',
             '--strategy-ref',
             ref,
             '--strategy-kwargs-json',
@@ -519,6 +520,7 @@ def engine_paper_run(
         )
         return
 
+
     from coinjure.engine.runner import (
         run_live_kalshi_paper_trading,
         run_live_paper_trading,
@@ -563,9 +565,11 @@ def engine_paper_run(
 
     hub_socket = HUB_SOCKET_PATH if (not no_hub and HUB_SOCKET_PATH.exists()) else None
     if hub_socket:
+        from coinjure.data.live.polymarket import LiveRSSNewsDataSource
+        from coinjure.data.source import CompositeDataSource
         from coinjure.hub.subscriber import HubDataSource
 
-        data_source = HubDataSource(hub_socket)
+        data_source = CompositeDataSource([HubDataSource(hub_socket), LiveRSSNewsDataSource()])
     else:
         data_source = _build_market_source(exchange)
 
@@ -944,32 +948,69 @@ def engine_status(
     as_json: bool,
 ) -> None:
     """Show engine runtime status. Use --full for complete snapshot."""
-    sock = _resolve_socket_for_id(strategy_id, socket)
-    if full:
-        resp = run_command('get_state', socket_path=sock)
-        _print_response(resp, as_json)
-        if not resp.get('ok'):
-            raise SystemExit(1)
-        return
-    resp = run_command('status', socket_path=sock)
-    if as_json:
-        click.echo(json.dumps(resp))
-    else:
-        if not resp.get('ok'):
-            click.echo(f"error: {resp.get('error', 'unknown')}")
-            raise SystemExit(1)
-        click.echo(
-            'status={status} paused={paused} runtime={runtime} events={events} '
-            'decisions={decisions} executed={executed} orders={orders}'.format(
-                status='ok',
-                paused=resp.get('paused', False),
-                runtime=resp.get('runtime', '0:00:00'),
-                events=resp.get('event_count', 0),
-                decisions=resp.get('decisions', 0),
-                executed=resp.get('executed', 0),
-                orders=resp.get('orders', 0),
+    # Single-engine mode: --id or --socket specified
+    if strategy_id or socket:
+        sock = _resolve_socket_for_id(strategy_id, socket)
+        cmd = 'get_state' if full else 'status'
+        resp = run_command(cmd, socket_path=sock)
+        if full:
+            _print_response(resp, as_json)
+            if not resp.get('ok'):
+                raise SystemExit(1)
+            return
+        if as_json:
+            click.echo(json.dumps(resp))
+        else:
+            if not resp.get('ok'):
+                click.echo(f"error: {resp.get('error', 'unknown')}")
+                raise SystemExit(1)
+            click.echo(
+                'status={status} paused={paused} runtime={runtime} events={events} '
+                'decisions={decisions} executed={executed} orders={orders}'.format(
+                    status='ok',
+                    paused=resp.get('paused', False),
+                    runtime=resp.get('runtime', '0:00:00'),
+                    events=resp.get('event_count', 0),
+                    decisions=resp.get('decisions', 0),
+                    executed=resp.get('executed', 0),
+                    orders=resp.get('orders', 0),
+                )
             )
-        )
+        return
+
+    # All-engines mode: no --id/--socket → query every active registry entry
+    reg = _load_registry()
+    entries = reg.list()
+    results = asyncio.run(_gather_socket_statuses(entries))
+
+    if not results:
+        if as_json:
+            click.echo(json.dumps([]))
+        else:
+            click.echo('No running engines.')
+        return
+
+    if as_json:
+        out = [{'strategy_id': entry.strategy_id, **resp} for entry, resp in results]
+        click.echo(json.dumps(out))
+        return
+
+    for entry, resp in results:
+        if resp.get('ok'):
+            click.echo(
+                '{sid}  paused={paused} runtime={runtime} events={events} '
+                'decisions={decisions} executed={executed} orders={orders}'.format(
+                    sid=entry.strategy_id,
+                    paused=resp.get('paused', False),
+                    runtime=resp.get('runtime', '0:00:00'),
+                    events=resp.get('event_count', 0),
+                    decisions=resp.get('decisions', 0),
+                    executed=resp.get('executed', 0),
+                    orders=resp.get('orders', 0),
+                )
+            )
+        else:
+            click.echo(f'{entry.strategy_id}  error={resp.get("error", "unknown")}')
 
 
 @engine.command('pause')
@@ -1259,16 +1300,32 @@ _NO_SIGNAL_HOURS = 24
     '-s',
     default=None,
     type=click.Path(),
-    help='Path to engine control socket.',
+    help='Path to a single engine control socket. Omit to auto-discover all running engines.',
 )
 def engine_monitor(socket: str | None) -> None:
-    """Attach a live Textual monitor to a running trading engine."""
+    """Attach a live Textual monitor to all running engines (or a specific one with -s)."""
     from coinjure.cli.textual_monitor import SocketTradingMonitorApp
 
-    sock = Path(socket) if socket else SOCKET_PATH
+    if socket:
+        socket_paths = [Path(socket)]
+        socket_labels: dict = {}
+    else:
+        # Auto-discover all running engines from the registry
+        registry = _load_registry()
+        socket_labels = {}
+        socket_paths = []
+        for entry in registry.list():
+            if entry.socket_path and Path(entry.socket_path).exists():
+                p = Path(entry.socket_path)
+                socket_paths.append(p)
+                socket_labels[p] = entry.strategy_id
+        if not socket_paths:
+            # Fallback: scan SOCKET_DIR for any live engine sockets (covers
+            # foreground / non-registered engines that use PID-based paths)
+            socket_paths = sorted(SOCKET_DIR.glob('*.sock')) or [SOCKET_PATH]
 
     try:
-        app = SocketTradingMonitorApp(socket_path=sock)
+        app = SocketTradingMonitorApp(socket_paths=socket_paths, socket_labels=socket_labels)
         app.run()
     except (KeyboardInterrupt, SystemExit):
         pass

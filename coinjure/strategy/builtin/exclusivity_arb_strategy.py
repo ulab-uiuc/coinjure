@@ -82,9 +82,9 @@ class ExclusivityArbStrategy(RelationArbMixin, Strategy):
             or ticker.symbol
         )
 
-        if self._matches(tid, self._id_a):
+        if self._matches(tid, self._id_a, self._token_a):
             self._price_a = event.price
-        elif self._matches(tid, self._id_b):
+        elif self._matches(tid, self._id_b, self._token_b):
             self._price_b = event.price
         else:
             return

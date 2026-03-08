@@ -246,12 +246,14 @@ class DecisionsTable(DataTable):
         self._current_signal_keys: list[str] = []
         self._set_columns([])
 
-    def _set_columns(self, signal_keys: list[str]) -> None:
+    def _set_columns(self, signal_keys: list[str], multi: bool = False) -> None:
         self.clear(columns=True)
+        mid_col = 'Relation' if multi else 'Market'
         self.add_columns(
-            'Time', 'Action', *[k[:6] for k in signal_keys], 'Market', 'Reasoning', '✓'
+            'Time', 'Type', 'Action', *[k[:6] for k in signal_keys], mid_col, 'Reasoning', '✓'
         )
         self._current_signal_keys = list(signal_keys)
+        self._multi_engine = multi
 
     def _get_signal_keys(self, decisions: list) -> list[str]:
         keys: list[str] = []
@@ -270,13 +272,14 @@ class DecisionsTable(DataTable):
                 break
         return keys
 
-    def refresh_from_state(self, decisions: list) -> None:
+    def refresh_from_state(self, decisions: list, multi: bool = False) -> None:
         signal_keys = self._get_signal_keys(decisions)
+        multi_changed = multi != getattr(self, '_multi_engine', False)
         keys_changed = signal_keys != self._current_signal_keys
-        if signal_keys != self._current_signal_keys:
-            self._set_columns(signal_keys)
-        if len(decisions) == self._last_len and not keys_changed:
+        if len(decisions) == self._last_len and not keys_changed and not multi_changed:
             return
+        if keys_changed or multi_changed:
+            self._set_columns(signal_keys, multi=multi)
         saved_row = self.cursor_row
         self.clear()
         for d in reversed(decisions[-40:]):
@@ -297,10 +300,11 @@ class DecisionsTable(DataTable):
                 signal_cells.append(f'{float(val):.3f}' if val is not None else '—')
             self.add_row(
                 d.get('timestamp', ''),
+                Text(d.get('strategy_name', '')[:10], style='dim cyan'),
                 Text(action, style=action_style),
                 *signal_cells,
-                d.get('ticker_name', '')[:22],
-                Text(d.get('reasoning', '')[:40], style='dim'),
+                d.get('ticker_name', '')[:18],
+                Text(d.get('reasoning', '')[:35], style='dim'),
                 Text('✓', style='bold green')
                 if d.get('executed')
                 else Text('—', style='dim'),
@@ -313,6 +317,7 @@ class DecisionsTable(DataTable):
 
     def refresh_data(self, strategy) -> None:
         decisions = list(strategy.get_decisions())
+        strategy_name = getattr(strategy, 'name', '') or ''
         signal_keys = self._get_signal_keys(decisions)
         keys_changed = signal_keys != self._current_signal_keys
         if signal_keys != self._current_signal_keys:
@@ -340,10 +345,11 @@ class DecisionsTable(DataTable):
                 signal_cells.append(f'{float(val):.3f}' if val is not None else '—')
             self.add_row(
                 d.timestamp,
+                Text(strategy_name[:10], style='dim cyan'),
                 Text(d.action, style=action_style),
                 *signal_cells,
-                (d.ticker_name or '')[:22],
-                Text((getattr(d, 'reasoning', '') or '')[:40], style='dim'),
+                (d.ticker_name or '')[:18],
+                Text((getattr(d, 'reasoning', '') or '')[:35], style='dim'),
                 Text('✓', style='bold green') if d.executed else Text('—', style='dim'),
             )
 
@@ -364,9 +370,6 @@ class PositionsPanel(DataTable):
         border: solid yellow;
         border-title-color: yellow;
         height: 1fr;
-    }
-    PositionsPanel:focus {
-        border: tall $accent;
     }
     """
 
@@ -463,9 +466,6 @@ class OrdersPanel(DataTable):
         border: solid yellow;
         border-title-color: yellow;
         height: 1fr;
-    }
-    OrdersPanel:focus {
-        border: tall $accent;
     }
     """
 
@@ -934,12 +934,15 @@ class TradingMonitorApp(App[None]):
 
 
 class SocketTradingMonitorApp(App[None]):
-    """Read-only monitor that connects to a running engine via Unix socket.
+    """Read-only monitor that connects to one or more running engines via Unix sockets.
 
-    Runs in a completely separate process. The engine continues unaffected
+    When multiple sockets are provided, decisions/positions/orders/portfolio are
+    aggregated across all engines so the view shows the full portfolio at once.
+
+    Runs in a completely separate process. Engines continue unaffected
     when this app is closed.
 
-    Start with:  coinjure monitor
+    Start with:  coinjure engine monitor   (auto-discovers all running engines)
     """
 
     CSS = TradingMonitorApp.CSS  # reuse identical layout
@@ -953,15 +956,32 @@ class SocketTradingMonitorApp(App[None]):
         Binding('k', 'scroll_up_panel', 'Scroll ↑', show=False),
     ]
 
-    def __init__(self, socket_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        socket_path: Path | None = None,
+        socket_paths: list[Path] | None = None,
+        socket_labels: dict[Path, str] | None = None,
+    ) -> None:
         from coinjure.engine.control import SOCKET_PATH
 
         super().__init__()
-        self.socket_path = socket_path or SOCKET_PATH
+        # Accept either a single socket (legacy) or a list of sockets.
+        if socket_paths:
+            self._socket_paths: list[Path] = socket_paths
+        elif socket_path:
+            self._socket_paths = [socket_path]
+        else:
+            self._socket_paths = [SOCKET_PATH]
+        # socket_labels maps socket path → human-readable strategy label
+        self._socket_labels: dict[Path, str] = socket_labels or {}
         self._monitor_start = datetime.now()
         self._connected: bool = False
         self._paused: bool = False
         self._stop_armed: bool = False  # two-click confirmation for E-Stop
+
+    # ------------------------------------------------------------------
+    # Layout
+    # ------------------------------------------------------------------
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -982,12 +1002,9 @@ class SocketTradingMonitorApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title = 'Coinjure — Monitor'
-        self.sub_title = (
-            'Waiting for engine…  '
-            'Start one with: coinjure paper run --exchange polymarket'
-        )
-        # Disable all control buttons until first poll confirms connection
+        n = len(self._socket_paths)
+        self.title = f'Coinjure — Monitor ({n} engine{"s" if n != 1 else ""})'
+        self.sub_title = 'Waiting for engines…'
         self.call_after_refresh(self._set_initial_disconnected_state)
         self.set_interval(2.0, self._poll_state)
 
@@ -997,85 +1014,191 @@ class SocketTradingMonitorApp(App[None]):
         except Exception:
             pass
 
-    async def _poll_state(self) -> None:
-        """Fetch state from the engine via socket and refresh all widgets."""
+    # ------------------------------------------------------------------
+    # Multi-engine polling and aggregation
+    # ------------------------------------------------------------------
+
+    def _engine_tag(self, sock: Path) -> str:
+        """Short label for an engine: strategy_id from registry, else socket stem."""
+        if sock in self._socket_labels:
+            return self._socket_labels[sock][:14]
+        name = sock.stem.removeprefix('engine-')
+        return name[:14]
+
+    async def _fetch_one(self, sock: Path) -> dict | None:
         from coinjure.engine.control import send_command
 
         try:
-            state = await send_command('get_state', socket_path=self.socket_path)
-        except FileNotFoundError:
+            return await send_command('get_state', socket_path=sock)
+        except Exception:
+            return None
+
+    async def _poll_state(self) -> None:
+        """Fetch state from all engines in parallel and merge into one view."""
+        import asyncio
+
+        results: list[dict | None] = await asyncio.gather(
+            *[self._fetch_one(s) for s in self._socket_paths]
+        )
+
+        # Filter out failed sockets
+        states: list[tuple[Path, dict]] = [
+            (sock, state)
+            for sock, state in zip(self._socket_paths, results)
+            if state is not None
+        ]
+
+        connected_count = len(states)
+        if connected_count == 0:
             self._connected = False
-            self.sub_title = (
-                '⚠  Waiting for engine…  '
-                'Start one with: coinjure paper run --exchange polymarket'
-            )
+            self.sub_title = '⚠  No engines reachable — start one with: coinjure engine paper-run'
             try:
-                self.query_one('#ctrl-bar', ControlBar).update_state(
-                    False, connected=False
-                )
+                self.query_one('#ctrl-bar', ControlBar).update_state(False, connected=False)
             except Exception:
                 pass
             return
-        except Exception as exc:
-            self._connected = False
-            self.sub_title = f'⚠  Connection error: {exc}'
-            return
 
         self._connected = True
-        self._paused = state.get('paused', False)
-        data_paused = state.get('data_paused', False)
-        if self._paused:
-            status_tag = '⏸  Engine PAUSED (data flow stopped) — coinjure trade resume'
-        elif data_paused:
-            status_tag = '⏸  Data flow PAUSED — coinjure trade resume'
-        else:
-            status_tag = '▶  Engine running — click ⏸ Pause or: coinjure trade pause'
-        self.sub_title = status_tag
-        last_activity = state.get('activity_log') or []
-        last_msg = last_activity[-1][1] if last_activity else 'No activity yet'
-        self.sub_title = f'{self.sub_title}  |  Last: {last_msg[:60]}  |  E-Stop: s'
+        any_paused = any(s.get('paused', False) for _, s in states)
+        self._paused = any_paused
+
+        # --- Merge decisions (label each with strategy id + type) ---
+        import re as _re
+        merged_decisions: list[dict] = []
+        multi = len(states) > 1
+        for sock, state in states:
+            tag = self._engine_tag(sock)
+            strategy_name = state.get('strategy_name', '')
+            for d in state.get('decisions', []):
+                d2 = dict(d)
+                d2['strategy_name'] = strategy_name
+                original = d2.get('ticker_name', '') or ''
+                if multi:
+                    d2['ticker_name'] = tag[:18]
+                merged_decisions.append(d2)
+        # Sort by timestamp string (lexicographic works for HH:MM:SS)
+        merged_decisions.sort(key=lambda d: d.get('timestamp', ''))
+
+        # --- Merge portfolio (sum across all engines) ---
+        total_sum = sum(s.get('portfolio', {}).get('total', 0.0) for _, s in states)
+        realized_sum = sum(
+            s.get('portfolio', {}).get('realized_pnl', 0.0) for _, s in states
+        )
+        unrealized_sum = sum(
+            s.get('portfolio', {}).get('unrealized_pnl', 0.0) for _, s in states
+        )
+        merged_portfolio = {
+            'total': total_sum,
+            'realized_pnl': realized_sum,
+            'unrealized_pnl': unrealized_sum,
+            'cash_positions': [],
+        }
+
+        # --- Merge positions, orders, orderbooks, news, activity ---
+        merged_positions: list = []
+        merged_orders: list = []
+        merged_orderbooks: list = []
+        merged_news: list = []
+        merged_activity: list = []
+        total_events = 0
+        total_decisions_count = 0
+        total_executed = 0
+
+        for _, state in states:
+            merged_positions.extend(state.get('positions', []))
+            merged_orders.extend(state.get('orders', []))
+            merged_orderbooks.extend(state.get('order_books', []))
+            merged_news.extend(state.get('news', []))
+            merged_activity.extend(state.get('activity_log', []))
+            total_events += state.get('event_count', 0) or 0
+            ds = state.get('decision_stats', {}) or {}
+            total_decisions_count += ds.get('decisions', 0) or 0
+            total_executed += ds.get('executed', 0) or 0
+
+        # Deduplicate orderbooks by market name (same market in multiple engines)
+        seen_ob: set[str] = set()
+        unique_orderbooks: list = []
+        for ob in merged_orderbooks:
+            key = ob.get('name', '') if isinstance(ob, dict) else str(ob)
+            if key not in seen_ob:
+                seen_ob.add(key)
+                unique_orderbooks.append(ob)
+
+        # Build a merged state dict for panels that consume the full state
+        merged_state: dict = {
+            'paused': any_paused,
+            'data_paused': False,
+            'runtime': states[0][1].get('runtime', '—') if states else '—',
+            'portfolio': merged_portfolio,
+            'positions': merged_positions,
+            'orders': merged_orders,
+            'order_books': unique_orderbooks,
+            'news': merged_news[-40:],
+            'activity_log': sorted(merged_activity, key=lambda x: x[0] if isinstance(x, list) and x else '')[-40:],
+            'stats': {
+                'event_count': total_events,
+                'decision_stats': {
+                    'decisions': total_decisions_count,
+                    'executed': total_executed,
+                },
+            },
+        }
+
+        # --- Update subtitle ---
+        n = len(self._socket_paths)
+        status = '⏸  PAUSED' if any_paused else '▶  Running'
+        self.sub_title = (
+            f'{status}  |  {connected_count}/{n} engines  |  '
+            f'decisions={total_decisions_count}  executed={total_executed}  |  E-Stop: s'
+        )
 
         try:
-            ctrl = self.query_one('#ctrl-bar', ControlBar)
-            ctrl.update_state(self._paused, connected=True)
+            self.query_one('#ctrl-bar', ControlBar).update_state(any_paused, connected=True)
         except Exception:
             pass
 
         try:
-            self.query_one('#portfolio', PortfolioPanel).refresh_from_state(state)
-            self.query_one('#stats', StatsPanel).refresh_from_state(state)
+            self.query_one('#portfolio', PortfolioPanel).refresh_from_state(merged_state)
+            self.query_one('#stats', StatsPanel).refresh_from_state(merged_state)
             self.query_one('#decisions', DecisionsTable).refresh_from_state(
-                state.get('decisions', [])
+                merged_decisions, multi=multi
             )
-            self.query_one('#positions', PositionsPanel).refresh_from_state(state)
-            self.query_one('#orders', OrdersPanel).refresh_from_state(state)
+            self.query_one('#positions', PositionsPanel).refresh_from_state(merged_state)
+            self.query_one('#orders', OrdersPanel).refresh_from_state(merged_state)
             self.query_one('#activity', ActivityLog).refresh_from_state(
-                state.get('activity_log', [])
+                merged_state['activity_log']
             )
             self.query_one('#orderbooks', OrderBooksTable).refresh_from_state(
-                state.get('order_books', [])
+                unique_orderbooks
             )
-            self.query_one('#news', NewsLog).refresh_from_state(state.get('news', []))
+            self.query_one('#news', NewsLog).refresh_from_state(merged_state['news'])
         except Exception as exc:
             logger.debug('Socket monitor render error: %s', exc)
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle control-bar button clicks (same effect as coinjure trade CLI)."""
+        """Handle control-bar button clicks — broadcasts to all engines."""
         from coinjure.engine.control import send_command
+        import asyncio
 
         btn_id = event.button.id
 
         if btn_id == 'btn-pause':
             try:
-                await send_command('pause', socket_path=self.socket_path)
-                self.notify('⏸  Engine paused', severity='warning', timeout=3)
+                await asyncio.gather(
+                    *[send_command('pause', socket_path=s) for s in self._socket_paths],
+                    return_exceptions=True,
+                )
+                self.notify('⏸  All engines paused', severity='warning', timeout=3)
             except Exception as exc:
                 self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)
 
         elif btn_id == 'btn-resume':
             try:
-                await send_command('resume', socket_path=self.socket_path)
-                self.notify('▶  Engine resumed', timeout=2)
+                await asyncio.gather(
+                    *[send_command('resume', socket_path=s) for s in self._socket_paths],
+                    return_exceptions=True,
+                )
+                self.notify('▶  All engines resumed', timeout=2)
             except Exception as exc:
                 self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)
 
@@ -1091,8 +1214,11 @@ class SocketTradingMonitorApp(App[None]):
             else:
                 self._stop_armed = False
                 try:
-                    await send_command('stop', socket_path=self.socket_path)
-                    self.notify('⏹  Stop signal sent', severity='error', timeout=4)
+                    await asyncio.gather(
+                        *[send_command('stop', socket_path=s) for s in self._socket_paths],
+                        return_exceptions=True,
+                    )
+                    self.notify('⏹  Stop signal sent to all engines', severity='error', timeout=4)
                 except Exception as exc:
                     self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)
 
@@ -1110,8 +1236,9 @@ class SocketTradingMonitorApp(App[None]):
             focused.scroll_up()
 
     async def action_e_stop(self) -> None:
-        """s — keyboard emergency stop over socket (same two-step guard)."""
+        """s — keyboard emergency stop broadcast to all engines."""
         from coinjure.engine.control import send_command
+        import asyncio
 
         if not self._stop_armed:
             self._stop_armed = True
@@ -1125,7 +1252,10 @@ class SocketTradingMonitorApp(App[None]):
 
         self._stop_armed = False
         try:
-            await send_command('stop', socket_path=self.socket_path)
-            self.notify('⏹  Stop signal sent', severity='error', timeout=4)
+            await asyncio.gather(
+                *[send_command('stop', socket_path=s) for s in self._socket_paths],
+                return_exceptions=True,
+            )
+            self.notify('⏹  Stop signal sent to all engines', severity='error', timeout=4)
         except Exception as exc:
             self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)

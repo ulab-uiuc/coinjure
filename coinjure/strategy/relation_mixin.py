@@ -49,7 +49,9 @@ class RelationArbMixin:
             tokens.append(self._token_b)
         return tokens
 
-    def _matches(self, ticker_id: str, market_id: str) -> bool:
-        if not market_id:
-            return False
-        return market_id in ticker_id or ticker_id in market_id
+    def _matches(self, ticker_id: str, market_id: str, token_id: str = '') -> bool:
+        if market_id and (market_id in ticker_id or ticker_id in market_id):
+            return True
+        if token_id and ticker_id == token_id:
+            return True
+        return False
