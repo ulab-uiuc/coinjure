@@ -10,7 +10,6 @@ import asyncio
 import json
 import os
 import shutil
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -20,11 +19,11 @@ from typing import Any
 
 import click
 
-from coinjure.engine.control import SOCKET_DIR, SOCKET_PATH, run_command
 from coinjure.cli.utils import _emit
 from coinjure.data.source import build_market_source as _domain_build_market_source
+from coinjure.engine.control import SOCKET_DIR, SOCKET_PATH, run_command
 from coinjure.engine.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry
-from coinjure.hub.hub import HUB_PID_PATH, HUB_SOCKET_PATH, send_hub_command
+from coinjure.hub.hub import HUB_SOCKET_PATH
 from coinjure.strategy.loader import load_strategy as _domain_load_strategy
 from coinjure.strategy.strategy import IdleStrategy
 
@@ -206,10 +205,10 @@ def engine() -> None:
     help='Unix socket path for the control server.',
 )
 @click.option(
-    '--hub-socket',
-    default=None,
-    type=click.Path(),
-    help='Connect to a running Market Data Hub.',
+    '--no-hub',
+    is_flag=True,
+    default=False,
+    help='Skip auto-connecting to the Market Data Hub even if running.',
 )
 def engine_paper_run(
     exchange: str,
@@ -220,7 +219,7 @@ def engine_paper_run(
     as_json: bool,
     monitor: bool,
     socket_path: str | None,
-    hub_socket: str | None,
+    no_hub: bool,
 ) -> None:
     """Run a paper trading engine instance."""
     from coinjure.engine.runner import (
@@ -255,7 +254,7 @@ def engine_paper_run(
             'strategy_ref': strategy_ref,
             'strategy_kwargs': strategy_kwargs,
             'strategy_mode': strategy_mode,
-            'hub_socket': hub_socket,
+            'no_hub': no_hub,
             'message': (
                 f'Starting paper mode ({exchange})'
                 if strategy_ref
@@ -265,10 +264,11 @@ def engine_paper_run(
         as_json=as_json,
     )
 
+    hub_socket = HUB_SOCKET_PATH if (not no_hub and HUB_SOCKET_PATH.exists()) else None
     if hub_socket:
         from coinjure.hub.subscriber import HubDataSource
 
-        data_source = HubDataSource(Path(hub_socket).expanduser())
+        data_source = HubDataSource(hub_socket)
     else:
         data_source = _build_market_source(exchange)
 
@@ -865,7 +865,6 @@ def engine_retire(
         click.echo(f'Retired {strategy_id!r}: {reason}')
 
 
-
 _STALE_DAYS = 7
 _NO_SIGNAL_HOURS = 24
 
@@ -1345,8 +1344,10 @@ def engine_backtest(
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     capital = Decimal(initial_capital)
     parquet = (
-        list(parquet_paths) if len(parquet_paths) > 1
-        else parquet_paths[0] if parquet_paths
+        list(parquet_paths)
+        if len(parquet_paths) > 1
+        else parquet_paths[0]
+        if parquet_paths
         else None
     )
 
@@ -1401,20 +1402,24 @@ def engine_backtest(
     errors = sum(1 for r in results if r.error is not None)
 
     if as_json:
-        _emit_json([
-            {
-                'relation_id': r.relation_id,
-                'spread_type': r.spread_type,
-                'strategy': r.strategy_name,
-                'pnl': float(r.total_pnl),
-                'trades': r.trade_count,
-                'passed': r.passed,
-                'error': r.error,
-            }
-            for r in results
-        ])
+        _emit_json(
+            [
+                {
+                    'relation_id': r.relation_id,
+                    'spread_type': r.spread_type,
+                    'strategy': r.strategy_name,
+                    'pnl': float(r.total_pnl),
+                    'trades': r.trade_count,
+                    'passed': r.passed,
+                    'error': r.error,
+                }
+                for r in results
+            ]
+        )
     else:
-        click.echo(f'\n  Backtest results: {passed} passed, {failed} failed, {errors} errors\n')
+        click.echo(
+            f'\n  Backtest results: {passed} passed, {failed} failed, {errors} errors\n'
+        )
         for r in results:
             status = 'PASS' if r.passed else ('ERROR' if r.error else 'FAIL')
             pnl_str = f'pnl={r.total_pnl:+.2f}' if r.error is None else r.error
@@ -1423,145 +1428,3 @@ def engine_backtest(
                 f'{r.spread_type}  {r.strategy_name}  '
                 f'{pnl_str}  trades={r.trade_count}'
             )
-
-
-# ── hub ───────────────────────────────────────────────────────────────────────
-
-_DEFAULT_HUB_SOCKET = str(HUB_SOCKET_PATH)
-
-
-@engine.command('hub-start')
-@click.option(
-    '--socket-path', default=_DEFAULT_HUB_SOCKET, show_default=True, type=click.Path()
-)
-@click.option(
-    '--poly-interval',
-    default=60.0,
-    show_default=True,
-    type=float,
-    help='Polymarket polling interval in seconds.',
-)
-@click.option(
-    '--kalshi-interval',
-    default=60.0,
-    show_default=True,
-    type=float,
-    help='Kalshi polling interval in seconds.',
-)
-@click.option('--kalshi-api-key-id', default=None, envvar='KALSHI_API_KEY_ID')
-@click.option(
-    '--kalshi-private-key-path', default=None, envvar='KALSHI_PRIVATE_KEY_PATH'
-)
-@click.option(
-    '--detach/--no-detach',
-    default=False,
-    help='Run as a detached background process (default: foreground).',
-)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def engine_hub_start(
-    socket_path: str,
-    poly_interval: float,
-    kalshi_interval: float,
-    kalshi_api_key_id: str | None,
-    kalshi_private_key_path: str | None,
-    detach: bool,
-    as_json: bool,
-) -> None:
-    """Start the shared Market Data Hub (exchange poller)."""
-    socket = Path(socket_path).expanduser()
-
-    if detach:
-        coinjure_bin = shutil.which('coinjure')
-        if coinjure_bin:
-            cmd = [coinjure_bin, 'engine', 'hub-start']
-        else:
-            cmd = [sys.executable, '-m', 'coinjure.cli.cli', 'engine', 'hub-start']
-
-        cmd += [
-            '--socket-path',
-            str(socket),
-            '--poly-interval',
-            str(poly_interval),
-            '--kalshi-interval',
-            str(kalshi_interval),
-            '--no-detach',
-        ]
-        if kalshi_api_key_id:
-            cmd += ['--kalshi-api-key-id', kalshi_api_key_id]
-        if kalshi_private_key_path:
-            cmd += ['--kalshi-private-key-path', kalshi_private_key_path]
-
-        proc = subprocess.Popen(
-            cmd,
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        HUB_PID_PATH.parent.mkdir(parents=True, exist_ok=True)
-        HUB_PID_PATH.write_text(str(proc.pid))
-
-        _emit({'ok': True, 'pid': proc.pid, 'socket': str(socket)}, as_json=as_json)
-        return
-
-    from coinjure.data.source import CompositeDataSource
-    from coinjure.data.live.kalshi import LiveKalshiDataSource
-    from coinjure.data.live.polymarket import LivePolyMarketDataSource
-    from coinjure.hub.hub import MarketDataHub
-
-    poly = LivePolyMarketDataSource(
-        event_cache_file='events_cache.jsonl',
-        polling_interval=poly_interval,
-        orderbook_refresh_interval=10.0,
-        reprocess_on_start=False,
-    )
-    kalshi = LiveKalshiDataSource(
-        api_key_id=kalshi_api_key_id,
-        private_key_path=kalshi_private_key_path,
-        event_cache_file='kalshi_events_cache.jsonl',
-        polling_interval=kalshi_interval,
-        reprocess_on_start=False,
-    )
-    source = CompositeDataSource([poly, kalshi])
-    hub_obj = MarketDataHub(socket_path=socket, source=source)
-
-    if not as_json:
-        click.echo(f'Starting Market Data Hub on {socket}  (Ctrl-C to stop)')
-    try:
-        asyncio.run(hub_obj.start())
-    except KeyboardInterrupt:
-        if not as_json:
-            click.echo('\nHub stopped.')
-
-
-@engine.command('hub-status')
-@click.option(
-    '--socket-path', default=_DEFAULT_HUB_SOCKET, show_default=True, type=click.Path()
-)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def engine_hub_status(socket_path: str, as_json: bool) -> None:
-    """Show hub status: subscriber count, uptime, events forwarded."""
-    socket = Path(socket_path).expanduser()
-    if not socket.exists():
-        _emit(
-            {'ok': False, 'error': f'Hub not running (socket not found: {socket})'},
-            as_json=as_json,
-        )
-        return
-    _emit(send_hub_command(socket, 'status'), as_json=as_json)
-
-
-@engine.command('hub-stop')
-@click.option(
-    '--socket-path', default=_DEFAULT_HUB_SOCKET, show_default=True, type=click.Path()
-)
-@click.option('--json', 'as_json', is_flag=True, default=False)
-def engine_hub_stop(socket_path: str, as_json: bool) -> None:
-    """Stop the running Market Data Hub."""
-    socket = Path(socket_path).expanduser()
-    if not socket.exists():
-        _emit(
-            {'ok': False, 'error': f'Hub not running (socket not found: {socket})'},
-            as_json=as_json,
-        )
-        return
-    _emit(send_hub_command(socket, 'stop'), as_json=as_json)

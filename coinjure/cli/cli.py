@@ -10,6 +10,7 @@ except ImportError:
 import click
 
 from coinjure.cli.engine_commands import engine
+from coinjure.cli.hub_commands import hub
 from coinjure.cli.market_commands import market
 
 
@@ -22,6 +23,7 @@ def cli() -> None:
 
 cli.add_command(market)
 cli.add_command(engine)
+cli.add_command(hub)
 
 
 if __name__ == '__main__':
