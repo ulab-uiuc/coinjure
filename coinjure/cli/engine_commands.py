@@ -234,6 +234,8 @@ def _run_batch_paper(
         ]
         if duration is not None:
             cmd += ['--duration', str(duration)]
+        if no_hub:
+            cmd += ['--no-hub']
 
         proc = subprocess.Popen(
             cmd,
@@ -382,9 +384,6 @@ def engine_paper_run(
             cmd += ['--duration', str(duration)]
         if no_hub:
             cmd += ['--no-hub']
-        if as_json:
-            cmd += ['--json']
-
         proc = subprocess.Popen(
             cmd,
             start_new_session=True,
@@ -398,6 +397,7 @@ def engine_paper_run(
         entry = StrategyEntry(
             strategy_id=sid,
             strategy_ref=strategy_ref or 'idle',
+            strategy_kwargs=_parse_strategy_kwargs_json(strategy_kwargs_json),
             lifecycle='paper_trading',
             exchange=exchange,
             pid=proc.pid,
