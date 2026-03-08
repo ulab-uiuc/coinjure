@@ -223,7 +223,7 @@ class DirectArbStrategy(Strategy):
             logger.exception('ARB leg1 failed (buy Poly YES)')
 
         # Leg 2: Buy Kalshi NO
-        kalshi_no = kalshi_ticker.get_no_ticker()
+        kalshi_no = trader.market_data.find_complement(kalshi_ticker)
         if kalshi_no is not None and executed:
             no_price = Decimal('1') - kalshi_yes
             try:
@@ -285,7 +285,7 @@ class DirectArbStrategy(Strategy):
             logger.exception('ARB leg1 failed (buy Kalshi YES)')
 
         # Leg 2: Buy Poly NO
-        poly_no = poly_ticker.get_no_ticker()
+        poly_no = trader.market_data.find_complement(poly_ticker)
         if poly_no is not None and executed:
             no_price = Decimal('1') - poly_yes
             try:

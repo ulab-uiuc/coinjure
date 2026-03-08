@@ -107,18 +107,13 @@ class LivePolyMarketDataSource(DataSource):
                     market_id = market.get('id', '')
                     token_ids = json.loads(market.get('clobTokenIds', '[]'))
                     for idx, token_id in enumerate(token_ids):
-                        complement_id = ''
-                        if idx == 0 and len(token_ids) > 1:
-                            complement_id = token_ids[1]
-                        elif idx == 1 and len(token_ids) > 0:
-                            complement_id = token_ids[0]
                         self._known_tickers[token_id] = PolyMarketTicker(
                             symbol=token_id,
                             name=market_title,
                             token_id=token_id,
                             market_id=market_id,
                             event_id=event_id,
-                            no_token_id=complement_id,
+                            side='no' if idx == 1 else 'yes',
                         )
 
     async def _fetch_events(self) -> list[dict[str, Any]]:
@@ -168,7 +163,7 @@ class LivePolyMarketDataSource(DataSource):
         order_book: Any,
         market_id: str = '',
         event_id: str = '',
-        no_token_id: str = '',
+        side: str = 'yes',
     ) -> list[OrderBookEvent]:
         events = []
 
@@ -182,7 +177,7 @@ class LivePolyMarketDataSource(DataSource):
             token_id=token_id,
             market_id=market_id,
             event_id=event_id,
-            no_token_id=no_token_id,
+            side=side,
         )
 
         # Only track tickers that have actual liquidity for refresh
@@ -281,16 +276,9 @@ class LivePolyMarketDataSource(DataSource):
 
                             # Convention: clobTokenIds[0] = YES, [1] = NO
                             yes_token_id = token_ids[0] if len(token_ids) > 0 else ''
-                            no_token_id = token_ids[1] if len(token_ids) > 1 else ''
 
                             # Fetch order books for new events
                             for idx, token_id in enumerate(token_ids):
-                                complement_id = ''
-                                if idx == 0 and len(token_ids) > 1:
-                                    complement_id = token_ids[1]
-                                elif idx == 1 and len(token_ids) > 0:
-                                    complement_id = token_ids[0]
-
                                 order_book = await self._fetch_order_book(token_id)
                                 order_book_events = self._process_order_book_to_events(
                                     token_id,
@@ -298,7 +286,7 @@ class LivePolyMarketDataSource(DataSource):
                                     order_book,
                                     market_id=market_id,
                                     event_id=event_id,
-                                    no_token_id=complement_id,
+                                    side='no' if idx == 1 else 'yes',
                                 )
                                 for ob_event in order_book_events:
                                     await self.event_queue.put(ob_event)
@@ -311,7 +299,6 @@ class LivePolyMarketDataSource(DataSource):
                                     token_id=yes_token_id,
                                     market_id=market_id,
                                     event_id=event_id,
-                                    no_token_id=no_token_id,
                                 )
                                 news_content = f'{market_title}: {enriched_event.get("description", "")}'
                                 news_event = NewsEvent(

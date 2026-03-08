@@ -357,7 +357,7 @@ def _run_strategy_dry_run(
         token_id='DRYRUN_YES',
         market_id='DRYRUN_MKT',
         event_id='DRYRUN_EVT',
-        no_token_id='DRYRUN_NO',
+
     )
     strategy = _strategy_from_ref(strategy_ref, strategy_kwargs)
     market_data = DataManager()
