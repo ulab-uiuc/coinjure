@@ -64,6 +64,9 @@ class PriceHistoryDataSource(DataSource):
     Accepts two price series (one per leg of a relation) and interleaves them
     by timestamp. Generates synthetic bid/ask OrderBookEvents so PaperTrader
     has liquidity to fill against.
+
+    If NO-side tickers are provided, also generates complementary (1 - price)
+    events for each YES price point, enabling strategies that trade NO sides.
     """
 
     def __init__(
@@ -72,10 +75,16 @@ class PriceHistoryDataSource(DataSource):
         prices_a: list[dict[str, Any]],
         ticker_b: Ticker,
         prices_b: list[dict[str, Any]],
+        *,
+        no_ticker_a: Ticker | None = None,
+        no_ticker_b: Ticker | None = None,
     ) -> None:
         self._events: list[Event] = []
         self._idx = 0
-        self._build_events(ticker_a, prices_a, ticker_b, prices_b)
+        self._build_events(
+            ticker_a, prices_a, ticker_b, prices_b,
+            no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+        )
 
     def _build_events(
         self,
@@ -83,17 +92,26 @@ class PriceHistoryDataSource(DataSource):
         prices_a: list[dict[str, Any]],
         ticker_b: Ticker,
         prices_b: list[dict[str, Any]],
+        *,
+        no_ticker_a: Ticker | None = None,
+        no_ticker_b: Ticker | None = None,
     ) -> None:
         """Convert raw {t, p} points into engine events, sorted by timestamp."""
         raw: list[tuple[int, Ticker, Decimal]] = []
         for pt in prices_a:
             try:
-                raw.append((int(pt['t']), ticker_a, Decimal(str(pt['p']))))
+                price = Decimal(str(pt['p']))
+                raw.append((int(pt['t']), ticker_a, price))
+                if no_ticker_a is not None:
+                    raw.append((int(pt['t']), no_ticker_a, Decimal('1') - price))
             except (ValueError, TypeError, KeyError):
                 continue
         for pt in prices_b:
             try:
-                raw.append((int(pt['t']), ticker_b, Decimal(str(pt['p']))))
+                price = Decimal(str(pt['p']))
+                raw.append((int(pt['t']), ticker_b, price))
+                if no_ticker_b is not None:
+                    raw.append((int(pt['t']), no_ticker_b, Decimal('1') - price))
             except (ValueError, TypeError, KeyError):
                 continue
 
@@ -129,7 +147,7 @@ class PriceHistoryDataSource(DataSource):
 # ---------------------------------------------------------------------------
 
 
-def _make_ticker(relation: MarketRelation, leg: str) -> Ticker:
+def _make_ticker(relation: MarketRelation, leg: str, side: str = 'yes') -> Ticker:
     """Create a PolyMarketTicker or KalshiTicker from a relation leg."""
     m = relation.market_a if leg == 'a' else relation.market_b
     platform = str(m.get('platform', 'polymarket')).lower()
@@ -143,9 +161,13 @@ def _make_ticker(relation: MarketRelation, leg: str) -> Ticker:
             market_ticker=market_ticker,
             event_ticker=str(m.get('event_ticker', '')),
             series_ticker=str(m.get('series_ticker', '')),
+            side=side,
         )
 
-    token_id = relation.get_token_id(leg)
+    if side == 'no':
+        token_id = relation.get_no_token_id(leg)
+    else:
+        token_id = relation.get_token_id(leg)
     market_id = str(m.get('id', ''))
     return PolyMarketTicker(
         symbol=token_id,
@@ -153,6 +175,7 @@ def _make_ticker(relation: MarketRelation, leg: str) -> Ticker:
         token_id=token_id,
         market_id=market_id,
         event_id=str(m.get('event_id', '')),
+        side=side,
     )
 
 
@@ -211,6 +234,27 @@ def _build_engine(
     return TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
 
+async def _resolve_polymarket_token(
+    market: dict[str, Any],
+    token_id: str,
+) -> str:
+    """Ensure token_id is a real CLOB hex token, not a numeric market ID.
+
+    If token_id looks numeric (i.e. the fallback market ID), fetches the
+    real token from the Gamma API and updates the market dict in-place.
+    """
+    if not token_id or not token_id.isdigit():
+        return token_id
+    # Numeric ID — need to resolve to real CLOB token
+    from coinjure.data.fetcher import polymarket_market_info
+
+    info = await polymarket_market_info(token_id)
+    if info and info.get('token_ids'):
+        market['token_ids'] = info['token_ids']
+        return str(info['token_ids'][0])
+    return token_id
+
+
 async def _fetch_leg_prices(
     market: dict[str, Any],
     token_id: str,
@@ -230,9 +274,10 @@ async def _fetch_leg_prices(
 
     from coinjure.data.live.polymarket import fetch_price_history
 
+    token_id = await _resolve_polymarket_token(market, token_id)
     if not token_id:
         raise ValueError(f'Missing token ID for Polymarket leg')
-    return await fetch_price_history(token_id, fidelity=60)
+    return await fetch_price_history(token_id, fidelity=1)
 
 
 async def _fetch_relation_prices(
@@ -338,9 +383,20 @@ async def run_backtest_relation(
     ticker_a = _make_ticker(relation, 'a')
     ticker_b = _make_ticker(relation, 'b')
 
+    # Build NO-side tickers if available (needed by EventSumArb etc.)
+    no_ticker_a: Ticker | None = None
+    no_ticker_b: Ticker | None = None
+    if relation.get_no_token_id('a'):
+        no_ticker_a = _make_ticker(relation, 'a', side='no')
+    if relation.get_no_token_id('b'):
+        no_ticker_b = _make_ticker(relation, 'b', side='no')
+
     if spread_type in STRUCTURAL_TYPES:
         # Structural: run on full data
-        ds = PriceHistoryDataSource(ticker_a, prices_a, ticker_b, prices_b)
+        ds = PriceHistoryDataSource(
+            ticker_a, prices_a, ticker_b, prices_b,
+            no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+        )
         strategy = strategy_cls(**kwargs)
         engine = _build_engine(ds, strategy, initial_capital)
         await engine.start()
@@ -366,12 +422,18 @@ async def run_backtest_relation(
 
     # Train phase: warm up strategy
     strategy = strategy_cls(**kwargs)
-    train_ds = PriceHistoryDataSource(ticker_a, train_a, ticker_b, train_b)
+    train_ds = PriceHistoryDataSource(
+        ticker_a, train_a, ticker_b, train_b,
+        no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+    )
     train_engine = _build_engine(train_ds, strategy, initial_capital)
     await train_engine.start()
 
     # Test phase: reuse calibrated strategy, fresh engine
-    test_ds = PriceHistoryDataSource(ticker_a, test_a, ticker_b, test_b)
+    test_ds = PriceHistoryDataSource(
+        ticker_a, test_a, ticker_b, test_b,
+        no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+    )
     test_engine = _build_engine(test_ds, strategy, initial_capital)
     await test_engine.start()
 
