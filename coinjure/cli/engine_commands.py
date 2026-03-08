@@ -164,6 +164,126 @@ def _resolve_kill_switch_file(path: str | None) -> Path:
     return Path.home() / '.coinjure' / 'kill.switch'
 
 
+def _load_relations_for_batch(status: str) -> list:
+    from coinjure.market.relations import RelationStore
+
+    return RelationStore().list(status=status)
+
+
+def _ensure_hub_running(as_json: bool) -> None:
+    """Auto-start hub if not running. Waits up to 5s for socket."""
+    if HUB_SOCKET_PATH.exists():
+        return
+    cmd = shlex.split(_coinjure_cmd()) + ['hub', 'start', '--detach']
+    subprocess.Popen(
+        cmd,
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(50):
+        if HUB_SOCKET_PATH.exists():
+            return
+        time.sleep(0.1)
+    if not as_json:
+        click.echo('Warning: Hub socket not ready after 5s, proceeding anyway.')
+
+
+def _run_batch_paper(
+    *,
+    initial_capital: str,
+    duration: float | None,
+    as_json: bool,
+    no_hub: bool,
+) -> None:
+    """Spawn one detached paper-run per backtest_passed relation."""
+    from coinjure.strategy.builtin import build_strategy_ref_for_relation
+
+    relations = _load_relations_for_batch('backtest_passed')
+    if not relations:
+        raise click.ClickException('No relations with status backtest_passed.')
+
+    if not no_hub:
+        _ensure_hub_running(as_json=as_json)
+
+    reg = _load_registry()
+    results = []
+
+    for rel in relations:
+        ref, kwargs = build_strategy_ref_for_relation(rel)
+        if ref is None:
+            results.append(
+                {
+                    'relation_id': rel.relation_id,
+                    'ok': False,
+                    'error': f'No strategy for spread_type: {rel.spread_type}',
+                }
+            )
+            continue
+
+        cmd = shlex.split(_coinjure_cmd()) + [
+            'engine',
+            'paper-run',
+            '--strategy-ref',
+            ref,
+            '--strategy-kwargs-json',
+            json.dumps(kwargs),
+            '--initial-capital',
+            initial_capital,
+            '--no-detach',
+        ]
+        if duration is not None:
+            cmd += ['--duration', str(duration)]
+
+        proc = subprocess.Popen(
+            cmd,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        socket = str(SOCKET_DIR / f'engine-{proc.pid}.sock')
+        entry = StrategyEntry(
+            strategy_id=rel.relation_id,
+            strategy_ref=ref,
+            strategy_kwargs=kwargs,
+            relation_id=rel.relation_id,
+            lifecycle='paper_trading',
+            exchange='cross_platform',
+            pid=proc.pid,
+            socket_path=socket,
+        )
+        try:
+            reg.add(entry)
+        except ValueError:
+            entry_existing = reg.get(rel.relation_id)
+            if entry_existing:
+                entry_existing.pid = proc.pid
+                entry_existing.socket_path = socket
+                entry_existing.lifecycle = 'paper_trading'
+                reg.update(entry_existing)
+
+        results.append(
+            {
+                'relation_id': rel.relation_id,
+                'ok': True,
+                'pid': proc.pid,
+                'strategy_ref': ref,
+                'socket': socket,
+            }
+        )
+
+    if as_json:
+        _emit_json({'ok': True, 'launched': results, 'count': len(results)})
+    else:
+        click.echo(f'\nLaunched {len(results)} paper trading instances:\n')
+        for r in results:
+            if r.get('ok'):
+                click.echo(f'  {r["relation_id"]}  pid={r["pid"]}  {r["strategy_ref"]}')
+            else:
+                click.echo(f'  {r["relation_id"]}  SKIPPED: {r["error"]}')
+
+
 # ── Click group ────────────────────────────────────────────────────────────────
 
 
@@ -213,6 +333,12 @@ def engine() -> None:
     help='Skip auto-connecting to the Market Data Hub even if running.',
 )
 @click.option(
+    '--all-relations',
+    is_flag=True,
+    default=False,
+    help='Batch run all backtest_passed relations (each as a detached process).',
+)
+@click.option(
     '--detach/--no-detach',
     default=False,
     help='Run as a detached background process.',
@@ -227,9 +353,24 @@ def engine_paper_run(
     monitor: bool,
     socket_path: str | None,
     no_hub: bool,
+    all_relations: bool,
     detach: bool,
 ) -> None:
     """Run a paper trading engine instance."""
+    if all_relations and strategy_ref:
+        raise click.ClickException(
+            '--all-relations and --strategy-ref are mutually exclusive.'
+        )
+
+    if all_relations:
+        _run_batch_paper(
+            initial_capital=initial_capital,
+            duration=duration,
+            as_json=as_json,
+            no_hub=no_hub,
+        )
+        return
+
     if detach:
         cmd = shlex.split(_coinjure_cmd()) + ['engine', 'paper-run', '--no-detach']
         if strategy_ref:

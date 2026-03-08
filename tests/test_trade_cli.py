@@ -167,6 +167,80 @@ def test_build_strategy_ref_for_relation_unknown():
     assert ref is None
 
 
+def test_paper_run_all_relations(monkeypatch, tmp_path):
+    """--all-relations spawns one detached process per backtest_passed relation."""
+    from coinjure.market.relations import MarketRelation
+
+    spawned = []
+
+    class FakeProcess:
+        pid_counter = 100
+
+        def __init__(self):
+            FakeProcess.pid_counter += 1
+            self.pid = FakeProcess.pid_counter
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    fake_relations = [
+        MarketRelation(
+            relation_id='rel-1',
+            spread_type='implication',
+            status='backtest_passed',
+        ),
+        MarketRelation(
+            relation_id='rel-2',
+            spread_type='exclusivity',
+            status='backtest_passed',
+        ),
+    ]
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._load_relations_for_batch',
+        lambda status: fake_relations,
+    )
+    # Pretend hub is already running
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.HUB_SOCKET_PATH',
+        tmp_path / 'hub.sock',
+    )
+    (tmp_path / 'hub.sock').touch()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'paper-run',
+            '--all-relations',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert len(spawned) == 2
+
+
+def test_paper_run_all_relations_mutually_exclusive_with_strategy_ref():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'paper-run',
+            '--all-relations',
+            '--strategy-ref',
+            'foo:Bar',
+        ],
+    )
+    assert result.exit_code != 0
+
+
 def test_paper_run_detach(monkeypatch, tmp_path):
     """--detach spawns a subprocess and registers in the registry."""
     spawned = []
