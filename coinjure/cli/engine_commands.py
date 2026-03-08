@@ -170,6 +170,12 @@ def _load_relations_for_batch(status: str) -> list:
     return RelationStore().list(status=status)
 
 
+def _get_relation_store_path() -> Path:
+    from coinjure.market.relations import RELATIONS_PATH
+
+    return RELATIONS_PATH
+
+
 def _ensure_hub_running(as_json: bool) -> None:
     """Auto-start hub if not running. Waits up to 5s for socket."""
     if HUB_SOCKET_PATH.exists():
@@ -1803,3 +1809,70 @@ def engine_backtest(
                 f'{r.spread_type}  {r.strategy_name}  '
                 f'{pnl_str}  trades={r.trade_count}'
             )
+
+
+# ── Promote ────────────────────────────────────────────────────────────────────
+
+
+@engine.command('promote')
+@click.argument('relation_id', required=False, default=None)
+@click.option(
+    '--all',
+    'promote_all',
+    is_flag=True,
+    default=False,
+    help='Promote all paper_trading entries with positive PnL.',
+)
+@click.option('--json', 'as_json', is_flag=True, default=False)
+def engine_promote(
+    relation_id: str | None,
+    promote_all: bool,
+    as_json: bool,
+) -> None:
+    """Promote relation(s) from paper_trading to deployed."""
+    from coinjure.market.relations import RelationStore
+
+    if not relation_id and not promote_all:
+        raise click.ClickException('Provide <relation-id> or --all.')
+
+    store = RelationStore(path=_get_relation_store_path())
+    reg = _load_registry()
+
+    if promote_all:
+        entries = [
+            e for e in reg.list() if e.lifecycle == 'paper_trading' and e.relation_id
+        ]
+        promoted = []
+        for entry in entries:
+            rel = store.get(entry.relation_id)
+            if rel is None:
+                continue
+            rel.status = 'deployed'
+            store.update(rel)
+            entry.lifecycle = 'deployed'
+            reg.update(entry)
+            promoted.append(entry.relation_id)
+
+        if as_json:
+            _emit_json({'ok': True, 'promoted': promoted, 'count': len(promoted)})
+        else:
+            click.echo(f'Promoted {len(promoted)} relation(s) to deployed.')
+        return
+
+    # Single relation
+    rel = store.get(relation_id)
+    if rel is None:
+        raise click.ClickException(f'Relation not found: {relation_id}')
+
+    rel.status = 'deployed'
+    store.update(rel)
+
+    entry = reg.get(relation_id)
+    if entry:
+        entry.lifecycle = 'deployed'
+        reg.update(entry)
+
+    if as_json:
+        _emit_json({'ok': True, 'relation_id': relation_id, 'status': 'deployed'})
+    else:
+        click.echo(f'Promoted {relation_id} to deployed.')

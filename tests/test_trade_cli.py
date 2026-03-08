@@ -397,3 +397,73 @@ def test_live_run_detach(monkeypatch, tmp_path):
     assert out['pid'] == 54321
     assert len(spawned) == 1
     assert '--no-detach' in spawned[0]
+
+
+def test_engine_promote_single(monkeypatch, tmp_path):
+    """Promote a single relation from backtest_passed to deployed."""
+    import json as json_mod
+
+    from coinjure.engine.registry import StrategyEntry, StrategyRegistry
+    from coinjure.market.relations import MarketRelation, RelationStore
+
+    rel_path = tmp_path / 'relations.json'
+    reg_path = tmp_path / 'portfolio.json'
+
+    # Seed a backtest_passed relation
+    store = RelationStore(path=rel_path)
+    store.add(
+        MarketRelation(
+            relation_id='rel-p1',
+            spread_type='implication',
+            status='backtest_passed',
+        )
+    )
+
+    # Seed a paper_trading registry entry
+    reg = StrategyRegistry(path=reg_path)
+    reg.add(
+        StrategyEntry(
+            strategy_id='rel-p1',
+            strategy_ref='mod:Cls',
+            relation_id='rel-p1',
+            lifecycle='paper_trading',
+        )
+    )
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.REGISTRY_PATH', reg_path)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._get_relation_store_path', lambda: rel_path
+    )
+
+    from click.testing import CliRunner
+
+    from coinjure.cli.cli import cli
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['engine', 'promote', 'rel-p1', '--json'])
+    assert result.exit_code == 0, result.output
+
+    out = json_mod.loads(result.output.strip())
+    assert out['ok'] is True
+
+    # Verify relation status updated
+    updated = RelationStore(path=rel_path).get('rel-p1')
+    assert updated.status == 'deployed'
+
+
+def test_engine_promote_not_found(monkeypatch, tmp_path):
+    rel_path = tmp_path / 'relations.json'
+    reg_path = tmp_path / 'portfolio.json'
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.REGISTRY_PATH', reg_path)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._get_relation_store_path', lambda: rel_path
+    )
+
+    from click.testing import CliRunner
+
+    from coinjure.cli.cli import cli
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['engine', 'promote', 'nonexistent'])
+    assert result.exit_code != 0
