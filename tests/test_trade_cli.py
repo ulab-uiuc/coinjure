@@ -280,3 +280,120 @@ def test_paper_run_detach(monkeypatch, tmp_path):
     assert out['pid'] == 12345
     assert len(spawned) == 1
     assert '--no-detach' in spawned[0]
+
+
+def test_live_run_all_relations(monkeypatch, tmp_path):
+    """--all-relations spawns one detached process per deployed relation."""
+    from coinjure.market.relations import MarketRelation
+
+    spawned = []
+
+    class FakeProcess:
+        pid_counter = 200
+
+        def __init__(self):
+            FakeProcess.pid_counter += 1
+            self.pid = FakeProcess.pid_counter
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    fake_relations = [
+        MarketRelation(
+            relation_id='rel-d1',
+            spread_type='implication',
+            status='deployed',
+        ),
+    ]
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._load_relations_for_batch',
+        lambda status: fake_relations if status == 'deployed' else [],
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.HUB_SOCKET_PATH',
+        tmp_path / 'hub.sock',
+    )
+    (tmp_path / 'hub.sock').touch()
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._confirm_live_trading',
+        lambda as_json: None,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'live-run',
+            '--all-relations',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert len(spawned) == 1
+
+
+def test_live_run_all_relations_mutually_exclusive_with_strategy_ref(monkeypatch):
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._confirm_live_trading',
+        lambda as_json: None,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'live-run',
+            '--all-relations',
+            '--strategy-ref',
+            'foo:Bar',
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_live_run_detach(monkeypatch, tmp_path):
+    """--detach spawns a subprocess and registers in the registry."""
+    spawned = []
+
+    class FakeProcess:
+        pid = 54321
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._confirm_live_trading',
+        lambda as_json: None,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'live-run',
+            '--strategy-ref',
+            'coinjure.strategy.demo:DemoStrategy',
+            '--detach',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    out = json.loads(result.output.strip().split('\n')[-1])
+    assert out['ok'] is True
+    assert out['pid'] == 54321
+    assert len(spawned) == 1
+    assert '--no-detach' in spawned[0]

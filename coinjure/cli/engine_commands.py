@@ -286,6 +286,100 @@ def _run_batch_paper(
                 click.echo(f'  {r["relation_id"]}  SKIPPED: {r["error"]}')
 
 
+def _run_batch_live(
+    *,
+    initial_capital: str,
+    duration: float | None,
+    exchange: str,
+    as_json: bool,
+) -> None:
+    """Spawn one detached live-run per deployed relation."""
+    from coinjure.strategy.builtin import build_strategy_ref_for_relation
+
+    relations = _load_relations_for_batch('deployed')
+    if not relations:
+        raise click.ClickException('No relations with status deployed.')
+
+    _ensure_hub_running(as_json=as_json)
+
+    reg = _load_registry()
+    results = []
+
+    for rel in relations:
+        ref, kwargs = build_strategy_ref_for_relation(rel)
+        if ref is None:
+            results.append(
+                {
+                    'relation_id': rel.relation_id,
+                    'ok': False,
+                    'error': f'No strategy for spread_type: {rel.spread_type}',
+                }
+            )
+            continue
+
+        cmd = shlex.split(_coinjure_cmd()) + [
+            'engine',
+            'live-run',
+            '--strategy-ref',
+            ref,
+            '--strategy-kwargs-json',
+            json.dumps(kwargs),
+            '--exchange',
+            exchange,
+            '--no-detach',
+        ]
+        if duration is not None:
+            cmd += ['--duration', str(duration)]
+
+        proc = subprocess.Popen(
+            cmd,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        socket = str(SOCKET_DIR / f'engine-{proc.pid}.sock')
+        entry = StrategyEntry(
+            strategy_id=rel.relation_id,
+            strategy_ref=ref,
+            strategy_kwargs=kwargs,
+            relation_id=rel.relation_id,
+            lifecycle='live_trading',
+            exchange=exchange,
+            pid=proc.pid,
+            socket_path=socket,
+        )
+        try:
+            reg.add(entry)
+        except ValueError:
+            entry_existing = reg.get(rel.relation_id)
+            if entry_existing:
+                entry_existing.pid = proc.pid
+                entry_existing.socket_path = socket
+                entry_existing.lifecycle = 'live_trading'
+                reg.update(entry_existing)
+
+        results.append(
+            {
+                'relation_id': rel.relation_id,
+                'ok': True,
+                'pid': proc.pid,
+                'strategy_ref': ref,
+                'socket': socket,
+            }
+        )
+
+    if as_json:
+        _emit_json({'ok': True, 'launched': results, 'count': len(results)})
+    else:
+        click.echo(f'\nLaunched {len(results)} live trading instances:\n')
+        for r in results:
+            if r.get('ok'):
+                click.echo(f'  {r["relation_id"]}  pid={r["pid"]}  {r["strategy_ref"]}')
+            else:
+                click.echo(f'  {r["relation_id"]}  SKIPPED: {r["error"]}')
+
+
 # ── Click group ────────────────────────────────────────────────────────────────
 
 
@@ -514,9 +608,10 @@ def engine_paper_run(
 @click.option(
     '--duration', type=float, default=None, help='Seconds to run (default: forever)'
 )
+@click.option('--initial-capital', default='10000', show_default=True)
 @click.option(
     '--strategy-ref',
-    required=True,
+    default=None,
     help='Strategy ref: module:Class or /path/file.py:Class.',
 )
 @click.option(
@@ -541,10 +636,22 @@ def engine_paper_run(
     default=None,
     help='Kalshi private key path.',
 )
+@click.option(
+    '--all-relations',
+    is_flag=True,
+    default=False,
+    help='Batch run all deployed relations (each as a detached process).',
+)
+@click.option(
+    '--detach/--no-detach',
+    default=False,
+    help='Run as a detached background process.',
+)
 def engine_live_run(
     exchange: str,
     duration: float | None,
-    strategy_ref: str,
+    initial_capital: str,
+    strategy_ref: str | None,
     strategy_kwargs_json: str | None,
     as_json: bool,
     monitor: bool,
@@ -553,8 +660,80 @@ def engine_live_run(
     funder: str | None,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
+    all_relations: bool,
+    detach: bool,
 ) -> None:
     """Run a live trading engine instance (real orders, real funds)."""
+    if all_relations and strategy_ref:
+        raise click.ClickException(
+            '--all-relations and --strategy-ref are mutually exclusive.'
+        )
+
+    _confirm_live_trading(as_json=as_json)
+
+    if all_relations:
+        _run_batch_live(
+            initial_capital=initial_capital,
+            duration=duration,
+            exchange=exchange,
+            as_json=as_json,
+        )
+        return
+
+    if not strategy_ref:
+        raise click.ClickException(
+            '--strategy-ref is required unless using --all-relations.'
+        )
+
+    if detach:
+        cmd = shlex.split(_coinjure_cmd()) + [
+            'engine',
+            'live-run',
+            '--no-detach',
+            '--strategy-ref',
+            strategy_ref,
+            '--exchange',
+            exchange,
+        ]
+        if strategy_kwargs_json:
+            cmd += ['--strategy-kwargs-json', strategy_kwargs_json]
+        if duration is not None:
+            cmd += ['--duration', str(duration)]
+
+        proc = subprocess.Popen(
+            cmd,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        reg = _load_registry()
+        sid = strategy_ref
+        entry = StrategyEntry(
+            strategy_id=sid,
+            strategy_ref=strategy_ref,
+            strategy_kwargs=_parse_strategy_kwargs_json(strategy_kwargs_json),
+            lifecycle='live_trading',
+            exchange=exchange,
+            pid=proc.pid,
+            socket_path=str(SOCKET_DIR / f'engine-{proc.pid}.sock'),
+        )
+        try:
+            reg.add(entry)
+        except ValueError:
+            reg.update(entry)
+
+        _emit(
+            {
+                'ok': True,
+                'pid': proc.pid,
+                'strategy_id': sid,
+                'socket': entry.socket_path,
+            },
+            as_json=as_json,
+        )
+        return
+
     from coinjure.data.live.kalshi import LiveKalshiDataSource
     from coinjure.data.live.polymarket import LivePolyMarketDataSource
     from coinjure.engine.runner import (
@@ -565,7 +744,6 @@ def engine_live_run(
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     strategy_obj = _load_strategy(strategy_ref, strategy_kwargs)
 
-    _confirm_live_trading(as_json=as_json)
     _emit(
         {
             'mode': 'live',
