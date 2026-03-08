@@ -82,3 +82,25 @@ def test_engine_killswitch_toggle(tmp_path):
     )
     assert disable.exit_code == 0
     assert not kill_file.exists()
+
+
+def test_strategy_entry_relation_id():
+    from coinjure.engine.registry import StrategyEntry
+
+    entry = StrategyEntry(
+        strategy_id='rel-abc',
+        strategy_ref='coinjure.strategy.builtin:DirectArbStrategy',
+        relation_id='rel-abc',
+    )
+    assert entry.relation_id == 'rel-abc'
+    d = entry.to_dict()
+    assert d['relation_id'] == 'rel-abc'
+    restored = StrategyEntry.from_dict(d)
+    assert restored.relation_id == 'rel-abc'
+
+
+def test_strategy_entry_relation_id_default():
+    from coinjure.engine.registry import StrategyEntry
+
+    entry = StrategyEntry(strategy_id='x', strategy_ref='m:C')
+    assert entry.relation_id is None

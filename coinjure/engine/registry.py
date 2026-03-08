@@ -30,6 +30,7 @@ _FIELDS = {
     'pid',
     'socket_path',
     'data_dir',
+    'relation_id',
     'retired_reason',
 }
 
@@ -50,6 +51,7 @@ class StrategyEntry:
     pid: int | None = None
     socket_path: str | None = None
     data_dir: str = ''
+    relation_id: str | None = None
     retired_reason: str | None = None
 
     def to_dict(self) -> dict:
