@@ -167,6 +167,80 @@ def test_build_strategy_ref_for_relation_unknown():
     assert ref is None
 
 
+def test_paper_run_all_relations(monkeypatch, tmp_path):
+    """--all-relations spawns one detached process per backtest_passed relation."""
+    from coinjure.market.relations import MarketRelation
+
+    spawned = []
+
+    class FakeProcess:
+        pid_counter = 100
+
+        def __init__(self):
+            FakeProcess.pid_counter += 1
+            self.pid = FakeProcess.pid_counter
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    fake_relations = [
+        MarketRelation(
+            relation_id='rel-1',
+            spread_type='implication',
+            status='backtest_passed',
+        ),
+        MarketRelation(
+            relation_id='rel-2',
+            spread_type='exclusivity',
+            status='backtest_passed',
+        ),
+    ]
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._load_relations_for_batch',
+        lambda status: fake_relations,
+    )
+    # Pretend hub is already running
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.HUB_SOCKET_PATH',
+        tmp_path / 'hub.sock',
+    )
+    (tmp_path / 'hub.sock').touch()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'paper-run',
+            '--all-relations',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert len(spawned) == 2
+
+
+def test_paper_run_all_relations_mutually_exclusive_with_strategy_ref():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'paper-run',
+            '--all-relations',
+            '--strategy-ref',
+            'foo:Bar',
+        ],
+    )
+    assert result.exit_code != 0
+
+
 def test_paper_run_detach(monkeypatch, tmp_path):
     """--detach spawns a subprocess and registers in the registry."""
     spawned = []
@@ -206,3 +280,190 @@ def test_paper_run_detach(monkeypatch, tmp_path):
     assert out['pid'] == 12345
     assert len(spawned) == 1
     assert '--no-detach' in spawned[0]
+
+
+def test_live_run_all_relations(monkeypatch, tmp_path):
+    """--all-relations spawns one detached process per deployed relation."""
+    from coinjure.market.relations import MarketRelation
+
+    spawned = []
+
+    class FakeProcess:
+        pid_counter = 200
+
+        def __init__(self):
+            FakeProcess.pid_counter += 1
+            self.pid = FakeProcess.pid_counter
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    fake_relations = [
+        MarketRelation(
+            relation_id='rel-d1',
+            spread_type='implication',
+            status='deployed',
+        ),
+    ]
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._load_relations_for_batch',
+        lambda status: fake_relations if status == 'deployed' else [],
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.HUB_SOCKET_PATH',
+        tmp_path / 'hub.sock',
+    )
+    (tmp_path / 'hub.sock').touch()
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._confirm_live_trading',
+        lambda as_json: None,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'live-run',
+            '--all-relations',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert len(spawned) == 1
+
+
+def test_live_run_all_relations_mutually_exclusive_with_strategy_ref(monkeypatch):
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._confirm_live_trading',
+        lambda as_json: None,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'live-run',
+            '--all-relations',
+            '--strategy-ref',
+            'foo:Bar',
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_live_run_detach(monkeypatch, tmp_path):
+    """--detach spawns a subprocess and registers in the registry."""
+    spawned = []
+
+    class FakeProcess:
+        pid = 54321
+
+    def fake_popen(cmd, **kwargs):
+        spawned.append(cmd)
+        return FakeProcess()
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.subprocess.Popen', fake_popen)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.REGISTRY_PATH', tmp_path / 'portfolio.json'
+    )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._confirm_live_trading',
+        lambda as_json: None,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            'engine',
+            'live-run',
+            '--strategy-ref',
+            'coinjure.strategy.demo:DemoStrategy',
+            '--detach',
+            '--json',
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    out = json.loads(result.output.strip().split('\n')[-1])
+    assert out['ok'] is True
+    assert out['pid'] == 54321
+    assert len(spawned) == 1
+    assert '--no-detach' in spawned[0]
+
+
+def test_engine_promote_single(monkeypatch, tmp_path):
+    """Promote a single relation from backtest_passed to deployed."""
+    import json as json_mod
+
+    from coinjure.engine.registry import StrategyEntry, StrategyRegistry
+    from coinjure.market.relations import MarketRelation, RelationStore
+
+    rel_path = tmp_path / 'relations.json'
+    reg_path = tmp_path / 'portfolio.json'
+
+    # Seed a backtest_passed relation
+    store = RelationStore(path=rel_path)
+    store.add(
+        MarketRelation(
+            relation_id='rel-p1',
+            spread_type='implication',
+            status='backtest_passed',
+        )
+    )
+
+    # Seed a paper_trading registry entry
+    reg = StrategyRegistry(path=reg_path)
+    reg.add(
+        StrategyEntry(
+            strategy_id='rel-p1',
+            strategy_ref='mod:Cls',
+            relation_id='rel-p1',
+            lifecycle='paper_trading',
+        )
+    )
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.REGISTRY_PATH', reg_path)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._get_relation_store_path', lambda: rel_path
+    )
+
+    from click.testing import CliRunner
+
+    from coinjure.cli.cli import cli
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['engine', 'promote', 'rel-p1', '--json'])
+    assert result.exit_code == 0, result.output
+
+    out = json_mod.loads(result.output.strip())
+    assert out['ok'] is True
+
+    # Verify relation status updated
+    updated = RelationStore(path=rel_path).get('rel-p1')
+    assert updated.status == 'deployed'
+
+
+def test_engine_promote_not_found(monkeypatch, tmp_path):
+    rel_path = tmp_path / 'relations.json'
+    reg_path = tmp_path / 'portfolio.json'
+
+    monkeypatch.setattr('coinjure.cli.engine_commands.REGISTRY_PATH', reg_path)
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands._get_relation_store_path', lambda: rel_path
+    )
+
+    from click.testing import CliRunner
+
+    from coinjure.cli.cli import cli
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['engine', 'promote', 'nonexistent'])
+    assert result.exit_code != 0

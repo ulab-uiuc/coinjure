@@ -14,7 +14,7 @@ REGISTRY_DIR = Path.home() / '.coinjure'
 REGISTRY_PATH = REGISTRY_DIR / 'portfolio.json'
 
 VALID_LIFECYCLES = frozenset(
-    {'pending_backtest', 'paper_trading', 'live_trading', 'retired'}
+    {'pending_backtest', 'paper_trading', 'deployed', 'live_trading', 'retired'}
 )
 
 _FIELDS = {
