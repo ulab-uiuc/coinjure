@@ -91,6 +91,15 @@ class EventSumArbStrategy(Strategy):
         self._tickers: dict[str, PolyMarketTicker] = {}  # market_id → ticker
         self._last_arb_time: float = 0.0
 
+    def watch_tokens(self) -> list[str]:
+        """Return CLOB token IDs so the data source prioritizes these markets."""
+        tokens = []
+        for ticker in self._tickers.values():
+            tid = getattr(ticker, 'token_id', '')
+            if tid:
+                tokens.append(tid)
+        return tokens
+
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused():
             return

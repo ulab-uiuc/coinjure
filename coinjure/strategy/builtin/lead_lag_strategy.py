@@ -19,20 +19,19 @@ Usage:
 from __future__ import annotations
 
 import logging
-import math
 from collections import deque
 from decimal import Decimal
 
 from coinjure.engine.trader.trader import Trader
 from coinjure.engine.trader.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.market.relations import RelationStore
+from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
 
 logger = logging.getLogger(__name__)
 
 
-class LeadLagStrategy(Strategy):
+class LeadLagStrategy(RelationArbMixin, Strategy):
     """Trade the follower when the leader moves.
 
     Parameters
@@ -72,10 +71,7 @@ class LeadLagStrategy(Strategy):
         self._exit_reversion = exit_reversion
         self._max_hold = max_hold
 
-        self._relation = None
-        if relation_id:
-            store = RelationStore()
-            self._relation = store.get(relation_id)
+        self._init_from_relation(relation_id)
 
         # Determine which is leader and which is follower.
         # lead_lag > 0: A leads B. lead_lag < 0: B leads A.
@@ -83,23 +79,15 @@ class LeadLagStrategy(Strategy):
             lag = self._relation.lead_lag or 0
             if lag >= 0:
                 # A leads B (or no lag)
-                self._leader_id = self._relation.market_a.get(
-                    'condition_id', ''
-                ) or self._relation.market_a.get('id', '')
-                self._follower_id = self._relation.market_b.get(
-                    'condition_id', ''
-                ) or self._relation.market_b.get('id', '')
+                self._leader_id = self._id_a
+                self._follower_id = self._id_b
             else:
                 # B leads A — swap roles
-                self._leader_id = self._relation.market_b.get(
-                    'condition_id', ''
-                ) or self._relation.market_b.get('id', '')
-                self._follower_id = self._relation.market_a.get(
-                    'condition_id', ''
-                ) or self._relation.market_a.get('id', '')
+                self._leader_id = self._id_b
+                self._follower_id = self._id_a
         else:
-            self._leader_id = ''
-            self._follower_id = ''
+            self._leader_id = self._id_a
+            self._follower_id = self._id_b
 
         # Price tracking
         self._leader_prices: deque[float] = deque(maxlen=warmup)
@@ -111,11 +99,6 @@ class LeadLagStrategy(Strategy):
         self._entry_leader_price: float = 0.0  # leader price at entry
         self._entry_follower_price: float = 0.0  # follower price at entry
         self._hold_count = 0  # count of follower updates since entry
-
-    def _matches(self, ticker_id: str, market_id: str) -> bool:
-        if not market_id:
-            return False
-        return market_id in ticker_id or ticker_id in market_id
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused() or not isinstance(event, PriceChangeEvent):

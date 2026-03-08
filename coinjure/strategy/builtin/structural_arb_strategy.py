@@ -25,13 +25,13 @@ from decimal import Decimal
 from coinjure.engine.trader.trader import Trader
 from coinjure.engine.trader.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.market.relations import RelationStore
+from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
 
 logger = logging.getLogger(__name__)
 
 
-class StructuralArbStrategy(Strategy):
+class StructuralArbStrategy(RelationArbMixin, Strategy):
     """Arbitrage deviations from a deterministic structural constraint.
 
     The expected relationship is: p(A) = slope × p(B) + intercept.
@@ -70,31 +70,12 @@ class StructuralArbStrategy(Strategy):
         self.intercept = intercept
         self.min_edge = Decimal(str(min_edge))
 
-        self._relation = None
-        if relation_id:
-            store = RelationStore()
-            self._relation = store.get(relation_id)
-
-        if self._relation:
-            self._id_a = self._relation.market_a.get(
-                'condition_id', ''
-            ) or self._relation.market_a.get('id', '')
-            self._id_b = self._relation.market_b.get(
-                'condition_id', ''
-            ) or self._relation.market_b.get('id', '')
-        else:
-            self._id_a = ''
-            self._id_b = ''
+        self._init_from_relation(relation_id)
 
         self._price_a: Decimal | None = None
         self._price_b: Decimal | None = None
         # flat | long_a_short_b (A underpriced) | short_a_long_b (A overpriced)
         self._position_state = 'flat'
-
-    def _matches(self, ticker_id: str, market_id: str) -> bool:
-        if not market_id:
-            return False
-        return market_id in ticker_id or ticker_id in market_id
 
     def _expected_a(self, price_b: float) -> float:
         """Compute expected p(A) from the structural relationship."""

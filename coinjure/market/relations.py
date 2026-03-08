@@ -205,6 +205,23 @@ class RelationStore:
         data.append(relation.to_dict())
         self._save(data)
 
+    def add_batch(self, relations: list[MarketRelation]) -> int:
+        """Add multiple relations in a single load/save cycle. Returns count added."""
+        if not relations:
+            return 0
+        data = self._load()
+        existing_ids = {d.get('relation_id') for d in data}
+        added = 0
+        for rel in relations:
+            if rel.relation_id in existing_ids:
+                # Replace existing (upsert, consistent with add())
+                data = [d for d in data if d.get('relation_id') != rel.relation_id]
+            else:
+                added += 1
+            data.append(rel.to_dict())
+        self._save(data)
+        return added
+
     def update(self, relation: MarketRelation) -> None:
         data = self._load()
         for i, d in enumerate(data):
