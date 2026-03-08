@@ -1,14 +1,11 @@
 """Persistent market relation graph — stores discovered spread pairs.
 
-Relation types (the 4+4 taxonomy):
-  - same_event     : identical market across platforms (cross-platform arb)
-  - complementary  : outcomes sum to 1 within an event (event-sum arb)
-  - implication    : A implies B (logical, e.g. "win nomination" → "win election")
-  - exclusivity    : A and B mutually exclusive (p_A + p_B ≤ 1)
-  - conditional    : p(A|B) is structurally constrained
-  - temporal       : lead-lag / Granger-causal
-  - semantic       : conceptually related (embedding-based, not structural)
-  - structural     : other deterministic constraint
+Relation types (by mathematical constraint):
+  - same_event     : identical market across platforms (A ≈ B)
+  - complementary  : outcomes sum to 1 within an event (Σ ≈ 1)
+  - implication    : A implies B (A ≤ B)
+  - exclusivity    : A and B mutually exclusive (A + B ≤ 1)
+  - correlated     : statistically correlated prices (no structural constraint)
 """
 
 from __future__ import annotations
@@ -28,13 +25,13 @@ RELATIONS_PATH = RELATIONS_DIR / 'relations.json'
 VALID_TYPES = frozenset(
     {
         'same_event',
-        'semantic',
-        'conditional',
-        'temporal',
         'complementary',
         'implication',
         'exclusivity',
+        'correlated',
         'structural',
+        'conditional',
+        'temporal',
     }
 )
 
@@ -115,7 +112,7 @@ class MarketRelation:
     hedge_ratio: float = 1.0  # β from OLS: p_A = α + β * p_B
     lead_lag: int = 0  # positive = A leads B by N steps
 
-    # Analysis results (set by market analyze)
+    # Analysis results (set by discover/auto-pair)
     analysis_a: dict[str, Any] = field(default_factory=dict)
     analysis_b: dict[str, Any] = field(default_factory=dict)
 
@@ -128,16 +125,26 @@ class MarketRelation:
     )
     last_validated: str | None = None
     valid_until: str | None = None
-    status: str = 'active'  # active, validated, deployed, invalidated, retired
+    status: str = (
+        'active'  # active, backtest_passed, backtest_failed, deployed, retired
+    )
+
+    # Backtest results (set by engine backtest)
+    backtest_pnl: float | None = None
+    backtest_trades: int | None = None
+
+    def set_backtest_result(
+        self, passed: bool, pnl: float = 0.0, trades: int = 0
+    ) -> None:
+        """Update lifecycle based on backtest outcome."""
+        self.status = 'backtest_passed' if passed else 'backtest_failed'
+        self.backtest_pnl = pnl
+        self.backtest_trades = trades
 
     def set_validation(self, result: ValidationResult) -> None:
-        """Store a validation result and update lifecycle + trading fields."""
+        """Store a validation result and update trading fields."""
         self.validation = asdict(result)
         self.last_validated = result.validated_at
-        if result.is_valid:
-            self.status = 'validated'
-        else:
-            self.status = 'invalidated'
         # Propagate hedge ratio (relatively stable across windows)
         if result.hedge_ratio is not None:
             self.hedge_ratio = result.hedge_ratio
@@ -152,13 +159,25 @@ class MarketRelation:
             **{k: v for k, v in self.validation.items() if k in known}
         )
 
+    def get_token_id(self, leg: str = 'a') -> str:
+        """Get the first YES-side CLOB token_id for leg 'a' or 'b'.
+
+        Falls back to the market dict's 'id' field if token_ids is empty.
+        """
+        m = self.market_a if leg == 'a' else self.market_b
+        token_ids = m.get('token_ids', [])
+        if token_ids:
+            return str(token_ids[0])
+        return str(m.get('id', ''))
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> MarketRelation:
         known = {f.name for f in cls.__dataclass_fields__.values()}
-        return cls(**{k: v for k, v in d.items() if k in known})
+        filtered = {k: v for k, v in d.items() if k in known}
+        return cls(**filtered)
 
 
 class RelationStore:
@@ -233,6 +252,22 @@ class RelationStore:
         data.append(relation.to_dict())
         self._save(data)
 
+    def add_batch(self, relations: list[MarketRelation]) -> int:
+        """Add multiple relations at once (upsert semantics)."""
+        if not relations:
+            return 0
+        data = self._load()
+        existing_ids = {d.get('relation_id') for d in data}
+        added = 0
+        for rel in relations:
+            if rel.relation_id in existing_ids:
+                data = [d for d in data if d.get('relation_id') != rel.relation_id]
+            else:
+                added += 1
+            data.append(rel.to_dict())
+        self._save(data)
+        return added
+
     def remove(self, relation_id: str) -> bool:
         data = self._load()
         before = len(data)
@@ -252,13 +287,13 @@ class RelationStore:
                 r.market_a.get('market_id', ''),
                 r.market_a.get('id', ''),
                 r.market_a.get('ticker', ''),
-                r.market_a.get('token_id', ''),
+                *r.market_a.get('token_ids', []),
             }
             b_ids = {
                 r.market_b.get('market_id', ''),
                 r.market_b.get('id', ''),
                 r.market_b.get('ticker', ''),
-                r.market_b.get('token_id', ''),
+                *r.market_b.get('token_ids', []),
             }
             if market_id in a_ids or market_id in b_ids:
                 results.append(r)

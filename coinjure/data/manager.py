@@ -46,6 +46,38 @@ class DataManager:
         self._market_history: dict[Ticker, deque[DataPoint]] = {}
         self._market_timeline: deque[DataPoint] = deque(maxlen=max_timeline_events)
         self._next_market_sequence = 1
+        # (market_id, side) -> Ticker for complement lookup
+        self._market_tickers: dict[tuple[str, str], Ticker] = {}
+
+    def _market_key(self, ticker: Ticker) -> str:
+        return getattr(ticker, 'market_id', '') or getattr(ticker, 'market_ticker', '')
+
+    def _register_ticker(self, ticker: Ticker) -> None:
+        key = self._market_key(ticker)
+        token_side = getattr(ticker, 'token_side', '')
+        if not key or not token_side:
+            return
+        self._market_tickers[(key, token_side)] = ticker
+        # Kalshi has no separate NO data stream — derive complement on registration
+        if isinstance(ticker, KalshiTicker) and token_side == 'YES':
+            comp = KalshiTicker(
+                symbol=f'{ticker.symbol}_NO',
+                name=ticker.name,
+                market_ticker=ticker.market_ticker,
+                event_ticker=ticker.event_ticker,
+                series_ticker=ticker.series_ticker,
+                token_side='NO',
+            )
+            self._market_tickers[(key, 'NO')] = comp
+
+    def get_complement_ticker(self, ticker: Ticker) -> Ticker | None:
+        """Look up the complement (opposite side) ticker."""
+        key = self._market_key(ticker)
+        token_side = getattr(ticker, 'token_side', '')
+        if not key or not token_side:
+            return None
+        comp_side = 'NO' if token_side == 'YES' else 'YES'
+        return self._market_tickers.get((key, comp_side))
 
     def update_order_book(self, ticker: Ticker, order_book: OrderBook) -> None:
         self.order_books[ticker] = order_book
@@ -56,6 +88,7 @@ class DataManager:
         Each event carries a single price level with its current size and side.
         We merge it into the existing order book, keeping levels sorted.
         """
+        self._register_ticker(event.ticker)
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
 
@@ -97,6 +130,7 @@ class DataManager:
         only record the price history — do NOT overwrite the real orderbook
         with synthetic levels.
         """
+        self._register_ticker(event.ticker)
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
 

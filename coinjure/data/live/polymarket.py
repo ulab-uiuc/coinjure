@@ -15,9 +15,50 @@ from py_clob_client.client import ClobClient
 from coinjure.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import PolyMarketTicker
 
-from ..data_source import DataSource
+from ..source import DataSource
 
 logger = logging.getLogger(__name__)
+
+
+CLOB_PRICES_HISTORY_URL = 'https://clob.polymarket.com/prices-history'
+
+
+async def fetch_price_history(
+    token_id: str,
+    fidelity: int = 60,
+    start_ts: int | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch CLOB price history for a single token.
+
+    Returns list of ``{'t': <unix_timestamp>, 'p': <price_string>}``.
+
+    Args:
+        token_id: CLOB token ID (long hex string).
+        fidelity: Minutes per candle (1, 5, 60, 1440).
+        start_ts: Optional Unix start timestamp.
+    """
+    params: dict[str, Any] = {
+        'market': token_id,
+        'interval': 'all',
+        'fidelity': fidelity,
+    }
+    if start_ts is not None:
+        params['startTs'] = start_ts
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(CLOB_PRICES_HISTORY_URL, params=params)
+    if resp.status_code != 200:
+        raise ValueError(
+            f'CLOB prices-history returned HTTP {resp.status_code}: {resp.text[:200]}'
+        )
+    data = resp.json()
+    raw_history = data.get('history') if isinstance(data, dict) else data
+    points: list[dict[str, Any]] = []
+    if isinstance(raw_history, list):
+        for item in raw_history:
+            if isinstance(item, dict) and 't' in item and 'p' in item:
+                points.append({'t': item['t'], 'p': item['p']})
+    return points
 
 
 class LivePolyMarketDataSource(DataSource):
@@ -292,6 +333,7 @@ class LivePolyMarketDataSource(DataSource):
                                     await self.event_queue.put(ob_event)
 
                             # Emit NewsEvent for new events only
+                            yes_token_id = token_ids[0] if token_ids else ''
                             if yes_token_id:
                                 yes_ticker = PolyMarketTicker(
                                     symbol=yes_token_id,

@@ -13,13 +13,13 @@ the Coinjure framework. It shows how to:
 import asyncio
 from decimal import Decimal
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.data.order_book import Level, OrderBook
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import NoRiskManager
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import TradeSide
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 from coinjure.events import (
     Event,
     NewsEvent,

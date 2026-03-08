@@ -1,11 +1,11 @@
-from .agent_strategy import AgentStrategy
+from .agent import AgentStrategy
 from .strategy import Strategy, StrategyContext, StrategyDecision
-from .test_strategy import TestStrategy
+from .demo import DemoStrategy
 
 __all__ = [
     'Strategy',
     'StrategyContext',
     'StrategyDecision',
     'AgentStrategy',
-    'TestStrategy',
+    'DemoStrategy',
 ]

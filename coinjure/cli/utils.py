@@ -9,9 +9,9 @@ from pathlib import Path
 
 import click
 
-from coinjure.cli.control import SOCKET_PATH, ControlServer
+from coinjure.engine.control import SOCKET_PATH, ControlServer
 from coinjure.cli.monitor import TradingMonitor
-from coinjure.engine.trading_engine import TradingEngine
+from coinjure.engine.engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 

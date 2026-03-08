@@ -7,11 +7,11 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from coinjure.data.data_manager import DataManager
-from coinjure.engine.trader.position_manager import PositionManager
-from coinjure.engine.trader.risk_manager import RiskManager
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import (
+from coinjure.data.manager import DataManager
+from coinjure.trading.position import PositionManager
+from coinjure.trading.risk import RiskManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
@@ -263,11 +263,7 @@ class KalshiTrader(Trader):
             action = 'buy' if side == TradeSide.BUY else 'sell'
 
             # Determine Kalshi API side based on ticker
-            kalshi_side = (
-                ticker.side
-                if isinstance(ticker, KalshiTicker)
-                else 'yes'
-            )
+            kalshi_side = ticker.side if isinstance(ticker, KalshiTicker) else 'yes'
 
             response = await self._submit_order(
                 action=action,

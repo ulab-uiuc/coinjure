@@ -13,7 +13,7 @@ and analyze trading performance. It shows how to:
 from decimal import Decimal
 
 from coinjure.engine.performance import PerformanceAnalyzer
-from coinjure.engine.trader.types import Trade, TradeSide
+from coinjure.trading.types import Trade, TradeSide
 from coinjure.ticker import PolyMarketTicker
 
 

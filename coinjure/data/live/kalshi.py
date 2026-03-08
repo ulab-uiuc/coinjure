@@ -8,9 +8,54 @@ from typing import Any
 from coinjure.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import KalshiTicker
 
-from ..data_source import DataSource
+from ..source import DataSource
 
 logger = logging.getLogger(__name__)
+
+KALSHI_API_URL = 'https://api.elections.kalshi.com/trade-api/v2'
+
+
+async def fetch_kalshi_price_history(
+    series_ticker: str,
+    market_ticker: str,
+    period_interval: int = 60,
+) -> list[dict[str, Any]]:
+    """Fetch candlestick price history from Kalshi API.
+
+    Returns a list of ``{t, p}`` dicts (same format as Polymarket's
+    ``fetch_price_history``) for interoperability with the backtester.
+    Uses the close price from each candlestick.
+    """
+    from kalshi_python import Configuration
+    from kalshi_python.api.markets_api import MarketsApi
+    from kalshi_python.api_client import ApiClient
+
+    config = Configuration(host=KALSHI_API_URL)
+    key_id = os.environ.get('KALSHI_API_KEY_ID')
+    pk_path = os.environ.get('KALSHI_PRIVATE_KEY_PATH')
+
+    api_client = ApiClient(configuration=config)
+    if key_id and pk_path:
+        api_client.set_kalshi_auth(key_id, pk_path)
+
+    markets_api = MarketsApi(api_client)
+
+    response = await asyncio.to_thread(
+        lambda: markets_api.get_market_candlesticks(
+            ticker=series_ticker,
+            market_ticker=market_ticker,
+            period_interval=period_interval,
+        )
+    )
+
+    result: list[dict[str, Any]] = []
+    for candle in response.candlesticks or []:
+        close_price = getattr(candle, 'close', None)
+        ts = getattr(candle, 'end_ts', None)
+        if close_price is not None and ts is not None:
+            # Kalshi prices are in cents (0–100); normalise to 0–1
+            result.append({'t': ts, 'p': close_price / 100})
+    return result
 
 
 async def _retry_with_backoff(

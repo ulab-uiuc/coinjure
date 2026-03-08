@@ -25,8 +25,8 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import TradeSide
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy

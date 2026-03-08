@@ -11,7 +11,6 @@ import click
 
 from coinjure.cli.engine_commands import engine
 from coinjure.cli.market_commands import market
-from coinjure.cli.strategy_commands import strategy
 
 
 @click.group()
@@ -22,7 +21,6 @@ def cli() -> None:
 
 
 cli.add_command(market)
-cli.add_command(strategy)
 cli.add_command(engine)
 
 

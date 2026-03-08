@@ -9,7 +9,6 @@ Use only when the user explicitly requests live trading and paper validation is 
 
 ## Prerequisites
 
-- `strategy validate` passed
 - Backtest results acceptable
 - Paper run behavior stable
 - User explicitly approved
@@ -18,12 +17,12 @@ Use only when the user explicitly requests live trading and paper validation is 
 
 ```bash
 # Polymarket
-coinjure engine run --exchange polymarket --mode live \
+coinjure engine live-run --exchange polymarket \
   --wallet-private-key "$POLYMARKET_PRIVATE_KEY" \
   --strategy-ref <strategy_ref> --json
 
 # Kalshi
-coinjure engine run --exchange kalshi --mode live \
+coinjure engine live-run --exchange kalshi \
   --kalshi-api-key-id "$KALSHI_API_KEY_ID" \
   --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH" \
   --strategy-ref <strategy_ref> --json

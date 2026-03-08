@@ -14,7 +14,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from coinjure.data.data_source import DataSource
+from coinjure.data.source import DataSource
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
 
@@ -126,7 +126,6 @@ class HubDataSource(DataSource):
                 token_id=ticker_data.get('token_id', ''),
                 market_id=ticker_data.get('market_id', ''),
                 event_id=ticker_data.get('event_id', ''),
-
                 side=ticker_data.get('side', 'yes'),
             )
         elif ticker_type == 'kalshi':
