@@ -104,3 +104,62 @@ def test_strategy_entry_relation_id_default():
 
     entry = StrategyEntry(strategy_id='x', strategy_ref='m:C')
     assert entry.relation_id is None
+
+
+def test_build_strategy_ref_for_relation_same_event():
+    from coinjure.market.relations import MarketRelation
+    from coinjure.strategy.builtin import build_strategy_ref_for_relation
+
+    rel = MarketRelation(
+        relation_id='r1',
+        spread_type='same_event',
+        market_a={'id': 'poly-123', 'platform': 'polymarket', 'token_ids': ['0xabc']},
+        market_b={'id': 'kalshi-456', 'platform': 'kalshi', 'ticker': 'K-TICK'},
+    )
+    ref, kwargs = build_strategy_ref_for_relation(rel)
+    assert ref == 'coinjure.strategy.builtin.direct_arb_strategy:DirectArbStrategy'
+    assert kwargs['poly_market_id'] == 'poly-123'
+    assert kwargs['poly_token_id'] == '0xabc'
+    assert kwargs['kalshi_ticker'] == 'K-TICK'
+
+
+def test_build_strategy_ref_for_relation_complementary():
+    from coinjure.market.relations import MarketRelation
+    from coinjure.strategy.builtin import build_strategy_ref_for_relation
+
+    rel = MarketRelation(
+        relation_id='r2',
+        spread_type='complementary',
+        market_a={'id': 'a', 'event_id': 'evt-1'},
+        market_b={'id': 'b'},
+    )
+    ref, kwargs = build_strategy_ref_for_relation(rel)
+    assert 'EventSumArbStrategy' in ref
+    assert kwargs['event_id'] == 'evt-1'
+
+
+def test_build_strategy_ref_for_relation_generic():
+    from coinjure.market.relations import MarketRelation
+    from coinjure.strategy.builtin import build_strategy_ref_for_relation
+
+    for spread_type in (
+        'implication',
+        'exclusivity',
+        'correlated',
+        'structural',
+        'conditional',
+        'temporal',
+    ):
+        rel = MarketRelation(relation_id=f'r-{spread_type}', spread_type=spread_type)
+        ref, kwargs = build_strategy_ref_for_relation(rel)
+        assert ref  # non-empty strategy ref
+        assert kwargs.get('relation_id') == f'r-{spread_type}'
+
+
+def test_build_strategy_ref_for_relation_unknown():
+    from coinjure.market.relations import MarketRelation
+    from coinjure.strategy.builtin import build_strategy_ref_for_relation
+
+    rel = MarketRelation(relation_id='r-bad', spread_type='unknown_type')
+    ref, kwargs = build_strategy_ref_for_relation(rel)
+    assert ref is None
