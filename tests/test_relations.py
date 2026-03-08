@@ -143,8 +143,8 @@ class TestRelationStore:
 class TestCorrelationAwareRisk:
     def test_init(self):
         from coinjure.data.manager import DataManager
-        from coinjure.engine.trader.position_manager import PositionManager
-        from coinjure.engine.trader.risk_manager import CorrelationAwareRiskManager
+        from coinjure.trading.position import PositionManager
+        from coinjure.trading.risk import CorrelationAwareRiskManager
 
         pm = PositionManager()
         md = DataManager()
@@ -157,8 +157,8 @@ class TestCorrelationAwareRisk:
 
     def test_set_correlation(self):
         from coinjure.data.manager import DataManager
-        from coinjure.engine.trader.position_manager import PositionManager
-        from coinjure.engine.trader.risk_manager import CorrelationAwareRiskManager
+        from coinjure.trading.position import PositionManager
+        from coinjure.trading.risk import CorrelationAwareRiskManager
 
         pm = PositionManager()
         md = DataManager()

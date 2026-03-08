@@ -5,12 +5,10 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from coinjure.data.manager import DataManager
-from coinjure.engine.trader.position_manager import PositionManager
-from coinjure.engine.trader.risk_manager import RiskManager
-from coinjure.ticker import Ticker
-
-from .trader import Trader
-from .types import (
+from coinjure.trading.position import PositionManager
+from coinjure.trading.risk import RiskManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
@@ -18,6 +16,7 @@ from .types import (
     Trade,
     TradeSide,
 )
+from coinjure.ticker import Ticker
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter

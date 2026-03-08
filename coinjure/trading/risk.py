@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 
 from coinjure.data.manager import DataManager
-from coinjure.engine.trader.position_manager import PositionManager
-from coinjure.engine.trader.types import TradeSide
+from coinjure.trading.position import PositionManager
+from coinjure.trading.types import TradeSide
 from coinjure.ticker import CashTicker, Ticker
 
 logger = logging.getLogger(__name__)

@@ -58,7 +58,7 @@ from coinjure.data.backtest.historical_data_source import HistoricalDataSource
 from coinjure.data.market_data_manager import MarketDataManager
 from coinjure.position.position_manager import Position, PositionManager
 from coinjure.risk.risk_manager import NoRiskManager
-from coinjure.strategy.demo_strategy import TestStrategy
+from coinjure.strategy.demo import DemoStrategy
 from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
 from coinjure.trader.paper_trader import PaperTrader
 

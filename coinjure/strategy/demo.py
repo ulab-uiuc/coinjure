@@ -1,13 +1,13 @@
 from decimal import Decimal
 
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import TradeSide
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 
 from .strategy import Strategy
 
 
-class TestStrategy(Strategy):
+class DemoStrategy(Strategy):
     name = 'test'
     version = '0.1.0'
     author = 'coinjure'

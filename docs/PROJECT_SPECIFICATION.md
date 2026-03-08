@@ -71,8 +71,8 @@ qfj/
 │   │   └── trading_engine.py    # Trading engine (event loop and driver)
 │   ├── strategy/                # Strategy layer
 │   │   ├── strategy.py         # Strategy abstract base class
-│   │   ├── agent_strategy.py   # Agent strategy (LLM/tool-driven)
-│   │   └── demo_strategy.py    # Demo strategy
+│   │   ├── agent.py            # Agent strategy (LLM/tool-driven)
+│   │   └── demo.py             # Demo strategy
 │   ├── trader/                  # Trade execution layer
 │   │   ├── trader.py           # Trader abstract base class
 │   │   ├── paper_trader.py     # Paper trading (simulation)
@@ -205,7 +205,7 @@ import asyncio
 from decimal import Decimal
 from coinjure.data.live.polymarket_data_source import LiveRSSNewsDataSource
 from coinjure.live.live_trader import run_live_paper_trading
-from coinjure.strategy.demo_strategy import TestStrategy
+from coinjure.strategy.demo import DemoStrategy
 
 asyncio.run(run_live_paper_trading(
     data_source=LiveRSSNewsDataSource(polling_interval=60.0),

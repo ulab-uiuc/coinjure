@@ -16,9 +16,9 @@ from typing import Any
 
 from coinjure.data.manager import DataManager
 from coinjure.data.source import DataSource
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import NoRiskManager
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
 from coinjure.engine.engine import TradingEngine
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.market.relations import MarketRelation

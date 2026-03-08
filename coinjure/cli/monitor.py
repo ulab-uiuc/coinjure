@@ -14,9 +14,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from coinjure.engine.trader.position_manager import PositionManager
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import OrderStatus
+from coinjure.trading.position import PositionManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import OrderStatus
 from coinjure.ticker import CashTicker
 
 
@@ -718,7 +718,7 @@ def monitor(socket: str | None) -> None:
     """
     from pathlib import Path
 
-    from coinjure.cli.control import SOCKET_PATH
+    from coinjure.engine.control import SOCKET_PATH
     from coinjure.cli.textual_monitor import SocketTradingMonitorApp
 
     sock = Path(socket) if socket else SOCKET_PATH

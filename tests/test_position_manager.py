@@ -4,8 +4,8 @@ import pytest
 
 from coinjure.data.manager import DataManager
 from coinjure.data.order_book import Level, OrderBook
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.types import Trade, TradeSide
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.types import Trade, TradeSide
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 

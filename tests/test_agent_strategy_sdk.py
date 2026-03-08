@@ -5,12 +5,12 @@ from decimal import Decimal
 import pytest
 
 from coinjure.data.manager import DataManager
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import NoRiskManager
-from coinjure.engine.trader.trader import Trader
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
+from coinjure.trading.trader import Trader
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.strategy.agent_strategy import AgentStrategy
+from coinjure.strategy.agent import AgentStrategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
@@ -87,7 +87,7 @@ def paper_trader(test_ticker: PolyMarketTicker) -> PaperTrader:
 
 def test_sdk_available_handles_missing_package(monkeypatch) -> None:
     monkeypatch.setattr(
-        'coinjure.strategy.agent_strategy._import_agents_sdk',
+        'coinjure.strategy.agent._import_agents_sdk',
         lambda: (_ for _ in ()).throw(RuntimeError('missing sdk')),
     )
     assert DummyOpenAIAgentStrategy.sdk_available() is False
@@ -123,7 +123,7 @@ async def test_agent_strategy_runs_through_openai_sdk_adapter(
         return fn
 
     monkeypatch.setattr(
-        'coinjure.strategy.agent_strategy._import_agents_sdk',
+        'coinjure.strategy.agent._import_agents_sdk',
         lambda: (FakeAgent, FakeRunner, fake_function_tool),
     )
 

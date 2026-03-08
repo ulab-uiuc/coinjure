@@ -20,7 +20,7 @@ from typing import Any
 
 import click
 
-from coinjure.cli.control import SOCKET_DIR, SOCKET_PATH, run_command
+from coinjure.engine.control import SOCKET_DIR, SOCKET_PATH, run_command
 from coinjure.cli.utils import _emit
 from coinjure.data.source import build_market_source as _domain_build_market_source
 from coinjure.engine.registry import REGISTRY_PATH, StrategyEntry, StrategyRegistry

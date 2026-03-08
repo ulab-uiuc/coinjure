@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from coinjure.engine.trader.alerter import Alerter, CompositeAlerter, LogAlerter
-from coinjure.engine.trader.types import OrderFailureReason, Trade, TradeSide
+from coinjure.trading.types import OrderFailureReason, Trade, TradeSide
 from coinjure.ticker import PolyMarketTicker
 
 # ---------------------------------------------------------------------------

@@ -61,7 +61,7 @@ def test_paper_and_live_commands_invokable(monkeypatch):
             '--duration',
             '1',
             '--strategy-ref',
-            'coinjure.strategy.demo_strategy:TestStrategy',
+            'coinjure.strategy.demo:DemoStrategy',
         ],
     )
     assert paper_res.exit_code == 0
@@ -79,7 +79,7 @@ def test_paper_and_live_commands_invokable(monkeypatch):
             '--duration',
             '1',
             '--strategy-ref',
-            'coinjure.strategy.demo_strategy:TestStrategy',
+            'coinjure.strategy.demo:DemoStrategy',
         ],
         input='y\n',
     )

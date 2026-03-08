@@ -5,10 +5,10 @@ import pytest
 from coinjure.data.manager import DataManager
 from coinjure.data.source import DataSource
 from coinjure.data.order_book import Level, OrderBook
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import NoRiskManager
-from coinjure.engine.trader.trader import Trader
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
+from coinjure.trading.trader import Trader
 from coinjure.engine.engine import TradingEngine
 from coinjure.events import (
     Event,
@@ -339,8 +339,8 @@ class TestTradingEngineWithRealStrategy:
         test_ticker: PolyMarketTicker,
         market_data: DataManager,
     ):
-        """Test engine with the actual TestStrategy."""
-        from coinjure.strategy.demo_strategy import TestStrategy
+        """Test engine with the actual DemoStrategy."""
+        from coinjure.strategy.demo import DemoStrategy
 
         # Create price change events that trigger the strategy
         events = [
@@ -351,7 +351,7 @@ class TestTradingEngineWithRealStrategy:
         ]
 
         data_source = MockDataSource(events)
-        strategy = TestStrategy()
+        strategy = DemoStrategy()
 
         engine = TradingEngine(
             data_source=data_source,

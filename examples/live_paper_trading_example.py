@@ -16,9 +16,9 @@ from decimal import Decimal
 from coinjure.data.manager import DataManager
 from coinjure.data.live.polymarket import LiveRSSNewsDataSource
 from coinjure.engine.runner import run_live_paper_trading
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import ConservativeRiskManager
-from coinjure.strategy.demo_strategy import TestStrategy
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import ConservativeRiskManager
+from coinjure.strategy.demo import DemoStrategy
 from coinjure.ticker import CashTicker
 
 
@@ -42,7 +42,7 @@ async def run_rss_paper_trading():
     )
 
     # Create strategy
-    strategy = TestStrategy()
+    strategy = DemoStrategy()
 
     print('\nConfiguration:')
     print(f'  Initial Capital: ${initial_capital:,.2f}')
@@ -97,7 +97,7 @@ async def run_paper_trading_with_risk_management():
         max_articles_per_poll=3,
     )
 
-    strategy = TestStrategy()
+    strategy = DemoStrategy()
 
     print('\nRisk Management Settings:')
     print(f'  Max Trade Size: ${risk_manager.max_single_trade_size:,.2f}')

@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING
 
 from coinjure.data.source import DataSource
 from coinjure.engine.performance import PerformanceAnalyzer
-from coinjure.engine.trader.risk_manager import StandardRiskManager
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import OrderStatus
+from coinjure.trading.risk import StandardRiskManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import OrderStatus
 from coinjure.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker

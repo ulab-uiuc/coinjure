@@ -103,8 +103,8 @@ module = [
     "coinjure.data.manager",
     "coinjure.data.live.polymarket",
     "coinjure.data.live.kalshi",
-    "coinjure.engine.trader.kalshi_trader",
-    "coinjure.engine.trader.paper_trader",
+    "coinjure.engine.trader.kalshi",
+    "coinjure.engine.trader.paper",
     "coinjure.engine.engine",
     "coinjure.engine.backtester",
 ]

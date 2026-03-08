@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from coinjure.data.manager import DataPoint
-from coinjure.engine.trader.trader import Trader
+from coinjure.trading.trader import Trader
 from coinjure.events import Event
 from coinjure.ticker import CashTicker, Ticker
 
