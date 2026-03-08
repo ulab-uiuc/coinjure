@@ -9,8 +9,8 @@ from pathlib import Path
 
 import click
 
-from coinjure.engine.control import SOCKET_PATH, ControlServer
 from coinjure.cli.monitor import TradingMonitor
+from coinjure.engine.control import ControlServer, default_engine_socket_path
 from coinjure.engine.engine import TradingEngine
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class MonitoredTradingEngine:
         self.exchange_name = exchange_name
         self.monitor: TradingMonitor | None = None  # used by display_snapshot()
         self.control_server: ControlServer = ControlServer(
-            engine, socket_path=socket_path or SOCKET_PATH
+            engine, socket_path=socket_path or default_engine_socket_path()
         )
 
     async def start(self) -> None:
@@ -113,7 +113,7 @@ def add_monitoring_to_engine(
         watch: Enable the interactive Textual monitor.
         refresh_rate: UI refresh interval hint (seconds).
         exchange_name: Exchange name shown in the monitor header.
-        socket_path: Unix socket path for the control server (default: ~/.coinjure/engine.sock).
+        socket_path: Unix socket path for the control server (default: ~/.coinjure/engine-{pid}.sock).
 
     Returns:
         A :class:`MonitoredTradingEngine` wrapping the original engine.
