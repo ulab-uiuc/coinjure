@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from coinjure.market.relations import MarketRelation
 from coinjure.strategy.builtin.coint_spread_strategy import CointSpreadStrategy
 from coinjure.strategy.builtin.conditional_arb_strategy import ConditionalArbStrategy
 from coinjure.strategy.builtin.direct_arb_strategy import DirectArbStrategy
@@ -23,6 +26,45 @@ STRATEGY_BY_RELATION = {
     'temporal': LeadLagStrategy,
 }
 
+
+def build_strategy_ref_for_relation(
+    relation: MarketRelation,
+    extra_kwargs: dict[str, Any] | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Build (strategy_ref, strategy_kwargs) for a relation.
+
+    Returns (None, {}) if no strategy maps to the relation's spread_type.
+    """
+    strategy_cls = STRATEGY_BY_RELATION.get(relation.spread_type)
+    if strategy_cls is None:
+        return None, {}
+
+    kwargs: dict[str, Any] = dict(extra_kwargs or {})
+    spread_type = relation.spread_type
+
+    if spread_type == 'same_event':
+        plat_a = str(relation.market_a.get('platform', 'polymarket')).lower()
+        if plat_a == 'kalshi':
+            poly_m, kalshi_m, poly_leg = relation.market_b, relation.market_a, 'b'
+        else:
+            poly_m, kalshi_m, poly_leg = relation.market_a, relation.market_b, 'a'
+        kwargs.setdefault('poly_market_id', str(poly_m.get('id', '')))
+        kwargs.setdefault('poly_token_id', relation.get_token_id(poly_leg))
+        kwargs.setdefault(
+            'kalshi_ticker',
+            str(kalshi_m.get('ticker', kalshi_m.get('id', ''))),
+        )
+    elif spread_type == 'complementary':
+        kwargs.setdefault('event_id', str(relation.market_a.get('event_id', '')))
+    else:
+        kwargs.setdefault('relation_id', relation.relation_id)
+
+    module = strategy_cls.__module__
+    name = strategy_cls.__name__
+    ref = f'{module}:{name}'
+    return ref, kwargs
+
+
 __all__ = [
     'DirectArbStrategy',
     'EventSumArbStrategy',
@@ -33,4 +75,5 @@ __all__ = [
     'ConditionalArbStrategy',
     'StructuralArbStrategy',
     'STRATEGY_BY_RELATION',
+    'build_strategy_ref_for_relation',
 ]
