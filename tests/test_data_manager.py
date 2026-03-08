@@ -256,53 +256,89 @@ class TestDataManager:
         ]
 
 
-class TestNoSideBootstrap:
-    """Tests for No-side orderbook bootstrap from PriceChangeEvent."""
+class TestFindComplement:
+    """Tests for DataManager.find_complement()."""
 
-    def test_no_orderbook_bootstrapped_on_first_yes_event(
-        self, market_data: DataManager
-    ):
+    def test_find_complement_polymarket(self, market_data: DataManager):
         yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E', token_side='YES',
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            market_id='M',
+            event_id='E',
         )
         no = PolyMarketTicker(
-            symbol='NO', name='T', token_id='NO', market_id='M', event_id='E', token_side='NO',
+            symbol='NO',
+            name='T',
+            token_id='NO',
+            market_id='M',
+            event_id='E',
+            side='no',
         )
-        # Pre-register NO ticker so complement lookup works
-        market_data._register_ticker(no)
-
-        event = PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
-        market_data.process_price_change_event(event)
-
-        # Complement orderbook should exist with derived prices
-        no_bid = market_data.get_best_bid(no)
-        no_ask = market_data.get_best_ask(no)
-        assert no_bid is not None
-        assert no_ask is not None
-        assert no_bid.price == Decimal('0.395')  # 1 - 0.60 - 0.005
-        assert no_ask.price == Decimal('0.405')  # 1 - 0.60 + 0.005
-
-    def test_no_orderbook_not_overwritten_by_second_yes_event(
-        self, market_data: DataManager
-    ):
-        yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E', token_side='YES',
-        )
-        no = PolyMarketTicker(
-            symbol='NO', name='T', token_id='NO', market_id='M', event_id='E', token_side='NO',
-        )
-        # Pre-register NO ticker so complement lookup works
-        market_data._register_ticker(no)
-
-        # First Yes event bootstraps No OB
+        # Register both sides by processing events
         market_data.process_price_change_event(
             PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
         )
-        # Directly update No OB (simulating a No PriceChangeEvent)
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=no, price=Decimal('0.40'), timestamp='t1')
+        )
+
+        assert market_data.find_complement(yes) == no
+        assert market_data.find_complement(no) == yes
+
+    def test_find_complement_kalshi(self, market_data: DataManager):
+        from coinjure.ticker import KalshiTicker
+
+        yes = KalshiTicker(symbol='MKT', name='T', market_ticker='MKT-T1')
+        no = KalshiTicker(symbol='MKT_NO', name='T', market_ticker='MKT-T1', side='no')
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
+        )
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=no, price=Decimal('0.40'), timestamp='t1')
+        )
+
+        assert market_data.find_complement(yes) == no
+        assert market_data.find_complement(no) == yes
+
+    def test_find_complement_returns_none_when_missing(self, market_data: DataManager):
+        yes = PolyMarketTicker(
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            market_id='M',
+            event_id='E',
+        )
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
+        )
+        # No complement registered
+        assert market_data.find_complement(yes) is None
+
+    def test_no_side_independent_orderbook(self, market_data: DataManager):
+        """YES and NO sides maintain independent orderbooks."""
+        yes = PolyMarketTicker(
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            market_id='M',
+            event_id='E',
+        )
+        no = PolyMarketTicker(
+            symbol='NO',
+            name='T',
+            token_id='NO',
+            market_id='M',
+            event_id='E',
+            side='no',
+        )
+        market_data.process_price_change_event(
+            PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
+        )
         market_data.process_price_change_event(
             PriceChangeEvent(ticker=no, price=Decimal('0.30'), timestamp='t1')
         )
-        # Second Yes event should NOT overwrite No OB
+        # Update YES — should NOT affect NO orderbook
         market_data.process_price_change_event(
             PriceChangeEvent(ticker=yes, price=Decimal('0.80'), timestamp='t2')
         )

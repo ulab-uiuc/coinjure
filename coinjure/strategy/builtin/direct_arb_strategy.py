@@ -94,6 +94,13 @@ class DirectArbStrategy(Strategy):
 
         self._last_arb_time: float = 0.0
 
+    def watch_tokens(self) -> list[str]:
+        """Return CLOB token IDs so the data source prioritizes these markets."""
+        tokens = []
+        if self.poly_token_id:
+            tokens.append(self.poly_token_id)
+        return tokens
+
     async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
         if self.is_paused():
             return
@@ -223,7 +230,7 @@ class DirectArbStrategy(Strategy):
             logger.exception('ARB leg1 failed (buy Poly YES)')
 
         # Leg 2: Buy Kalshi NO
-        kalshi_no = self.market_data.get_complement_ticker(kalshi_ticker)
+        kalshi_no = trader.market_data.find_complement(kalshi_ticker)
         if kalshi_no is not None and executed:
             no_price = Decimal('1') - kalshi_yes
             try:
@@ -285,7 +292,7 @@ class DirectArbStrategy(Strategy):
             logger.exception('ARB leg1 failed (buy Kalshi YES)')
 
         # Leg 2: Buy Poly NO
-        poly_no = self.market_data.get_complement_ticker(poly_ticker)
+        poly_no = trader.market_data.find_complement(poly_ticker)
         if poly_no is not None and executed:
             no_price = Decimal('1') - poly_yes
             try:

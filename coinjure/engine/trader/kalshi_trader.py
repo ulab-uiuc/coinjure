@@ -263,11 +263,7 @@ class KalshiTrader(Trader):
             action = 'buy' if side == TradeSide.BUY else 'sell'
 
             # Determine Kalshi API side based on ticker
-            kalshi_side = (
-                'no'
-                if isinstance(ticker, KalshiTicker) and ticker.token_side == 'NO'
-                else 'yes'
-            )
+            kalshi_side = ticker.side if isinstance(ticker, KalshiTicker) else 'yes'
 
             response = await self._submit_order(
                 action=action,

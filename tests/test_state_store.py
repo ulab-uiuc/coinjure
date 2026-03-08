@@ -33,7 +33,6 @@ def poly_ticker():
         token_id='abc123',
         market_id='mkt1',
         event_id='evt1',
-        token_side='YES',
     )
 
 
@@ -100,13 +99,13 @@ def test_roundtrip_kalshi_ticker_no_side():
         market_ticker='MKT-T1',
         event_ticker='EVT-T1',
         series_ticker='SER-T1',
-        token_side='NO',
+        side='no',
     )
     d = serialize_ticker(no_ticker)
-    assert d['token_side'] == 'NO'
+    assert d['token_side'] == 'no'
     result = deserialize_ticker(d)
     assert result == no_ticker
-    assert result.token_side == 'NO'
+    assert result.side == 'no'
 
 
 def test_roundtrip_cashticker_polymarket_usdc():

@@ -27,7 +27,6 @@ def test_ticker() -> PolyMarketTicker:
         token_id='token123',
         market_id='market123',
         event_id='event123',
-        token_side='YES',
     )
 
 
@@ -36,6 +35,18 @@ def paper_trader(test_ticker: PolyMarketTicker) -> PaperTrader:
     market_data = DataManager()
     market_data.process_price_change_event(
         PriceChangeEvent(ticker=test_ticker, price=Decimal('0.52'), timestamp='t1')
+    )
+    # Register NO-side complement so resolve_trade_contract('TEST_TOKEN', 'no') works
+    test_no = PolyMarketTicker(
+        symbol='TEST_TOKEN_NO',
+        name='Test Market',
+        token_id='token123_no',
+        market_id='market123',
+        event_id='event123',
+        side='no',
+    )
+    market_data.process_price_change_event(
+        PriceChangeEvent(ticker=test_no, price=Decimal('0.48'), timestamp='t1b')
     )
     related = PolyMarketTicker(
         symbol='RELATED',

@@ -134,49 +134,20 @@ class TestKalshiTicker:
     def test_creation_defaults(self):
         ticker = KalshiTicker(symbol='MKT')
         assert ticker.symbol == 'MKT'
-        assert ticker.token_side == 'YES'
+        assert ticker.side == 'yes'
 
     def test_collateral(self):
         ticker = KalshiTicker(symbol='MKT')
         assert ticker.collateral == CashTicker.KALSHI_USD
 
-    def test_complement_via_data_manager(self):
-        from coinjure.data.manager import DataManager
-
-        dm = DataManager()
-        yes = KalshiTicker(symbol='MKT', name='Market', market_ticker='MKT-T1')
-        dm._register_ticker(yes)
-        no = dm.get_complement_ticker(yes)
-        assert no is not None
-        assert no.symbol == 'MKT_NO'
-        assert no.token_side == 'NO'
-        assert no.market_ticker == 'MKT-T1'
-        assert no.name == 'Market'
-
-    def test_complement_returns_none_for_no_side(self):
-        from coinjure.data.manager import DataManager
-
-        dm = DataManager()
-        no = KalshiTicker(symbol='MKT_NO', token_side='NO', market_ticker='MKT-T1')
-        dm._register_ticker(no)
-        assert dm.get_complement_ticker(no) is None
-
     def test_yes_no_not_equal(self):
-        from coinjure.data.manager import DataManager
-
-        dm = DataManager()
         yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
-        dm._register_ticker(yes)
-        no = dm.get_complement_ticker(yes)
+        no = KalshiTicker(symbol='MKT_NO', market_ticker='MKT-T1', side='no')
         assert yes != no
 
     def test_yes_no_different_hash(self):
-        from coinjure.data.manager import DataManager
-
-        dm = DataManager()
         yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
-        dm._register_ticker(yes)
-        no = dm.get_complement_ticker(yes)
+        no = KalshiTicker(symbol='MKT_NO', market_ticker='MKT-T1', side='no')
         assert hash(yes) != hash(no)
         # Both usable as dict keys simultaneously
         d = {yes: 'yes_val', no: 'no_val'}

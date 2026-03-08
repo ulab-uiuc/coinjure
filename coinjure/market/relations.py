@@ -125,13 +125,17 @@ class MarketRelation:
     )
     last_validated: str | None = None
     valid_until: str | None = None
-    status: str = 'active'  # active, backtest_passed, backtest_failed, deployed, retired
+    status: str = (
+        'active'  # active, backtest_passed, backtest_failed, deployed, retired
+    )
 
     # Backtest results (set by engine backtest)
     backtest_pnl: float | None = None
     backtest_trades: int | None = None
 
-    def set_backtest_result(self, passed: bool, pnl: float = 0.0, trades: int = 0) -> None:
+    def set_backtest_result(
+        self, passed: bool, pnl: float = 0.0, trades: int = 0
+    ) -> None:
         """Update lifecycle based on backtest outcome."""
         self.status = 'backtest_passed' if passed else 'backtest_failed'
         self.backtest_pnl = pnl
@@ -219,6 +223,23 @@ class RelationStore:
         data = [d for d in data if d.get('relation_id') != relation.relation_id]
         data.append(relation.to_dict())
         self._save(data)
+
+    def add_batch(self, relations: list[MarketRelation]) -> int:
+        """Add multiple relations in a single load/save cycle. Returns count added."""
+        if not relations:
+            return 0
+        data = self._load()
+        existing_ids = {d.get('relation_id') for d in data}
+        added = 0
+        for rel in relations:
+            if rel.relation_id in existing_ids:
+                # Replace existing (upsert, consistent with add())
+                data = [d for d in data if d.get('relation_id') != rel.relation_id]
+            else:
+                added += 1
+            data.append(rel.to_dict())
+        self._save(data)
+        return added
 
     def update(self, relation: MarketRelation) -> None:
         data = self._load()

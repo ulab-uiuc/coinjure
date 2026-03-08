@@ -292,9 +292,9 @@ class TradingEngine:
                         watch = getattr(self.data_source, 'watch_token', None)
                         if watch:
                             watch(order.ticker.token_id)
-                            comp = self.market_data.get_complement_ticker(order.ticker)
-                            if comp is not None:
-                                watch(getattr(comp, 'token_id', ''))
+                            complement = self.market_data.find_complement(order.ticker)
+                            if complement and hasattr(complement, 'token_id'):
+                                watch(complement.token_id)
                     elif order.side.value.upper() == 'SELL':
                         pos = self.trader.position_manager.get_position(order.ticker)
                         if pos is None or pos.quantity <= 0:

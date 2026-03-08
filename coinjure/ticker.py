@@ -26,7 +26,7 @@ class PolyMarketTicker(Ticker):
     token_id: str = ''
     market_id: str = ''
     event_id: str = ''
-    token_side: str = 'YES'
+    side: str = 'yes'  # 'yes' or 'no'
 
     @property
     def collateral(self) -> Ticker:
@@ -65,12 +65,11 @@ class KalshiTicker(Ticker):
     market_ticker: str = ''
     event_ticker: str = ''
     series_ticker: str = ''
-    token_side: str = 'YES'
+    side: str = 'yes'  # 'yes' or 'no'
 
     @property
     def collateral(self) -> Ticker:
         return CashTicker.KALSHI_USD
-
 
 
 CashTicker.KALSHI_USD = CashTicker(symbol='Kalshi_USD', name='Kalshi USD')

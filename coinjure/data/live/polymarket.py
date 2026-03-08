@@ -37,7 +37,11 @@ async def fetch_price_history(
         fidelity: Minutes per candle (1, 5, 60, 1440).
         start_ts: Optional Unix start timestamp.
     """
-    params: dict[str, Any] = {'market': token_id, 'interval': 'all', 'fidelity': fidelity}
+    params: dict[str, Any] = {
+        'market': token_id,
+        'interval': 'all',
+        'fidelity': fidelity,
+    }
     if start_ts is not None:
         params['startTs'] = start_ts
 
@@ -144,14 +148,13 @@ class LivePolyMarketDataSource(DataSource):
                     market_id = market.get('id', '')
                     token_ids = json.loads(market.get('clobTokenIds', '[]'))
                     for idx, token_id in enumerate(token_ids):
-                        token_side = 'YES' if idx == 0 else 'NO'
                         self._known_tickers[token_id] = PolyMarketTicker(
                             symbol=token_id,
                             name=market_title,
                             token_id=token_id,
                             market_id=market_id,
                             event_id=event_id,
-                            token_side=token_side,
+                            side='no' if idx == 1 else 'yes',
                         )
 
     async def _fetch_events(self) -> list[dict[str, Any]]:
@@ -201,7 +204,7 @@ class LivePolyMarketDataSource(DataSource):
         order_book: Any,
         market_id: str = '',
         event_id: str = '',
-        token_side: str = 'YES',
+        side: str = 'yes',
     ) -> list[OrderBookEvent]:
         events = []
 
@@ -215,7 +218,7 @@ class LivePolyMarketDataSource(DataSource):
             token_id=token_id,
             market_id=market_id,
             event_id=event_id,
-            token_side=token_side,
+            side=side,
         )
 
         # Only track tickers that have actual liquidity for refresh
@@ -312,9 +315,11 @@ class LivePolyMarketDataSource(DataSource):
                             market_id = market.get('id', '')
                             token_ids = json.loads(market.get('clobTokenIds', '[]'))
 
+                            # Convention: clobTokenIds[0] = YES, [1] = NO
+                            yes_token_id = token_ids[0] if len(token_ids) > 0 else ''
+
                             # Fetch order books for new events
                             for idx, token_id in enumerate(token_ids):
-                                token_side = 'YES' if idx == 0 else 'NO'
                                 order_book = await self._fetch_order_book(token_id)
                                 order_book_events = self._process_order_book_to_events(
                                     token_id,
@@ -322,7 +327,7 @@ class LivePolyMarketDataSource(DataSource):
                                     order_book,
                                     market_id=market_id,
                                     event_id=event_id,
-                                    token_side=token_side,
+                                    side='no' if idx == 1 else 'yes',
                                 )
                                 for ob_event in order_book_events:
                                     await self.event_queue.put(ob_event)
@@ -336,7 +341,6 @@ class LivePolyMarketDataSource(DataSource):
                                     token_id=yes_token_id,
                                     market_id=market_id,
                                     event_id=event_id,
-                                    token_side='YES',
                                 )
                                 news_content = f'{market_title}: {enriched_event.get("description", "")}'
                                 news_event = NewsEvent(
