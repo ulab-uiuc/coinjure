@@ -110,11 +110,25 @@ def _compute_mid_price(m: dict) -> float | None:
     return (b + a) / 2 if (b or a) else None
 
 
+def _has_liquidity(m: dict) -> bool:
+    """Check that a market has non-zero bid AND ask (not a zombie market)."""
+    bid = m.get('best_bid', '')
+    ask = m.get('best_ask', '')
+    try:
+        return float(bid) > 0 and float(ask) > 0 if bid and ask else False
+    except (ValueError, TypeError):
+        return False
+
+
 def _compute_current_arb(rel: MarketRelation) -> float:
     """Compute current constraint violation from snapshot bid/ask prices.
 
-    Returns 0.0 if no violation, prices unavailable, or non-structural type.
+    Returns 0.0 if no violation, prices unavailable, either leg has no
+    liquidity, or non-structural type.
     """
+    if not _has_liquidity(rel.market_a) or not _has_liquidity(rel.market_b):
+        return 0.0
+
     mid_a = _compute_mid_price(rel.market_a)
     mid_b = _compute_mid_price(rel.market_b)
     if mid_a is None or mid_b is None:

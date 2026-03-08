@@ -345,6 +345,9 @@ def market_discover(
     # ── Fetch markets ──────────────────────────────────────────────────
 
     async def _fetch_markets() -> tuple[list[dict], list[dict]]:
+        # Over-fetch to compensate for zombie filtering downstream
+        fetch_limit = limit * 2
+
         poly_markets: list[dict] = []
         kalshi_markets: list[dict] = []
         poly_seen: set[str] = set()
@@ -370,13 +373,13 @@ def market_discover(
             for q in query:
                 if exchange in ('polymarket', 'both'):
                     _merge_poly(await polymarket_search_markets(
-                        q, limit, with_rules=with_rules,
+                        q, fetch_limit, with_rules=with_rules,
                     ))
                 if exchange in ('kalshi', 'both'):
                     _merge_kalshi(
                         await kalshi_search_markets(
                             q,
-                            limit,
+                            fetch_limit,
                             kalshi_api_key_id,
                             kalshi_private_key_path,
                             with_rules=with_rules,
@@ -385,16 +388,16 @@ def market_discover(
             for t in tag:
                 if exchange in ('polymarket', 'both'):
                     _merge_poly(await polymarket_list_markets(
-                        limit, tag=t, with_rules=with_rules,
+                        fetch_limit, tag=t, with_rules=with_rules,
                     ))
         else:
             if exchange in ('polymarket', 'both'):
                 poly_markets = await polymarket_list_markets(
-                    limit, with_rules=with_rules,
+                    fetch_limit, with_rules=with_rules,
                 )
             if exchange in ('kalshi', 'both'):
                 kalshi_markets = await kalshi_list_markets(
-                    limit,
+                    fetch_limit,
                     kalshi_api_key_id,
                     kalshi_private_key_path,
                 )
@@ -408,6 +411,20 @@ def market_discover(
 
     if not poly_markets and not kalshi_markets:
         raise click.ClickException('No markets fetched. Check API keys or queries.')
+
+    # ── Filter zombie markets (no bid AND no ask) ─────────────────────
+
+    def _is_alive(m: dict) -> bool:
+        """Require both bid > 0 and ask > 0 — zombie markets have one or both missing."""
+        bid = m.get('best_bid') or m.get('yes_bid', '')
+        ask = m.get('best_ask') or m.get('yes_ask', '')
+        try:
+            return (float(bid) > 0 if bid else False) and (float(ask) > 0 if ask else False)
+        except (ValueError, TypeError):
+            return False
+
+    poly_markets = [m for m in poly_markets if _is_alive(m)][:limit]
+    kalshi_markets = [m for m in kalshi_markets if _is_alive(m)][:limit]
 
     # ── Annotate with existing relations ──────────────────────────────
 
