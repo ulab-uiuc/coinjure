@@ -104,28 +104,32 @@ def build_market_source(
 ) -> CompositeDataSource | DataSource:
     """Build a market data source for the given exchange.
 
-    - polymarket      -> LivePolyMarketDataSource
-    - kalshi          -> LiveKalshiDataSource
-    - cross_platform  -> CompositeDataSource([poly, kalshi])
+    - polymarket      -> CompositeDataSource([poly, rss_news])
+    - kalshi          -> CompositeDataSource([kalshi, rss_news])
+    - cross_platform  -> CompositeDataSource([poly, kalshi, rss_news])
 
     Raises :exc:`ValueError` for unsupported exchange values.
     """
     from coinjure.data.live.kalshi import LiveKalshiDataSource
-    from coinjure.data.live.polymarket import LivePolyMarketDataSource
+    from coinjure.data.live.polymarket import LivePolyMarketDataSource, LiveRSSNewsDataSource
+
+    rss = LiveRSSNewsDataSource()
 
     if exchange == 'polymarket':
-        return LivePolyMarketDataSource(
+        poly = LivePolyMarketDataSource(
             event_cache_file='events_cache.jsonl',
             polling_interval=60.0,
             orderbook_refresh_interval=10.0,
             reprocess_on_start=False,
         )
+        return CompositeDataSource([poly, rss])
     if exchange == 'kalshi':
-        return LiveKalshiDataSource(
+        kalshi = LiveKalshiDataSource(
             event_cache_file='kalshi_events_cache.jsonl',
             polling_interval=60.0,
             reprocess_on_start=False,
         )
+        return CompositeDataSource([kalshi, rss])
     if exchange == 'cross_platform':
         poly = LivePolyMarketDataSource(
             event_cache_file='events_cache.jsonl',
@@ -138,5 +142,5 @@ def build_market_source(
             polling_interval=60.0,
             reprocess_on_start=False,
         )
-        return CompositeDataSource([poly, kalshi])
+        return CompositeDataSource([poly, kalshi, rss])
     raise ValueError(f'Unsupported exchange: {exchange!r}')

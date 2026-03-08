@@ -205,7 +205,7 @@ class TradingEngine:
             self._activity_log.append(
                 (
                     now_str,
-                    f'Milestone: {self._event_count} events processed, {ob_count} order books',
+                    f'Collected {self._event_count} market data points ({ob_count} order books)',
                 )
             )
 
@@ -242,8 +242,10 @@ class TradingEngine:
                         'url': url,
                     }
                 )
+                _crawl_sources = {'polymarket', 'kalshi'}
+                _label = 'Crawl' if source.lower() in _crawl_sources else 'News'
                 self._activity_log.append(
-                    (now_str, f'News [{source[:15]}] "{headline[:55]}"')
+                    (now_str, f'{_label} [{source[:15]}] "{headline[:55]}"')
                 )
                 logger.info('NewsEvent: %s', headline)
 

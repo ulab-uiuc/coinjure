@@ -81,13 +81,19 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
                 # A leads B (or no lag)
                 self._leader_id = self._id_a
                 self._follower_id = self._id_b
+                self._leader_token = self._token_a
+                self._follower_token = self._token_b
             else:
                 # B leads A — swap roles
                 self._leader_id = self._id_b
                 self._follower_id = self._id_a
+                self._leader_token = self._token_b
+                self._follower_token = self._token_a
         else:
             self._leader_id = self._id_a
             self._follower_id = self._id_b
+            self._leader_token = self._token_a
+            self._follower_token = self._token_b
 
         # Price tracking
         self._leader_prices: deque[float] = deque(maxlen=warmup)
@@ -114,8 +120,8 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             or ticker.symbol
         )
 
-        is_leader = self._matches(tid, self._leader_id)
-        is_follower = self._matches(tid, self._follower_id)
+        is_leader = self._matches(tid, self._leader_id, self._leader_token)
+        is_follower = self._matches(tid, self._follower_id, self._follower_token)
 
         if is_leader:
             self._leader_price = event.price

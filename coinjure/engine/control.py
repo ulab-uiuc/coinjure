@@ -222,6 +222,8 @@ class ControlServer:
         trader = getattr(self.engine, 'trader', None)
         md = getattr(trader, 'market_data', None)
 
+        state['strategy_name'] = (strategy.name or '') if strategy is not None else ''
+
         # ── Stats ────────────────────────────────────────────────────
         orders_list = list(getattr(trader, 'orders', []))
         decision_stats = strategy.get_decision_stats() if strategy is not None else {}
