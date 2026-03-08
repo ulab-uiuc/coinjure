@@ -92,7 +92,7 @@ class ExclusivityArbStrategy(Strategy):
             return
 
         ticker = event.ticker
-        if ticker.symbol.endswith('_NO') or ticker.name.startswith('NO '):
+        if getattr(ticker, 'is_no_side', False):
             return
 
         tid = (
@@ -205,10 +205,7 @@ class ExclusivityArbStrategy(Strategy):
 
     def _find_ticker(self, trader: Trader, market_id: str, yes: bool = True):
         for ticker in trader.market_data.order_books:
-            is_no = (
-                ticker.symbol.endswith('_NO')
-                or ticker.name.startswith('NO ')
-            )
+            is_no = getattr(ticker, 'is_no_side', False)
             if yes and is_no:
                 continue
             if not yes and not is_no:

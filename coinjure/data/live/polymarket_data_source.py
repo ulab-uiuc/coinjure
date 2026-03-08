@@ -119,6 +119,7 @@ class LivePolyMarketDataSource(DataSource):
                             market_id=market_id,
                             event_id=event_id,
                             no_token_id=complement_id,
+                            is_no_side=(idx == 1),
                         )
 
     async def _fetch_events(self) -> list[dict[str, Any]]:
@@ -169,6 +170,7 @@ class LivePolyMarketDataSource(DataSource):
         market_id: str = '',
         event_id: str = '',
         no_token_id: str = '',
+        is_no_side: bool = False,
     ) -> list[OrderBookEvent]:
         events = []
 
@@ -183,6 +185,7 @@ class LivePolyMarketDataSource(DataSource):
             market_id=market_id,
             event_id=event_id,
             no_token_id=no_token_id,
+            is_no_side=is_no_side,
         )
 
         # Only track tickers that have actual liquidity for refresh
@@ -299,6 +302,7 @@ class LivePolyMarketDataSource(DataSource):
                                     market_id=market_id,
                                     event_id=event_id,
                                     no_token_id=complement_id,
+                                    is_no_side=(idx == 1),
                                 )
                                 for ob_event in order_book_events:
                                     await self.event_queue.put(ob_event)
