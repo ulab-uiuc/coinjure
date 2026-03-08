@@ -7,8 +7,8 @@ from decimal import Decimal
 import pytest
 
 from coinjure.engine import runner as live_trader
-from coinjure.engine.trader.position_manager import Position
-from coinjure.engine.trader.risk_manager import NoRiskManager
+from coinjure.trading.position import Position
+from coinjure.trading.risk import NoRiskManager
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 

@@ -15,7 +15,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from coinjure.engine.trader.types import OrderFailureReason, Trade
+from coinjure.trading.types import OrderFailureReason, Trade
 from coinjure.ticker import Ticker
 
 logger = logging.getLogger(__name__)

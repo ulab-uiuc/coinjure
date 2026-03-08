@@ -7,10 +7,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from coinjure.data.data_manager import DataManager
-from coinjure.engine.trader.position_manager import PositionManager
-from coinjure.engine.trader.risk_manager import RiskManager
-from coinjure.engine.trader.types import (
+from coinjure.data.manager import DataManager
+from coinjure.trading.position import PositionManager
+from coinjure.trading.risk import RiskManager
+from coinjure.trading.types import (
     Order,
     OrderFailureReason,
     PlaceOrderResult,

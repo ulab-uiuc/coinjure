@@ -7,7 +7,7 @@ from coinjure.engine.performance import (
     PerformanceAnalyzer,
     TradeStats,
 )
-from coinjure.engine.trader.types import Trade, TradeSide
+from coinjure.trading.types import Trade, TradeSide
 from coinjure.ticker import PolyMarketTicker
 
 

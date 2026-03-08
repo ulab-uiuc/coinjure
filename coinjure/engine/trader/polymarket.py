@@ -17,11 +17,11 @@ from py_clob_client.exceptions import PolyApiException
 from py_clob_client.order_builder.constants import BUY, SELL
 from py_order_utils.model import EOA
 
-from coinjure.data.data_manager import DataManager
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import RiskManager
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trader.types import (
+from coinjure.data.manager import DataManager
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import RiskManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import (
     Order,
     OrderFailureReason,
     OrderStatus,
@@ -314,8 +314,8 @@ if __name__ == '__main__':
     from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
     from py_order_utils.model import POLY_GNOSIS_SAFE
 
-    from coinjure.engine.trader.position_manager import Position
-    from coinjure.engine.trader.risk_manager import NoRiskManager
+    from coinjure.trading.position import Position
+    from coinjure.trading.risk import NoRiskManager
     from coinjure.ticker import CashTicker
 
     async def test_polymarket_trader():

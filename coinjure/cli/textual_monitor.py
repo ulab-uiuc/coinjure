@@ -24,8 +24,8 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DataTable, Footer, Header, Label, RichLog, Static
 
 if TYPE_CHECKING:
-    from coinjure.cli.control import ControlServer
-    from coinjure.engine.trading_engine import TradingEngine
+    from coinjure.engine.control import ControlServer
+    from coinjure.engine.engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 
@@ -954,7 +954,7 @@ class SocketTradingMonitorApp(App[None]):
     ]
 
     def __init__(self, socket_path: Path | None = None) -> None:
-        from coinjure.cli.control import SOCKET_PATH
+        from coinjure.engine.control import SOCKET_PATH
 
         super().__init__()
         self.socket_path = socket_path or SOCKET_PATH
@@ -999,7 +999,7 @@ class SocketTradingMonitorApp(App[None]):
 
     async def _poll_state(self) -> None:
         """Fetch state from the engine via socket and refresh all widgets."""
-        from coinjure.cli.control import send_command
+        from coinjure.engine.control import send_command
 
         try:
             state = await send_command('get_state', socket_path=self.socket_path)
@@ -1061,7 +1061,7 @@ class SocketTradingMonitorApp(App[None]):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle control-bar button clicks (same effect as coinjure trade CLI)."""
-        from coinjure.cli.control import send_command
+        from coinjure.engine.control import send_command
 
         btn_id = event.button.id
 
@@ -1111,7 +1111,7 @@ class SocketTradingMonitorApp(App[None]):
 
     async def action_e_stop(self) -> None:
         """s — keyboard emergency stop over socket (same two-step guard)."""
-        from coinjure.cli.control import send_command
+        from coinjure.engine.control import send_command
 
         if not self._stop_armed:
             self._stop_armed = True

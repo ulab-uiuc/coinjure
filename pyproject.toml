@@ -100,13 +100,12 @@ exclude = "(examples/|scripts/|tests/)"
 module = [
     "coinjure.events",
     "coinjure.engine.performance",
-    "coinjure.data.data_manager",
-    "coinjure.data.live.polymarket_data_source",
-    "coinjure.data.live.google_news_data_source",
-    "coinjure.data.live.kalshi_data_source",
-    "coinjure.engine.trader.kalshi_trader",
-    "coinjure.engine.trader.paper_trader",
-    "coinjure.engine.trading_engine",
+    "coinjure.data.manager",
+    "coinjure.data.live.polymarket",
+    "coinjure.data.live.kalshi",
+    "coinjure.engine.trader.kalshi",
+    "coinjure.engine.trader.paper",
+    "coinjure.engine.engine",
     "coinjure.engine.backtester",
 ]
 disable_error_code = ["assignment", "operator", "arg-type", "return-value", "attr-defined", "override", "var-annotated", "func-returns-value", "import-untyped", "misc"]
@@ -168,8 +167,8 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["S101"]
-"coinjure/data/live/polymarket_data_source.py" = ["C901"]
-"coinjure/cli/agent_commands.py" = ["C901"]
+"coinjure/data/live/polymarket.py" = ["C901"]
+"coinjure/cli/engine_commands.py" = ["C901"]
 "coinjure/cli/monitor.py" = ["C901"]
 "scripts/*" = ["C901"]
 

@@ -11,16 +11,16 @@ from coinjure.strategy.builtin.implication_arb_strategy import ImplicationArbStr
 from coinjure.strategy.builtin.lead_lag_strategy import LeadLagStrategy
 from coinjure.strategy.builtin.structural_arb_strategy import StructuralArbStrategy
 
-# Relation type → strategy class mapping
+# Relation type → default strategy class mapping
 STRATEGY_BY_RELATION = {
     'same_event': DirectArbStrategy,
     'complementary': EventSumArbStrategy,
     'implication': ImplicationArbStrategy,
     'exclusivity': ExclusivityArbStrategy,
-    'temporal': LeadLagStrategy,
-    'semantic': CointSpreadStrategy,
-    'conditional': ConditionalArbStrategy,
+    'correlated': CointSpreadStrategy,
     'structural': StructuralArbStrategy,
+    'conditional': ConditionalArbStrategy,
+    'temporal': LeadLagStrategy,
 }
 
 __all__ = [

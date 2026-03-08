@@ -126,3 +126,40 @@ class PriceChangeEvent(Event):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+def build_mock_events(ticker: Ticker, n_events: int) -> list[Event]:
+    """Generate a list of synthetic PriceChangeEvent / OrderBookEvent for dry runs."""
+    prices = [
+        Decimal('0.47'),
+        Decimal('0.49'),
+        Decimal('0.46'),
+        Decimal('0.51'),
+        Decimal('0.48'),
+    ]
+    events: list[Event] = []
+    for i in range(max(1, n_events)):
+        base = prices[i % len(prices)]
+        if i % 2 == 0:
+            events.append(
+                PriceChangeEvent(
+                    ticker=ticker,
+                    price=base,
+                    timestamp=None,
+                )
+            )
+            continue
+
+        side = 'bid' if i % 4 == 1 else 'ask'
+        price = base - Decimal('0.01') if side == 'bid' else base + Decimal('0.01')
+        size = Decimal('100') + Decimal(i * 10)
+        events.append(
+            OrderBookEvent(
+                ticker=ticker,
+                price=price,
+                size=size,
+                size_delta=Decimal('10'),
+                side=side,
+            )
+        )
+    return events

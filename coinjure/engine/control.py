@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from coinjure.engine.trading_engine import TradingEngine
+    from coinjure.engine.engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 

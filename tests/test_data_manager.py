@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from coinjure.data.data_manager import DataManager
+from coinjure.data.manager import DataManager
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.events import OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import PolyMarketTicker
@@ -261,10 +261,18 @@ class TestFindComplement:
 
     def test_find_complement_polymarket(self, market_data: DataManager):
         yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E',
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            market_id='M',
+            event_id='E',
         )
         no = PolyMarketTicker(
-            symbol='NO', name='T', token_id='NO', market_id='M', event_id='E',
+            symbol='NO',
+            name='T',
+            token_id='NO',
+            market_id='M',
+            event_id='E',
             side='no',
         )
         # Register both sides by processing events
@@ -295,7 +303,11 @@ class TestFindComplement:
 
     def test_find_complement_returns_none_when_missing(self, market_data: DataManager):
         yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E',
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            market_id='M',
+            event_id='E',
         )
         market_data.process_price_change_event(
             PriceChangeEvent(ticker=yes, price=Decimal('0.60'), timestamp='t0')
@@ -306,10 +318,18 @@ class TestFindComplement:
     def test_no_side_independent_orderbook(self, market_data: DataManager):
         """YES and NO sides maintain independent orderbooks."""
         yes = PolyMarketTicker(
-            symbol='YES', name='T', token_id='YES', market_id='M', event_id='E',
+            symbol='YES',
+            name='T',
+            token_id='YES',
+            market_id='M',
+            event_id='E',
         )
         no = PolyMarketTicker(
-            symbol='NO', name='T', token_id='NO', market_id='M', event_id='E',
+            symbol='NO',
+            name='T',
+            token_id='NO',
+            market_id='M',
+            event_id='E',
             side='no',
         )
         market_data.process_price_change_event(

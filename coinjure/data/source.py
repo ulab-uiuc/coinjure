@@ -97,3 +97,46 @@ class CompositeDataSource(DataSource):
             unwatch = getattr(source, 'unwatch_token', None)
             if unwatch:
                 unwatch(token_id)
+
+
+def build_market_source(
+    exchange: str,
+) -> CompositeDataSource | DataSource:
+    """Build a market data source for the given exchange.
+
+    - polymarket      -> LivePolyMarketDataSource
+    - kalshi          -> LiveKalshiDataSource
+    - cross_platform  -> CompositeDataSource([poly, kalshi])
+
+    Raises :exc:`ValueError` for unsupported exchange values.
+    """
+    from coinjure.data.live.kalshi import LiveKalshiDataSource
+    from coinjure.data.live.polymarket import LivePolyMarketDataSource
+
+    if exchange == 'polymarket':
+        return LivePolyMarketDataSource(
+            event_cache_file='events_cache.jsonl',
+            polling_interval=60.0,
+            orderbook_refresh_interval=10.0,
+            reprocess_on_start=False,
+        )
+    if exchange == 'kalshi':
+        return LiveKalshiDataSource(
+            event_cache_file='kalshi_events_cache.jsonl',
+            polling_interval=60.0,
+            reprocess_on_start=False,
+        )
+    if exchange == 'cross_platform':
+        poly = LivePolyMarketDataSource(
+            event_cache_file='events_cache.jsonl',
+            polling_interval=60.0,
+            orderbook_refresh_interval=10.0,
+            reprocess_on_start=False,
+        )
+        kalshi = LiveKalshiDataSource(
+            event_cache_file='kalshi_events_cache.jsonl',
+            polling_interval=60.0,
+            reprocess_on_start=False,
+        )
+        return CompositeDataSource([poly, kalshi])
+    raise ValueError(f'Unsupported exchange: {exchange!r}')

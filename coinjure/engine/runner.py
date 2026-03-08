@@ -6,21 +6,21 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from coinjure.data.data_manager import DataManager
-from coinjure.data.data_source import DataSource
-from coinjure.data.live.kalshi_data_source import LiveKalshiDataSource
-from coinjure.data.live.polymarket_data_source import LivePolyMarketDataSource
-from coinjure.engine.trader.kalshi_trader import KalshiTrader
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.polymarket_trader import PolymarketTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import (
+from coinjure.data.manager import DataManager
+from coinjure.data.source import DataSource
+from coinjure.data.live.kalshi import LiveKalshiDataSource
+from coinjure.data.live.polymarket import LivePolyMarketDataSource
+from coinjure.engine.trader.kalshi import KalshiTrader
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.engine.trader.polymarket import PolymarketTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import (
     NoRiskManager,
     RiskManager,
     StandardRiskManager,
 )
-from coinjure.engine.trader.trader import Trader
-from coinjure.engine.trading_engine import TradingEngine
+from coinjure.trading.trader import Trader
+from coinjure.engine.engine import TradingEngine
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker
 

@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from coinjure.cli.control import ControlServer
-from coinjure.data.data_manager import DataManager
+from coinjure.engine.control import ControlServer
+from coinjure.data.manager import DataManager
 from coinjure.data.order_book import Level, OrderBook
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import NoRiskManager
-from coinjure.engine.trader.types import OrderFailureReason, TradeSide
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
+from coinjure.trading.types import OrderFailureReason, TradeSide
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 

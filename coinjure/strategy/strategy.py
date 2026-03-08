@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
 
-from coinjure.data.data_manager import DataPoint
-from coinjure.engine.trader.trader import Trader
+from coinjure.data.manager import DataPoint
+from coinjure.trading.trader import Trader
 from coinjure.events import Event
 from coinjure.ticker import CashTicker, Ticker
 
@@ -378,3 +378,10 @@ class Strategy(ABC):
                 info['default'] = param.default
             schema[name] = info
         return schema
+
+
+class IdleStrategy(Strategy):
+    """No-op strategy: consume events without placing orders."""
+
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        return

@@ -15,12 +15,12 @@ import os
 from decimal import Decimal
 
 from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.data_manager import DataManager
-from coinjure.engine.trader.paper_trader import PaperTrader
-from coinjure.engine.trader.position_manager import Position, PositionManager
-from coinjure.engine.trader.risk_manager import NoRiskManager, StandardRiskManager
-from coinjure.engine.trading_engine import TradingEngine
-from coinjure.strategy.test_strategy import TestStrategy
+from coinjure.data.manager import DataManager
+from coinjure.engine.trader.paper import PaperTrader
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager, StandardRiskManager
+from coinjure.engine.engine import TradingEngine
+from coinjure.strategy.demo import DemoStrategy
 from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
@@ -87,7 +87,7 @@ async def run_basic_backtest():
     )
 
     # Set up strategy
-    strategy = TestStrategy()
+    strategy = DemoStrategy()
 
     # Create trading engine
     engine = TradingEngine(
@@ -185,7 +185,7 @@ async def run_backtest_with_risk_management():
         commission_rate=Decimal('0.01'),  # 1% commission
     )
 
-    strategy = TestStrategy()
+    strategy = DemoStrategy()
 
     engine = TradingEngine(
         data_source=data_source,

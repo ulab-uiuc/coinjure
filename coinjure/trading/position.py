@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from coinjure.data.data_manager import DataManager
-from coinjure.engine.trader.types import Trade, TradeSide
+from coinjure.data.manager import DataManager
+from coinjure.trading.types import Trade, TradeSide
 from coinjure.ticker import CashTicker, Ticker
 
 
