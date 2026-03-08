@@ -156,7 +156,8 @@ class MarketDataHub:
                 'token_id': ticker.token_id,
                 'market_id': ticker.market_id,
                 'event_id': ticker.event_id,
-                'no_token_id': ticker.no_token_id,
+
+                'side': ticker.side,
             }
             ticker_type = 'polymarket'
         elif isinstance(ticker, KalshiTicker):
@@ -166,7 +167,7 @@ class MarketDataHub:
                 'market_ticker': ticker.market_ticker,
                 'event_ticker': ticker.event_ticker,
                 'series_ticker': ticker.series_ticker,
-                'is_no_side': ticker.is_no_side,
+                'side': ticker.side,
             }
             ticker_type = 'kalshi'
         else:

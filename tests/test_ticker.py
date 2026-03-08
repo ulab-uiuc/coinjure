@@ -134,33 +134,20 @@ class TestKalshiTicker:
     def test_creation_defaults(self):
         ticker = KalshiTicker(symbol='MKT')
         assert ticker.symbol == 'MKT'
-        assert ticker.is_no_side is False
+        assert ticker.side == 'yes'
 
     def test_collateral(self):
         ticker = KalshiTicker(symbol='MKT')
         assert ticker.collateral == CashTicker.KALSHI_USD
 
-    def test_get_no_ticker(self):
-        yes = KalshiTicker(symbol='MKT', name='Market', market_ticker='MKT-T1')
-        no = yes.get_no_ticker()
-        assert no is not None
-        assert no.symbol == 'MKT_NO'
-        assert no.is_no_side is True
-        assert no.market_ticker == 'MKT-T1'
-        assert no.name == 'Market'
-
-    def test_get_no_ticker_returns_none_for_no_side(self):
-        no = KalshiTicker(symbol='MKT_NO', is_no_side=True)
-        assert no.get_no_ticker() is None
-
     def test_yes_no_not_equal(self):
         yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
-        no = yes.get_no_ticker()
+        no = KalshiTicker(symbol='MKT_NO', market_ticker='MKT-T1', side='no')
         assert yes != no
 
     def test_yes_no_different_hash(self):
         yes = KalshiTicker(symbol='MKT', market_ticker='MKT-T1')
-        no = yes.get_no_ticker()
+        no = KalshiTicker(symbol='MKT_NO', market_ticker='MKT-T1', side='no')
         assert hash(yes) != hash(no)
         # Both usable as dict keys simultaneously
         d = {yes: 'yes_val', no: 'no_val'}

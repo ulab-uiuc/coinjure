@@ -264,8 +264,8 @@ class KalshiTrader(Trader):
 
             # Determine Kalshi API side based on ticker
             kalshi_side = (
-                'no'
-                if isinstance(ticker, KalshiTicker) and ticker.is_no_side
+                ticker.side
+                if isinstance(ticker, KalshiTicker)
                 else 'yes'
             )
 

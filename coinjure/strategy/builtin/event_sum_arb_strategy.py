@@ -204,7 +204,7 @@ class EventSumArbStrategy(Strategy):
                 leg_price = ask_price
             else:
                 # BUY_NO: use the NO token if available, else skip this leg
-                no_ticker = ticker.get_no_ticker()
+                no_ticker = trader.market_data.find_complement(ticker)
                 if no_ticker is None:
                     logger.warning(
                         'EventSumArb: no NO ticker for market %s, skipping leg',
