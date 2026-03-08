@@ -26,13 +26,13 @@ from decimal import Decimal
 from coinjure.engine.trader.trader import Trader
 from coinjure.engine.trader.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
-from coinjure.market.relations import RelationStore
+from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
 
 logger = logging.getLogger(__name__)
 
 
-class CointSpreadStrategy(Strategy):
+class CointSpreadStrategy(RelationArbMixin, Strategy):
     """Cointegration-based mean reversion on stationary spreads.
 
     Parameters
@@ -75,10 +75,7 @@ class CointSpreadStrategy(Strategy):
         self._exit_mult = exit_mult
         self._warmup_size = warmup
 
-        self._relation = None
-        if relation_id:
-            store = RelationStore()
-            self._relation = store.get(relation_id)
+        self._init_from_relation(relation_id)
 
         # Hedge ratio
         if hedge_ratio is not None:
@@ -87,18 +84,6 @@ class CointSpreadStrategy(Strategy):
             self._hedge_ratio = Decimal(str(self._relation.hedge_ratio))
         else:
             self._hedge_ratio = Decimal('1.0')
-
-        # Market IDs
-        if self._relation:
-            self._id_a = self._relation.market_a.get(
-                'condition_id', ''
-            ) or self._relation.market_a.get('id', '')
-            self._id_b = self._relation.market_b.get(
-                'condition_id', ''
-            ) or self._relation.market_b.get('id', '')
-        else:
-            self._id_a = ''
-            self._id_b = ''
 
         # Calibration state
         self._spread_buffer: deque[float] = deque(maxlen=warmup)
@@ -113,11 +98,6 @@ class CointSpreadStrategy(Strategy):
 
         # Position: flat, long_spread, short_spread
         self._position_state = 'flat'
-
-    def _matches(self, ticker_id: str, market_id: str) -> bool:
-        if not market_id:
-            return False
-        return market_id in ticker_id or ticker_id in market_id
 
     def _calibrate(self) -> None:
         n = len(self._spread_buffer)
