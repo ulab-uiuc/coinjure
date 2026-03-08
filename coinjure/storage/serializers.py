@@ -65,7 +65,7 @@ def deserialize_ticker(d: dict) -> Ticker:
             token_id=d.get('token_id', ''),
             market_id=d.get('market_id', ''),
             event_id=d.get('event_id', ''),
-            side=d.get('token_side', 'no' if d.get('is_no_side') else 'yes'),
+            side=d.get('token_side', 'yes'),
         )
     if ticker_type == 'KalshiTicker':
         return KalshiTicker(
@@ -74,7 +74,7 @@ def deserialize_ticker(d: dict) -> Ticker:
             market_ticker=d.get('market_ticker', ''),
             event_ticker=d.get('event_ticker', ''),
             series_ticker=d.get('series_ticker', ''),
-            side=d.get('token_side', 'no' if d.get('is_no_side') else 'yes'),
+            side=d.get('token_side', 'yes'),
         )
     if ticker_type == 'CashTicker':
         symbol = d['symbol']
