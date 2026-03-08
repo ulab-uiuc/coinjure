@@ -68,14 +68,14 @@ async def _polymarket_list_markets(
                 for mkt in event.get('markets', []):
                     if len(markets) >= limit:
                         break
+                    clob_ids = _parse_clob_ids(mkt)
                     entry: dict[str, Any] = {
                         'id': mkt.get('id', ''),
                         'question': mkt.get('question', ''),
                         'event_id': str(event.get('id', '')),
                         'event_title': event.get('title', ''),
-                        'token_id': _parse_clob_ids(mkt)[0]
-                        if _parse_clob_ids(mkt)
-                        else '',
+                        'token_id': clob_ids[0] if clob_ids else '',
+                        'no_token_id': clob_ids[1] if len(clob_ids) > 1 else '',
                         'best_bid': mkt.get('bestBid', ''),
                         'best_ask': mkt.get('bestAsk', ''),
                         'volume': mkt.get('volume', ''),
@@ -126,10 +126,16 @@ async def _polymarket_market_info(market_id: str) -> dict | None:
         return None
 
     clob_ids = _parse_clob_ids(mkt)
+    # eventId is often None in Gamma Markets API; fall back to events[0].id
+    event_id = mkt.get('eventId') or ''
+    if not event_id:
+        events = mkt.get('events') or []
+        if events and isinstance(events, list):
+            event_id = events[0].get('id', '')
     return {
         'id': mkt.get('id', ''),
         'question': mkt.get('question', ''),
-        'event_id': str(mkt.get('eventId', '')),
+        'event_id': str(event_id),
         'token_id': clob_ids[0] if clob_ids else '',
         'no_token_id': clob_ids[1] if len(clob_ids) > 1 else '',
         'best_bid': mkt.get('bestBid', ''),
@@ -662,7 +668,7 @@ def _compute_pair_stats(
                 'lead_lag_significant': ll.lead_lag_significant,
             }
         )
-    except (ImportError, Exception):
+    except Exception:
         result['note'] = 'install statsmodels+scipy for advanced analysis'
 
     return result
@@ -1043,6 +1049,19 @@ def relations_validate(relation_id: str, interval: str, as_json: bool) -> None:
     help='Include resolution rules/description. Use --no-rules to omit.',
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
+@click.option(
+    '--auto-pair/--no-auto-pair',
+    'auto_pair',
+    default=False,
+    show_default=True,
+    help='Auto-detect and persist market relations (implication, exclusivity, etc.).',
+)
+@click.option(
+    '--skip-exclusivity',
+    is_flag=True,
+    default=False,
+    help='Skip intra-event exclusivity detection (reduces pair count).',
+)
 def market_discover(
     exchange: str,
     query: tuple[str, ...],
@@ -1052,6 +1071,8 @@ def market_discover(
     kalshi_private_key_path: str | None,
     with_rules: bool,
     as_json: bool,
+    auto_pair: bool,
+    skip_exclusivity: bool,
 ) -> None:
     """Fetch markets from exchanges for agent analysis.
 
@@ -1175,26 +1196,52 @@ def market_discover(
         for r in all_relations
     ]
 
+    # ── Auto-pair ───────────────────────────────────────────────────────
+
+    auto_pair_summary: dict[str, Any] | None = None
+    if auto_pair:
+        from coinjure.market.auto_pair import auto_pair_markets
+
+        result = auto_pair_markets(
+            poly_markets, kalshi_markets, store,
+            skip_exclusivity=skip_exclusivity,
+        )
+        auto_pair_summary = {
+            'created_count': len(result.created),
+            'skipped_duplicate': result.skipped_duplicate,
+            'by_type': result.by_type,
+            'by_layer': result.by_layer,
+            'created': [
+                {
+                    'relation_id': r.relation_id,
+                    'type': r.spread_type,
+                    'confidence': r.confidence,
+                    'reasoning': r.reasoning,
+                    'market_a': r.market_a.get('question', '')[:60],
+                    'market_b': r.market_b.get('question', '')[:60],
+                }
+                for r in result.created
+            ],
+        }
+
     # ── Output ─────────────────────────────────────────────────────────
 
     total = len(poly_markets) + len(kalshi_markets)
 
     if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    'ok': True,
-                    'markets': {
-                        'polymarket': poly_markets,
-                        'kalshi': kalshi_markets,
-                    },
-                    'total_markets': total,
-                    'existing_relations': relation_summary,
-                    'existing_relation_count': len(relation_summary),
-                },
-                default=str,
-            )
-        )
+        payload: dict[str, Any] = {
+            'ok': True,
+            'markets': {
+                'polymarket': poly_markets,
+                'kalshi': kalshi_markets,
+            },
+            'total_markets': total,
+            'existing_relations': relation_summary,
+            'existing_relation_count': len(relation_summary),
+        }
+        if auto_pair_summary is not None:
+            payload['auto_pair'] = auto_pair_summary
+        click.echo(json.dumps(payload, default=str))
         return
 
     parts = [f'"{q}"' for q in query] + [f'tag:{t}' for t in tag]
@@ -1240,6 +1287,21 @@ def market_discover(
 
     _fmt_table(poly_markets, 'Polymarket')
     _fmt_table(kalshi_markets, 'Kalshi')
+
+    if auto_pair_summary:
+        s = auto_pair_summary
+        click.echo(f'  Auto-pair: {s["created_count"]} relations created, '
+                    f'{s["skipped_duplicate"]} duplicates skipped')
+        if s['by_type']:
+            click.echo(f'    By type: {s["by_type"]}')
+        if s['by_layer']:
+            click.echo(f'    By layer: {s["by_layer"]}')
+        for r in s['created'][:20]:
+            click.echo(f'    [{r["type"]}] {r["relation_id"]}  '
+                        f'{r["market_a"]}  <->  {r["market_b"]}')
+        if len(s['created']) > 20:
+            click.echo(f'    ... and {len(s["created"]) - 20} more')
+        click.echo()
 
 
 # ---------------------------------------------------------------------------
