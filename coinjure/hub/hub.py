@@ -274,6 +274,24 @@ class MarketDataHub:
                     lambda: asyncio.ensure_future(self.stop())
                 )
                 return
+            elif cmd == 'watch_token':
+                token_id = req.get('token_id', '')
+                if token_id:
+                    watch = getattr(self._source, 'watch_token', None)
+                    if watch:
+                        watch(token_id)
+                    resp = {'ok': True}
+                else:
+                    resp = {'ok': False, 'error': 'token_id required'}
+            elif cmd == 'unwatch_token':
+                token_id = req.get('token_id', '')
+                if token_id:
+                    unwatch = getattr(self._source, 'unwatch_token', None)
+                    if unwatch:
+                        unwatch(token_id)
+                    resp = {'ok': True}
+                else:
+                    resp = {'ok': False, 'error': 'token_id required'}
             else:
                 resp = {'ok': False, 'error': f'Unknown command: {cmd!r}'}
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,11 @@ logger = logging.getLogger(__name__)
 # Default socket location; callers can override by subclassing or passing path.
 SOCKET_DIR = Path.home() / '.coinjure'
 SOCKET_PATH = SOCKET_DIR / 'engine.sock'
+
+
+def default_engine_socket_path() -> Path:
+    """Return a PID-based socket path so multiple engines can run in parallel."""
+    return SOCKET_DIR / f'engine-{os.getpid()}.sock'
 
 
 # ── Server ─────────────────────────────────────────────────────────────

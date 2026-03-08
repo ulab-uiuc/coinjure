@@ -70,17 +70,39 @@ Auto-pair filters by **snapshot arb**: only candidates with current pricing viol
 
 ## Full Workflow
 
-### Step 1: Discover candidates
+### Step 1: Broad, iterative discovery across many topics
+
+**This is the most important step.** Do NOT stop after one or two queries. Cast a wide net by searching many different topic areas and keyword combinations. The goal is to accumulate a large pool of candidate relations before moving to backtest.
+
+**Search strategy — iterate through ALL of these categories:**
+
+1. **Geopolitics**: "Ukraine", "Russia", "China", "Taiwan", "NATO", "ceasefire", "war", "sanctions", "troops"
+2. **US Politics**: "Trump", "election", "president", "congress", "senate", "governor", "Supreme Court"
+3. **Economics/Finance**: "Bitcoin", "crypto", "Fed", "interest rate", "recession", "inflation", "S&P", "stock"
+4. **Technology**: "AI", "GPT", "Apple", "Tesla", "SpaceX", "launch"
+5. **Sports**: "World Cup", "Super Bowl", "NBA", "NFL", "Olympics"
+6. **Culture/Entertainment**: "Oscar", "Grammy", "GTA", "movie"
+7. **Science/Health**: "FDA", "vaccine", "climate", "NASA"
+8. **Misc current events**: Check trending topics, recently created markets
+
+Use BOTH keyword queries (-q) AND tag filters (-t) for maximum coverage:
 
 ```bash
-coinjure market discover -q "keyword1" -q "keyword2" --exchange both --limit 40
+# Keyword search — good for specific topics
+coinjure market discover -q "keyword1" -q "keyword2" --exchange polymarket --limit 40
+# Tag search — good for broad category sweeps
+coinjure market discover -t "Politics" --exchange polymarket --limit 100
+coinjure market discover -t "Crypto" -t "Finance" --exchange polymarket --limit 100
+coinjure market discover -t "Sports" --exchange polymarket --limit 100
+coinjure market discover -t "Science" -t "Technology" --exchange polymarket --limit 100
+# Also search Kalshi for cross-platform (same_event) opportunities:
+coinjure market discover -q "keyword1" --exchange kalshi --limit 40
 ```
 
-Auto-pair candidates (implication/exclusivity/complementary with current arb > 0) are shown and persisted automatically. For agent-judged types, the agent identifies candidates from the market list.
+**Keep going until you have explored at least 10+ topic areas using both keyword and tag search.** Auto-pair will automatically find and persist implication/exclusivity/complementary relations with current arb > 0. For agent-judged types (same_event, correlated, temporal, conditional, structural), the agent must identify candidates from the market lists.
 
-### Step 2: Determine relation type
+### Step 2: Determine relation type for agent-judged candidates
 
-- Auto-pair found implication/exclusivity/complementary? → verify pricing
 - Same question on two platforms? → `same_event`
 - Related topics with shared drivers? → `correlated`
 - Known mathematical relationship? → `structural`
@@ -93,7 +115,7 @@ Auto-pair candidates (implication/exclusivity/complementary with current arb > 0
 coinjure market info --market-id <id> --json
 ```
 
-### Step 4: Add pairs with actual opportunities
+### Step 4: Add agent-judged pairs
 
 ```bash
 coinjure market relations add \
@@ -108,6 +130,16 @@ coinjure market relations add \
 ```bash
 coinjure market relations list --json
 ```
+
+### Step 6: Backtest all relations
+
+Only after accumulating a substantial pool of relations (20+), run backtest on all of them:
+
+```bash
+coinjure engine backtest --all-relations --json
+```
+
+This uses API price history by default. Focus on which relations show positive PnL and trades.
 
 ## Strategy Code Reference
 
