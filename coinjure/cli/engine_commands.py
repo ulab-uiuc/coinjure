@@ -1853,7 +1853,6 @@ def engine_backtest(
                 parquet_path=parquet,
                 strategy_kwargs=strategy_kwargs,
             )
-            # Update relation lifecycle
             if result.error is None:
                 rel.set_backtest_result(
                     passed=result.passed,
