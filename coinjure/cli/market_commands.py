@@ -237,8 +237,7 @@ def relations_add(
 
     rel = MarketRelation(
         relation_id=rid,
-        market_a=info_a,
-        market_b=info_b,
+        markets=[info_a, info_b],
         spread_type=spread_type,
         reasoning=reasoning,
         hypothesis=hypothesis,
@@ -305,14 +304,14 @@ def relations_list(
 
     click.echo(f'\n{len(relations)} market relation(s):\n')
     for r in relations:
-        ma = r.market_a
-        mb = r.market_b
         click.echo(
             f'  [{r.relation_id}] {r.spread_type}  conf={r.confidence:.2f}  '
-            f'status={r.status}'
+            f'status={r.status}  markets={len(r.markets)}'
         )
-        click.echo(f'    A: [{ma.get("platform", "?")}] {ma.get("question", "?")[:60]}')
-        click.echo(f'    B: [{mb.get("platform", "?")}] {mb.get("question", "?")[:60]}')
+        for i, m in enumerate(r.markets):
+            click.echo(
+                f'    [{i}] [{m.get("platform", "?")}] {m.get("question", "?")[:60]}'
+            )
         if r.hypothesis:
             click.echo(f'    Hypothesis: {r.hypothesis}')
         click.echo()
@@ -377,12 +376,12 @@ def relations_remove(relation_id: str) -> None:
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 @click.option(
-    '--auto-pair/--no-auto-pair',
-    'auto_pair',
+    '--auto-discover/--no-auto-discover',
+    'auto_discover',
     default=True,
     show_default=True,
     help='Auto-detect and persist intra-event structural relations '
-    '(implication, exclusivity, complementary). Use --no-auto-pair to disable.',
+    '(implication, exclusivity, complementary). Use --no-auto-discover to disable.',
 )
 def market_discover(
     exchange: str,
@@ -393,7 +392,7 @@ def market_discover(
     kalshi_private_key_path: str | None,
     with_rules: bool,
     as_json: bool,
-    auto_pair: bool,
+    auto_discover: bool,
 ) -> None:
     """Fetch markets from exchanges for agent analysis.
 
@@ -514,9 +513,9 @@ def market_discover(
     # Build a set of market IDs already in relations
     related_ids: dict[str, list[str]] = {}  # market_id → [relation_id, ...]
     for r in all_relations:
-        for mkt in (r.market_a, r.market_b):
+        for m in r.markets:
             for key in ('id', 'market_id', 'ticker'):
-                mid = mkt.get(key, '')
+                mid = m.get(key, '')
                 if mid:
                     related_ids.setdefault(mid, []).append(r.relation_id)
 
@@ -536,16 +535,17 @@ def market_discover(
             'relation_id': r.relation_id,
             'type': r.spread_type,
             'status': r.status,
+            'market_count': len(r.markets),
             'market_ids': [m.get('id', m.get('ticker', '')) for m in r.markets],
             'market_questions': [m.get('question', '')[:60] for m in r.markets],
         }
         for r in all_relations
     ]
 
-    # ── Auto-pair ───────────────────────────────────────────────────────
+    # ── Auto-discover ──────────────────────────────────────────────────
 
-    auto_pair_summary: dict[str, Any] | None = None
-    if auto_pair:
+    auto_discover_summary: dict[str, Any] | None = None
+    if auto_discover:
         from coinjure.market.auto_discover import discover_relations
 
         result = discover_relations(poly_markets, kalshi_markets)
@@ -558,7 +558,7 @@ def market_discover(
             store = RelationStore()
             stored_new = store.add_batch(result.candidates)
 
-        auto_pair_summary = {
+        auto_discover_summary = {
             'total_detected': result.total_detected,
             'candidate_count': len(result.candidates),
             'stored_new': stored_new,
@@ -570,12 +570,13 @@ def market_discover(
                     'type': r.spread_type,
                     'confidence': r.confidence,
                     'reasoning': r.reasoning,
+                    'market_count': len(r.markets),
                     'market_ids': [m.get('id', '') for m in r.markets],
                     'market_questions': [m.get('question', '')[:60] for m in r.markets],
-                    'current_mids': [m.get('current_mid') for m in r.markets],
                     'current_arb': r.markets[0].get('current_arb', 0)
                     if r.markets
                     else 0,
+                    'market_mids': [m.get('current_mid') for m in r.markets],
                 }
                 for r in result.candidates
             ],
@@ -596,8 +597,8 @@ def market_discover(
             'existing_relations': relation_summary,
             'existing_relation_count': len(relation_summary),
         }
-        if auto_pair_summary is not None:
-            payload['auto_pair'] = auto_pair_summary
+        if auto_discover_summary is not None:
+            payload['auto_discover'] = auto_discover_summary
         click.echo(json.dumps(payload, default=str))
         return
 
@@ -646,46 +647,33 @@ def market_discover(
     _fmt_table(poly_markets, 'Polymarket')
     _fmt_table(kalshi_markets, 'Kalshi')
 
-    if auto_pair_summary:
-        s = auto_pair_summary
+    if auto_discover_summary:
+        s = auto_discover_summary
         td = s['total_detected']
-        wc = s['candidate_count']
+        cc = s['candidate_count']
         sn = s.get('stored_new', 0)
-        click.echo(
-            f'  Auto-pair: {td} structural pairs detected, {wc} with current opportunity'
-        )
-        if wc > 0:
-            click.echo(f'    Stored {sn} new relation(s) ({wc - sn} already in store)')
+        click.echo(f'  Auto-discover: {td} relations detected, {cc} candidates')
+        if cc > 0:
+            click.echo(f'    Stored {sn} new relation(s) ({cc - sn} already in store)')
         if s['by_type']:
             click.echo(f'    By type: {s["by_type"]}')
         click.echo()
         for r in s['candidates'][:20]:
             arb = r.get('current_arb', 0)
             arb_s = f'   arb={arb:.3f}' if arb else ''
-            click.echo(
-                f'    [{r["type"]}]  {r["market_a_id"]} <-> {r["market_b_id"]}{arb_s}'
-            )
-            mid_a = r.get('current_mid_a')
-            mid_b = r.get('current_mid_b')
-            mid_a_s = f'  mid={mid_a:.3f}' if mid_a is not None else ''
-            mid_b_s = f'  mid={mid_b:.3f}' if mid_b is not None else ''
-            click.echo(f'      A: {r["market_a"]}{mid_a_s}')
-            click.echo(f'      B: {r["market_b"]}{mid_b_s}')
-            if r['type'] == 'implication' and mid_a is not None and mid_b is not None:
-                click.echo(
-                    f'      Violation: A ({mid_a:.3f}) > B ({mid_b:.3f}), arb = {arb:.3f}'
-                )
-            elif (
-                r['type'] in ('exclusivity', 'complementary')
-                and mid_a is not None
-                and mid_b is not None
-            ):
-                click.echo(
-                    f'      Violation: A ({mid_a:.3f}) + B ({mid_b:.3f})'
-                    f' = {mid_a + mid_b:.3f} > 1, arb = {arb:.3f}'
-                )
-            else:
-                click.echo(f'      {r["reasoning"]}')
+            n = r.get('market_count', 0)
+            ids = r.get('market_ids', [])
+            ids_s = ', '.join(str(i) for i in ids[:3])
+            if len(ids) > 3:
+                ids_s += f' +{len(ids)-3} more'
+            click.echo(f'    [{r["type"]}] {n} markets: {ids_s}{arb_s}')
+            for q in r.get('market_questions', [])[:5]:
+                click.echo(f'      - {q}')
+            mids = r.get('market_mids', [])
+            if mids:
+                mid_sum = sum(m for m in mids if m is not None)
+                click.echo(f'      sum(mids)={mid_sum:.3f}')
+            click.echo(f'      {r["reasoning"]}')
             click.echo()
         if len(s['candidates']) > 20:
             click.echo(f'    ... and {len(s["candidates"]) - 20} more')
