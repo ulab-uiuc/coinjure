@@ -22,11 +22,11 @@ import logging
 from collections import deque
 from decimal import Decimal
 
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -75,25 +75,29 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
         # Determine which is leader and which is follower.
         # lead_lag > 0: A leads B. lead_lag < 0: B leads A.
+        id_a = self._ids[0] if self._ids else ''
+        id_b = self._ids[1] if len(self._ids) > 1 else ''
+        token_a = self._tokens[0] if self._tokens else ''
+        token_b = self._tokens[1] if len(self._tokens) > 1 else ''
         if self._relation:
             lag = self._relation.lead_lag or 0
             if lag >= 0:
                 # A leads B (or no lag)
-                self._leader_id = self._id_a
-                self._follower_id = self._id_b
-                self._leader_token = self._token_a
-                self._follower_token = self._token_b
+                self._leader_id = id_a
+                self._follower_id = id_b
+                self._leader_token = token_a
+                self._follower_token = token_b
             else:
                 # B leads A — swap roles
-                self._leader_id = self._id_b
-                self._follower_id = self._id_a
-                self._leader_token = self._token_b
-                self._follower_token = self._token_a
+                self._leader_id = id_b
+                self._follower_id = id_a
+                self._leader_token = token_b
+                self._follower_token = token_a
         else:
-            self._leader_id = self._id_a
-            self._follower_id = self._id_b
-            self._leader_token = self._token_a
-            self._follower_token = self._token_b
+            self._leader_id = id_a
+            self._follower_id = id_b
+            self._leader_token = token_a
+            self._follower_token = token_b
 
         # Price tracking
         self._leader_prices: deque[float] = deque(maxlen=warmup)
@@ -174,8 +178,10 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         ticker_b = self._find_ticker(trader, self._follower_id, yes=True)
         if ticker_b and self._follower_price:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b,
-                limit_price=self._follower_price, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_b,
+                limit_price=self._follower_price,
+                quantity=self.trade_size,
             )
 
         self._position_state = 'long_follower'
@@ -202,8 +208,10 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         if ticker_b_no and self._follower_price:
             no_price = Decimal('1') - self._follower_price
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b_no,
-                limit_price=no_price, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_b_no,
+                limit_price=no_price,
+                quantity=self.trade_size,
             )
 
         self._position_state = 'short_follower'
@@ -238,8 +246,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             catchup_ratio = 0.0
 
         should_exit = (
-            catchup_ratio >= self._exit_reversion
-            or self._hold_count >= self._max_hold
+            catchup_ratio >= self._exit_reversion or self._hold_count >= self._max_hold
         )
 
         if should_exit:
@@ -248,8 +255,10 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
                     best_bid = trader.market_data.get_best_bid(pos.ticker)
                     if best_bid:
                         await trader.place_order(
-                            side=TradeSide.SELL, ticker=pos.ticker,
-                            limit_price=best_bid.price, quantity=pos.quantity,
+                            side=TradeSide.SELL,
+                            ticker=pos.ticker,
+                            limit_price=best_bid.price,
+                            quantity=pos.quantity,
                         )
 
             reason = 'catchup' if catchup_ratio >= self._exit_reversion else 'timeout'
@@ -267,7 +276,9 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
                     'hold_count': self._hold_count,
                 },
             )
-            logger.info('EXIT %s: %s catchup=%.2f', self._position_state, reason, catchup_ratio)
+            logger.info(
+                'EXIT %s: %s catchup=%.2f', self._position_state, reason, catchup_ratio
+            )
             self._position_state = 'flat'
 
     def _find_ticker(self, trader: Trader, market_id: str, yes: bool = True):

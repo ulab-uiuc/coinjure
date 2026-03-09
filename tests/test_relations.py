@@ -21,7 +21,6 @@ def _has_statsmodels():
 # ── Unified Market ───────────────────────────────────────────────────────
 
 
-
 # ── Relations ────────────────────────────────────────────────────────────
 
 
@@ -33,8 +32,7 @@ class TestRelationStore:
 
         r = MarketRelation(
             relation_id='test-1',
-            market_a={'market_id': 'A'},
-            market_b={'market_id': 'B'},
+            markets=[{'market_id': 'A'}, {'market_id': 'B'}],
             spread_type='same_event',
             confidence=0.9,
         )
@@ -59,24 +57,21 @@ class TestRelationStore:
         store.add(
             MarketRelation(
                 relation_id='r1',
-                market_a={'market_id': 'M1'},
-                market_b={'market_id': 'M2'},
+                markets=[{'market_id': 'M1'}, {'market_id': 'M2'}],
                 confidence=0.8,
             )
         )
         store.add(
             MarketRelation(
                 relation_id='r2',
-                market_a={'market_id': 'M2'},
-                market_b={'market_id': 'M3'},
+                markets=[{'market_id': 'M2'}, {'market_id': 'M3'}],
                 confidence=0.9,
             )
         )
         store.add(
             MarketRelation(
                 relation_id='r3',
-                market_a={'market_id': 'M4'},
-                market_b={'market_id': 'M5'},
+                markets=[{'market_id': 'M4'}, {'market_id': 'M5'}],
                 confidence=0.5,
             )
         )
@@ -116,6 +111,20 @@ class TestRelationStore:
         vr = loaded.get_validation()
         assert vr.is_valid
         assert vr.adf_pvalue == 0.01
+
+    def test_from_dict_migrates_old_format(self):
+        from coinjure.market.relations import MarketRelation
+
+        d = {
+            'relation_id': 'old-1',
+            'market_a': {'id': 'A'},
+            'market_b': {'id': 'B'},
+            'spread_type': 'same_event',
+        }
+        r = MarketRelation.from_dict(d)
+        assert len(r.markets) == 2
+        assert r.markets[0]['id'] == 'A'
+        assert r.markets[1]['id'] == 'B'
 
     def test_invalidate_retire(self, tmp_path):
         from coinjure.market.relations import MarketRelation, RelationStore
