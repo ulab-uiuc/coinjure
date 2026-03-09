@@ -28,7 +28,12 @@ class RelationArbMixin:
         if self._relation:
             for m in self._relation.markets:
                 self._ids.append(m.get('condition_id', '') or m.get('id', ''))
-                self._tokens.append(m.get('token_id', ''))
+                # token_id (singular) for backward compat; token_ids[0] = YES token
+                tid = m.get('token_id', '')
+                if not tid:
+                    token_ids = m.get('token_ids', [])
+                    tid = token_ids[0] if token_ids else ''
+                self._tokens.append(tid)
 
     def watch_tokens(self) -> list[str]:
         """Return CLOB token IDs so the data source prioritizes these markets."""

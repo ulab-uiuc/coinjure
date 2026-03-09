@@ -38,6 +38,27 @@ def default_engine_socket_path() -> Path:
     return SOCKET_DIR / f'engine-{os.getpid()}.sock'
 
 
+def cleanup_stale_sockets() -> int:
+    """Remove engine-*.sock files whose owning PID no longer exists.
+
+    Returns the number of stale sockets removed.
+    """
+    removed = 0
+    for sock in SOCKET_DIR.glob('engine-*.sock'):
+        try:
+            pid = int(sock.stem.split('-', 1)[1])
+        except (ValueError, IndexError):
+            continue
+        try:
+            os.kill(pid, 0)  # check if PID exists
+        except ProcessLookupError:
+            sock.unlink(missing_ok=True)
+            removed += 1
+        except PermissionError:
+            pass  # PID exists but belongs to another user
+    return removed
+
+
 # ── Server ─────────────────────────────────────────────────────────────
 
 

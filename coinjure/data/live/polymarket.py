@@ -180,8 +180,13 @@ class LivePolyMarketDataSource(DataSource):
                 all_events.extend(events)
                 if len(events) < limit:
                     break  # Last page
-                # On subsequent polls (not first), only fetch first page for new events
+                # On subsequent polls (not first), only fetch first page for new events.
+                # Even on first poll, if we already have a substantial cache,
+                # limit to first 3 pages — the full scan takes too long and
+                # blocks the event loop from processing priority tokens.
                 if not self._first_poll:
+                    break
+                if len(self.processed_event_ids) > 100 and offset >= 300:
                     break
                 offset += limit
         return all_events
@@ -363,6 +368,10 @@ class LivePolyMarketDataSource(DataSource):
 
             await asyncio.sleep(self.polling_interval)
 
+    def register_token_ticker(self, token_id: str, ticker: PolyMarketTicker) -> None:
+        """Pre-register a ticker for a token_id so the refresh loop uses it."""
+        self._known_tickers[token_id] = ticker
+
     def watch_token(self, token_id: str) -> None:
         """Mark a token as priority for order book refresh (e.g. when position opened)."""
         self._priority_tokens.add(token_id)
@@ -519,9 +528,10 @@ class LivePolyMarketDataSource(DataSource):
     async def _refresh_loop(self) -> None:
         """Periodically re-fetch order books for position tokens.
 
-        Only refreshes priority tokens (ones we hold positions in) plus
-        a small rotating batch of other known tickers. Fetches are done
-        concurrently with a semaphore to limit parallelism.
+        Priority tokens (watched by strategies) are fetched first in a
+        separate gather so that slow/dead non-priority tokens never block
+        critical data flow.  Non-priority tokens are fetched afterwards
+        in a rotating batch with a per-fetch timeout.
         """
         while True:
             await asyncio.sleep(self.orderbook_refresh_interval)
@@ -529,18 +539,40 @@ class LivePolyMarketDataSource(DataSource):
             # Evict stale tickers if we've exceeded the max
             self._evict_stale_tickers()
 
-            # Build refresh list: priority tokens first, then a batch of others
-            refresh_ids: list[tuple[str, PolyMarketTicker]] = []
+            # --- Priority tokens: fetch first, separately ---
+            priority_ids: list[tuple[str, PolyMarketTicker]] = []
             for tid in list(self._priority_tokens):
                 ticker = self._known_tickers.get(tid)
                 if ticker is None:
-                    # Priority token not yet registered by poll; create a
-                    # minimal ticker for this refresh cycle but do NOT store
-                    # it — let _poll_data register the full ticker later.
                     ticker = PolyMarketTicker(symbol=tid, name='', token_id=tid)
-                refresh_ids.append((tid, ticker))
+                priority_ids.append((tid, ticker))
 
-            # Add a rotating batch of non-priority tokens
+            async def _fetch_one(token_id: str, ticker: PolyMarketTicker):
+                async with self._fetch_semaphore:
+                    order_book = await self._fetch_order_book(token_id)
+                    return (token_id, ticker, order_book)
+
+            if priority_ids:
+                results = await asyncio.gather(
+                    *[_fetch_one(tid, t) for tid, t in priority_ids],
+                    return_exceptions=True,
+                )
+                for result in results:
+                    if isinstance(result, Exception):
+                        continue
+                    token_id, ticker, order_book = result
+                    if not order_book:
+                        continue
+                    try:
+                        await self._process_refresh_result(token_id, ticker, order_book)
+                    except Exception:
+                        logger.debug(
+                            'Error processing refresh for %s',
+                            token_id,
+                            exc_info=True,
+                        )
+
+            # --- Non-priority rotating batch (with per-fetch timeout) ---
             non_priority = [
                 (tid, t)
                 for tid, t in self._known_tickers.items()
@@ -553,7 +585,35 @@ class LivePolyMarketDataSource(DataSource):
                 if len(batch) < batch_size:
                     batch.extend(non_priority[: batch_size - len(batch)])
                 self._refresh_offset += batch_size
-                refresh_ids.extend(batch)
+
+                async def _fetch_with_timeout(token_id: str, ticker: PolyMarketTicker):
+                    async with self._fetch_semaphore:
+                        try:
+                            order_book = await asyncio.wait_for(
+                                self._fetch_order_book(token_id), timeout=5.0
+                            )
+                        except asyncio.TimeoutError:
+                            return (token_id, ticker, None)
+                        return (token_id, ticker, order_book)
+
+                results = await asyncio.gather(
+                    *[_fetch_with_timeout(tid, t) for tid, t in batch],
+                    return_exceptions=True,
+                )
+                for result in results:
+                    if isinstance(result, Exception):
+                        continue
+                    token_id, ticker, order_book = result
+                    if not order_book:
+                        continue
+                    try:
+                        await self._process_refresh_result(token_id, ticker, order_book)
+                    except Exception:
+                        logger.debug(
+                            'Error processing refresh for %s',
+                            token_id,
+                            exc_info=True,
+                        )
 
             # Clean up last_order_book_state for tokens no longer tracked
             tracked_token_ids = set(self._known_tickers.keys())
@@ -564,30 +624,6 @@ class LivePolyMarketDataSource(DataSource):
             ]
             for k in stale_state_keys:
                 del self.last_order_book_state[k]
-
-            # Fetch order books concurrently with semaphore
-            async def _fetch_one(token_id: str, ticker: PolyMarketTicker):
-                async with self._fetch_semaphore:
-                    order_book = await self._fetch_order_book(token_id)
-                    return (token_id, ticker, order_book)
-
-            results = await asyncio.gather(
-                *[_fetch_one(tid, t) for tid, t in refresh_ids],
-                return_exceptions=True,
-            )
-
-            for result in results:
-                if isinstance(result, Exception):
-                    continue
-                token_id, ticker, order_book = result
-                if not order_book:
-                    continue
-                try:
-                    await self._process_refresh_result(token_id, ticker, order_book)
-                except Exception:
-                    logger.debug(
-                        'Error processing refresh for %s', token_id, exc_info=True
-                    )
 
     async def start(self) -> None:
         if self._poll_task is None or self._poll_task.done():

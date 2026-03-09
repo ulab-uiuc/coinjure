@@ -103,7 +103,7 @@ def hub_start(
     poly = LivePolyMarketDataSource(
         event_cache_file='events_cache.jsonl',
         polling_interval=poly_interval,
-        orderbook_refresh_interval=10.0,
+        orderbook_refresh_interval=5.0,
         reprocess_on_start=False,
     )
     kalshi = LiveKalshiDataSource(

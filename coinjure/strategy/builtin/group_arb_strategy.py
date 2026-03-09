@@ -28,7 +28,7 @@ import logging
 import time
 from decimal import Decimal
 
-from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
+from coinjure.events import Event
 from coinjure.market.relations import RelationStore
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import PolyMarketTicker
@@ -81,27 +81,68 @@ class GroupArbStrategy(Strategy):
 
         self._event_id = event_id
         self._relation_market_ids: set[str] = set()
-        if relation_id and not event_id:
+        self._relation_token_ids: list[str] = []
+        # Map token_id → market_id for tickers received via watch_token
+        # (they may have empty market_id/event_id fields)
+        self._token_to_market: dict[str, str] = {}
+        self._no_token_ids: list[str] = []
+        # Pre-built tickers with correct market_id and side for data source registration
+        self._yes_tickers: dict[str, PolyMarketTicker] = {}  # yes_token_id → ticker
+        self._no_tickers: dict[str, PolyMarketTicker] = {}  # no_token_id → ticker
+        if relation_id:
             store = RelationStore()
             rel = store.get(relation_id)
             if rel:
                 for m in rel.markets:
                     eid = m.get('event_id', '')
-                    if eid:
+                    if eid and not self._event_id:
                         self._event_id = eid
                     mid = m.get('id', '')
                     if mid:
                         self._relation_market_ids.add(mid)
+                    token_ids = m.get('token_ids', [])
+                    if token_ids:
+                        yes_tid = token_ids[0]
+                        self._relation_token_ids.append(yes_tid)
+                        if mid:
+                            self._token_to_market[yes_tid] = mid
+                        # YES ticker with full market_id
+                        self._yes_tickers[yes_tid] = PolyMarketTicker(
+                            symbol=yes_tid,
+                            name=m.get('question', ''),
+                            token_id=yes_tid,
+                            market_id=mid,
+                            event_id=eid,
+                            side='yes',
+                        )
+                        # NO token (for BUY_NO legs)
+                        if len(token_ids) >= 2:
+                            no_tid = token_ids[1]
+                            self._no_token_ids.append(no_tid)
+                            no_ticker = PolyMarketTicker(
+                                symbol=no_tid,
+                                name=m.get('question', ''),
+                                token_id=no_tid,
+                                market_id=mid,
+                                event_id=eid,
+                                side='no',
+                            )
+                            self._no_tickers[no_tid] = no_ticker
 
-        self._asks: dict[str, Decimal] = {}
+        # market_id → NO ticker for direct lookup in _check_arb
+        self._market_no_ticker: dict[str, PolyMarketTicker] = {}
+        for no_tid, no_t in self._no_tickers.items():
+            if no_t.market_id:
+                self._market_no_ticker[no_t.market_id] = no_t
+
         self._tickers: dict[str, PolyMarketTicker] = {}
         self._last_arb_time: float = 0.0
 
     def watch_tokens(self) -> list[str]:
-        tokens = []
+        tokens = list(self._relation_token_ids) + list(self._no_token_ids)
         for ticker in self._tickers.values():
             tid = getattr(ticker, 'token_id', '')
-            if tid:
+            if tid and tid not in tokens:
                 tokens.append(tid)
         return tokens
 
@@ -109,6 +150,10 @@ class GroupArbStrategy(Strategy):
         if self._event_id and ticker.event_id == self._event_id:
             return True
         if self._relation_market_ids and ticker.market_id in self._relation_market_ids:
+            return True
+        # Match by token_id for tickers from watch_token (may lack market_id/event_id)
+        tid = getattr(ticker, 'token_id', '')
+        if tid and tid in self._token_to_market:
             return True
         return False
 
@@ -129,6 +174,10 @@ class GroupArbStrategy(Strategy):
 
         mid = ticker.market_id
         if not mid:
+            # Resolve via token_id mapping (for tickers from watch_token)
+            tid = getattr(ticker, 'token_id', '')
+            mid = self._token_to_market.get(tid, '')
+        if not mid:
             return
 
         if mid not in self._tickers:
@@ -139,28 +188,29 @@ class GroupArbStrategy(Strategy):
                 ticker.name[:40] if ticker.name else '?',
             )
 
-        if isinstance(event, OrderBookEvent):
-            if event.side == 'ask' and event.price > 0:
-                self._asks[mid] = event.price
-            elif event.side == 'bid' and mid not in self._asks:
-                self._asks[mid] = event.price
-        elif isinstance(event, PriceChangeEvent):
-            if mid not in self._asks:
-                self._asks[mid] = event.price
-
         await self._check_arb(trader)
 
     async def _check_arb(self, trader: Trader) -> None:
-        if len(self._asks) < self.min_markets:
+        if len(self._tickers) < self.min_markets:
             return
 
-        market_ids = [mid for mid in self._asks if mid in self._tickers]
-        if len(market_ids) < self.min_markets:
-            return
+        # Query actual best asks from DataManager order book
+        prices: dict[str, Decimal] = {}
+        for mid, ticker in self._tickers.items():
+            best_ask = trader.market_data.get_best_ask(ticker)
+            if best_ask is not None and best_ask.price > 0:
+                prices[mid] = best_ask.price
 
-        prices = {mid: self._asks[mid] for mid in market_ids}
+        if len(prices) < self.min_markets:
+            return
         sum_yes = sum(prices.values())
         n = len(prices)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            for mid, p in prices.items():
+                logger.debug(
+                    '  _check_arb price: market=%s ask=%.4f', mid[:16], float(p)
+                )
 
         edge_buy_yes = Decimal('1') - sum_yes - _FEE_PER_SIDE * n
         edge_buy_no = sum_yes - Decimal('1') - _FEE_PER_SIDE * n
@@ -214,7 +264,9 @@ class GroupArbStrategy(Strategy):
                 trade_ticker = ticker
                 leg_price = ask_price
             else:
-                no_ticker = trader.market_data.find_complement(ticker)
+                no_ticker = self._market_no_ticker.get(mid)
+                if no_ticker is None:
+                    no_ticker = trader.market_data.find_complement(ticker)
                 if no_ticker is None:
                     logger.warning(
                         'GroupArb: no NO ticker for market %s, skipping leg',
@@ -222,7 +274,12 @@ class GroupArbStrategy(Strategy):
                     )
                     continue
                 trade_ticker = no_ticker
-                leg_price = Decimal('1') - ask_price
+                # Use actual NO ask from order book (not theoretical 1 - YES_ask)
+                no_best_ask = trader.market_data.get_best_ask(no_ticker)
+                if no_best_ask is not None:
+                    leg_price = no_best_ask.price
+                else:
+                    leg_price = Decimal('1') - ask_price
 
             try:
                 result = await trader.place_order(
