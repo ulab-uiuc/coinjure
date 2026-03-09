@@ -46,8 +46,24 @@ async def fetch_kalshi_price_history(
         'end_ts': end_ts,
     }
 
+    max_retries = 5
+    base_delay = 3.0
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(url, params=params)
+        for attempt in range(max_retries):
+            resp = await client.get(url, params=params)
+            if resp.status_code == 429:
+                delay = base_delay * (2**attempt)
+                logger.warning(
+                    'Kalshi 429 rate-limited (%s), retry %d/%d in %.0fs',
+                    market_ticker,
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                continue
+            break
 
     if resp.status_code != 200:
         logger.warning(
