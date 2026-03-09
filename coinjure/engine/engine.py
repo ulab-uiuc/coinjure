@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING
 
 from coinjure.data.source import DataSource
 from coinjure.engine.performance import PerformanceAnalyzer
-from coinjure.trading.risk import StandardRiskManager
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import OrderStatus
 from coinjure.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker
+from coinjure.trading.risk import StandardRiskManager
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import OrderStatus
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter
@@ -167,9 +167,19 @@ class TradingEngine:
         self._data_paused: bool = False
 
     def _drain_backtest_timestamp_batch(self, event: object) -> list[object]:
-        """Return all queued backtest events that share a timestamp."""
+        """Return all queued events that should be processed as a batch.
+
+        In continuous (live) mode, drain all pending events from the queue
+        so that order books are fully updated before the strategy runs.
+        In backtest mode, drain events that share a timestamp.
+        """
         if self._continuous:
-            return [event]
+            # Drain all pending events so order books are complete
+            batch = [event]
+            drain_queue = getattr(self.data_source, 'drain_pending_events', None)
+            if callable(drain_queue):
+                batch.extend(drain_queue())
+            return batch
 
         drain = getattr(self.data_source, 'drain_same_timestamp_events', None)
         if not callable(drain):
@@ -364,7 +374,14 @@ class TradingEngine:
 
         # Register strategy's priority tokens with the data source
         watch = getattr(self.data_source, 'watch_token', None)
+        register = getattr(self.data_source, 'register_token_ticker', None)
         if watch:
+            # Pre-register tickers with correct market_id/side if strategy provides them
+            if register:
+                for attr in ('_yes_tickers', '_no_tickers'):
+                    tickers = getattr(self.strategy, attr, {})
+                    for tid, ticker in tickers.items():
+                        register(tid, ticker)
             for token_id in self.strategy.watch_tokens():
                 watch(token_id)
 

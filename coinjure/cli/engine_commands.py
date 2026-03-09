@@ -1307,6 +1307,12 @@ _NO_SIGNAL_HOURS = 24
 def engine_monitor(socket: str | None) -> None:
     """Attach a live Textual monitor to all running engines (or a specific one with -s)."""
     from coinjure.cli.textual_monitor import SocketTradingMonitorApp
+    from coinjure.engine.control import cleanup_stale_sockets
+
+    # Remove stale sockets from dead engine processes before discovery
+    removed = cleanup_stale_sockets()
+    if removed:
+        click.echo(f'Cleaned up {removed} stale socket(s).', err=True)
 
     if socket:
         socket_paths = [Path(socket)]
@@ -1324,7 +1330,7 @@ def engine_monitor(socket: str | None) -> None:
         if not socket_paths:
             # Fallback: scan SOCKET_DIR for any live engine sockets (covers
             # foreground / non-registered engines that use PID-based paths)
-            socket_paths = sorted(SOCKET_DIR.glob('*.sock')) or [SOCKET_PATH]
+            socket_paths = sorted(SOCKET_DIR.glob('engine-*.sock')) or [SOCKET_PATH]
 
     try:
         app = SocketTradingMonitorApp(

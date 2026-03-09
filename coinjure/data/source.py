@@ -86,6 +86,22 @@ class CompositeDataSource(DataSource):
         except asyncio.TimeoutError:
             return None
 
+    def drain_pending_events(self) -> list[object]:
+        """Drain all pending events from the queue (non-blocking)."""
+        events: list[object] = []
+        while not self._queue.empty():
+            try:
+                events.append(self._queue.get_nowait())
+            except Exception:
+                break
+        return events
+
+    def register_token_ticker(self, token_id: str, ticker: object) -> None:
+        for source in self.sources:
+            reg = getattr(source, 'register_token_ticker', None)
+            if reg:
+                reg(token_id, ticker)
+
     def watch_token(self, token_id: str) -> None:
         for source in self.sources:
             watch = getattr(source, 'watch_token', None)
@@ -111,15 +127,18 @@ def build_market_source(
     Raises :exc:`ValueError` for unsupported exchange values.
     """
     from coinjure.data.live.kalshi import LiveKalshiDataSource
-    from coinjure.data.live.polymarket import LivePolyMarketDataSource, LiveRSSNewsDataSource
+    from coinjure.data.live.polymarket import (
+        LivePolyMarketDataSource,
+        LiveRSSNewsDataSource,
+    )
 
     rss = LiveRSSNewsDataSource()
 
     if exchange == 'polymarket':
         poly = LivePolyMarketDataSource(
             event_cache_file='events_cache.jsonl',
-            polling_interval=60.0,
-            orderbook_refresh_interval=10.0,
+            polling_interval=120.0,
+            orderbook_refresh_interval=5.0,
             reprocess_on_start=False,
         )
         return CompositeDataSource([poly, rss])
