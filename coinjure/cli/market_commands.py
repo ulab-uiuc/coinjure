@@ -536,10 +536,8 @@ def market_discover(
             'relation_id': r.relation_id,
             'type': r.spread_type,
             'status': r.status,
-            'market_a_id': r.market_a.get('id', r.market_a.get('ticker', '')),
-            'market_b_id': r.market_b.get('id', r.market_b.get('ticker', '')),
-            'market_a_question': r.market_a.get('question', '')[:60],
-            'market_b_question': r.market_b.get('question', '')[:60],
+            'market_ids': [m.get('id', m.get('ticker', '')) for m in r.markets],
+            'market_questions': [m.get('question', '')[:60] for m in r.markets],
         }
         for r in all_relations
     ]
@@ -548,9 +546,9 @@ def market_discover(
 
     auto_pair_summary: dict[str, Any] | None = None
     if auto_pair:
-        from coinjure.market.auto_pair import auto_pair_markets
+        from coinjure.market.auto_discover import discover_relations
 
-        result = auto_pair_markets(poly_markets, kalshi_markets)
+        result = discover_relations(poly_markets, kalshi_markets)
 
         # Persist candidates to relation store
         stored_new = 0
@@ -572,13 +570,12 @@ def market_discover(
                     'type': r.spread_type,
                     'confidence': r.confidence,
                     'reasoning': r.reasoning,
-                    'market_a_id': r.market_a.get('id', ''),
-                    'market_b_id': r.market_b.get('id', ''),
-                    'market_a': r.market_a.get('question', '')[:60],
-                    'market_b': r.market_b.get('question', '')[:60],
-                    'current_mid_a': r.market_a.get('current_mid'),
-                    'current_mid_b': r.market_b.get('current_mid'),
-                    'current_arb': r.market_a.get('current_arb', 0),
+                    'market_ids': [m.get('id', '') for m in r.markets],
+                    'market_questions': [m.get('question', '')[:60] for m in r.markets],
+                    'current_mids': [m.get('current_mid') for m in r.markets],
+                    'current_arb': r.markets[0].get('current_arb', 0)
+                    if r.markets
+                    else 0,
                 }
                 for r in result.candidates
             ],
