@@ -19,42 +19,64 @@ async def fetch_kalshi_price_history(
     series_ticker: str,
     market_ticker: str,
     period_interval: int = 60,
+    lookback_days: int = 30,
 ) -> list[dict[str, Any]]:
-    """Fetch candlestick price history from Kalshi API.
+    """Fetch candlestick price history from Kalshi REST API.
 
     Returns a list of ``{t, p}`` dicts (same format as Polymarket's
     ``fetch_price_history``) for interoperability with the backtester.
-    Uses the close price from each candlestick.
+    Uses the mid of yes_bid.close / yes_ask.close from each candlestick.
+
+    URL: /series/{series_ticker}/markets/{market_ticker}/candlesticks
     """
-    from kalshi_python import Configuration
-    from kalshi_python.api.markets_api import MarketsApi
-    from kalshi_python.api_client import ApiClient
+    import datetime
 
-    config = Configuration(host=KALSHI_API_URL)
-    key_id = os.environ.get('KALSHI_API_KEY_ID')
-    pk_path = os.environ.get('KALSHI_PRIVATE_KEY_PATH')
+    import httpx
 
-    api_client = ApiClient(configuration=config)
-    if key_id and pk_path:
-        api_client.set_kalshi_auth(key_id, pk_path)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    start_ts = int((now - datetime.timedelta(days=lookback_days)).timestamp())
+    end_ts = int(now.timestamp())
 
-    markets_api = MarketsApi(api_client)
-
-    response = await asyncio.to_thread(
-        lambda: markets_api.get_market_candlesticks(
-            ticker=series_ticker,
-            market_ticker=market_ticker,
-            period_interval=period_interval,
-        )
+    url = (
+        f'{KALSHI_API_URL}/series/{series_ticker}/markets/{market_ticker}/candlesticks'
     )
+    params = {
+        'period_interval': period_interval,
+        'start_ts': start_ts,
+        'end_ts': end_ts,
+    }
 
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(url, params=params)
+
+    if resp.status_code != 200:
+        logger.warning(
+            'Kalshi candlestick %s: HTTP %d %s',
+            market_ticker,
+            resp.status_code,
+            resp.text[:200],
+        )
+        return []
+
+    data = resp.json()
     result: list[dict[str, Any]] = []
-    for candle in response.candlesticks or []:
-        close_price = getattr(candle, 'close', None)
-        ts = getattr(candle, 'end_ts', None)
-        if close_price is not None and ts is not None:
-            # Kalshi prices are in cents (0–100); normalise to 0–1
-            result.append({'t': ts, 'p': close_price / 100})
+    for candle in data.get('candlesticks', []):
+        ts = candle.get('end_period_ts')
+        if ts is None:
+            continue
+        bid_close = (candle.get('yes_bid') or {}).get('close')
+        ask_close = (candle.get('yes_ask') or {}).get('close')
+        if bid_close is None and ask_close is None:
+            # Fall back to price.previous if available
+            price_prev = (candle.get('price') or {}).get('previous')
+            if price_prev is None:
+                continue
+            mid = price_prev / 100
+        else:
+            b = bid_close if bid_close is not None else ask_close
+            a = ask_close if ask_close is not None else bid_close
+            mid = (b + a) / 2 / 100  # cents → 0-1
+        result.append({'t': ts, 'p': mid})
     return result
 
 

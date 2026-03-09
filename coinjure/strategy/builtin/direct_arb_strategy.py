@@ -23,15 +23,16 @@ net edge exceeds min_edge, places both legs simultaneously.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from decimal import Decimal
 
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class DirectArbStrategy(Strategy):
         min_edge: float = 0.02,
         trade_size: float = 10.0,
         cooldown_seconds: int = 60,
+        backtest_mode: bool = False,
     ) -> None:
         super().__init__()
         self.poly_market_id = poly_market_id
@@ -83,16 +85,25 @@ class DirectArbStrategy(Strategy):
         self.min_edge = Decimal(str(min_edge))
         self.trade_size = Decimal(str(trade_size))
         self.cooldown_seconds = cooldown_seconds
+        self.backtest_mode = backtest_mode
 
-        # Latest prices (updated on every matching event)
+        # Latest mid prices (updated on every matching event)
         self._poly_yes_price: Decimal | None = None
         self._kalshi_yes_price: Decimal | None = None
+
+        # Actual bid/ask prices from REST (used as limit_price when placing orders)
+        self._poly_ask_price: Decimal | None = None
+        self._poly_bid_price: Decimal | None = None
+        self._kalshi_ask_price: Decimal | None = None
+        self._kalshi_bid_price: Decimal | None = None
 
         # Store actual ticker objects once we see them in the stream
         self._poly_ticker: PolyMarketTicker | None = None
         self._kalshi_ticker_obj: KalshiTicker | None = None
 
         self._last_arb_time: float = 0.0
+        self._poll_task: asyncio.Task | None = None
+        self._initialized: bool = False
 
     def watch_tokens(self) -> list[str]:
         """Return CLOB token IDs so the data source prioritizes these markets."""
@@ -101,7 +112,165 @@ class DirectArbStrategy(Strategy):
             tokens.append(self.poly_token_id)
         return tokens
 
+    async def _ensure_initialized(self, trader: Trader) -> None:
+        """On first event, seed prices from REST and start background poll loop."""
+        if self._initialized:
+            return
+        self._initialized = True
+        if self.backtest_mode:
+            return  # Historical data drives prices; skip REST fetch + poll
+        await self._refresh_prices(trader)
+        self._poll_task = asyncio.create_task(self._poll_loop(trader))
+
+    async def _poll_loop(self, trader: Trader) -> None:
+        """Refresh prices every 60s so stale cache markets get picked up."""
+        while True:
+            await asyncio.sleep(60)
+            await self._refresh_prices(trader)
+
+    async def _refresh_prices(self, trader: Trader) -> None:
+        """Fetch current prices directly from Gamma + Kalshi REST APIs."""
+
+        async def _fetch_poly() -> None:
+            try:
+                from coinjure.data.fetcher import polymarket_market_info
+
+                info = await polymarket_market_info(self.poly_market_id)
+                if info:
+                    bid_str = info.get('best_bid', '')
+                    ask_str = info.get('best_ask', '')
+                    try:
+                        b = float(bid_str) if bid_str else 0.0
+                        a = float(ask_str) if ask_str else 0.0
+                        mid = (b + a) / 2 if (b or a) else None
+                    except (ValueError, TypeError):
+                        mid = None
+                    if mid is not None and mid > 0:
+                        self._poly_yes_price = Decimal(str(mid))
+                        if b > 0:
+                            self._poly_bid_price = Decimal(str(b))
+                        if a > 0:
+                            self._poly_ask_price = Decimal(str(a))
+                        if self._poly_ticker is None:
+                            token_ids = info.get('token_ids', [])
+                            self._poly_ticker = PolyMarketTicker(
+                                symbol=token_ids[0]
+                                if token_ids
+                                else self.poly_token_id,
+                                name=info.get('question', '')[:40],
+                                token_id=token_ids[0]
+                                if token_ids
+                                else self.poly_token_id,
+                                market_id=self.poly_market_id,
+                                event_id=str(info.get('event_id', '')),
+                            )
+                        logger.debug(
+                            'DirectArb: poly REST price %s (bid=%s ask=%s)',
+                            self.poly_market_id,
+                            b,
+                            a,
+                        )
+            except Exception as exc:
+                logger.debug('DirectArb: poly REST fetch failed: %s', exc)
+
+        async def _fetch_kalshi() -> None:
+            try:
+                import httpx
+
+                from coinjure.data.live.kalshi import KALSHI_API_URL
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f'{KALSHI_API_URL}/markets/{self.kalshi_ticker_str}'
+                    )
+                if resp.status_code == 200:
+                    m = resp.json().get('market', resp.json())
+                    yes_bid = m.get('yes_bid', 0) or 0
+                    yes_ask = m.get('yes_ask', 0) or 0
+                    if yes_bid or yes_ask:
+                        mid = (yes_bid + yes_ask) / 2 / 100
+                        self._kalshi_yes_price = Decimal(str(mid))
+                        if yes_bid > 0:
+                            self._kalshi_bid_price = Decimal(str(yes_bid)) / Decimal(
+                                '100'
+                            )
+                        if yes_ask > 0:
+                            self._kalshi_ask_price = Decimal(str(yes_ask)) / Decimal(
+                                '100'
+                            )
+                        if self._kalshi_ticker_obj is None:
+                            self._kalshi_ticker_obj = KalshiTicker(
+                                symbol=self.kalshi_ticker_str,
+                                name=m.get('title', '')[:40],
+                                market_ticker=self.kalshi_ticker_str,
+                                event_ticker=m.get('event_ticker', ''),
+                                series_ticker='',
+                            )
+                        logger.debug(
+                            'DirectArb: kalshi REST price %s (bid=%s ask=%s)',
+                            self.kalshi_ticker_str,
+                            yes_bid,
+                            yes_ask,
+                        )
+            except Exception as exc:
+                logger.debug('DirectArb: kalshi REST fetch failed: %s', exc)
+
+        await asyncio.gather(_fetch_poly(), _fetch_kalshi())
+
+        # Inject actual bid/ask into DataManager so PaperTrader can fill at real prices.
+        # Use OrderBookEvent with actual bid/ask (not synthetic from PriceChangeEvent)
+        # so a limit order at ask_price fills correctly.
+        from coinjure.events import OrderBookEvent as _OBE
+
+        _size = Decimal('1000')
+        if self._poly_ticker is not None:
+            if self._poly_ask_price is not None:
+                trader.market_data.process_orderbook_event(
+                    _OBE(
+                        ticker=self._poly_ticker,
+                        price=self._poly_ask_price,
+                        size=_size,
+                        size_delta=_size,
+                        side='ask',
+                    )
+                )
+            if self._poly_bid_price is not None:
+                trader.market_data.process_orderbook_event(
+                    _OBE(
+                        ticker=self._poly_ticker,
+                        price=self._poly_bid_price,
+                        size=_size,
+                        size_delta=_size,
+                        side='bid',
+                    )
+                )
+        if self._kalshi_ticker_obj is not None:
+            if self._kalshi_ask_price is not None:
+                trader.market_data.process_orderbook_event(
+                    _OBE(
+                        ticker=self._kalshi_ticker_obj,
+                        price=self._kalshi_ask_price,
+                        size=_size,
+                        size_delta=_size,
+                        side='ask',
+                    )
+                )
+            if self._kalshi_bid_price is not None:
+                trader.market_data.process_orderbook_event(
+                    _OBE(
+                        ticker=self._kalshi_ticker_obj,
+                        price=self._kalshi_bid_price,
+                        size=_size,
+                        size_delta=_size,
+                        side='bid',
+                    )
+                )
+
+        if self._poly_yes_price is not None and self._kalshi_yes_price is not None:
+            await self._check_arb(trader)
+
     async def process_event(self, event: Event, trader: Trader) -> None:  # noqa: C901
+        await self._ensure_initialized(trader)
         if self.is_paused():
             return
 
@@ -127,14 +296,18 @@ class DirectArbStrategy(Strategy):
 
         # --- Match and store Polymarket price ---
         if isinstance(ticker, PolyMarketTicker):
-            if ticker.market_id == self.poly_market_id:
+            # Match by market_id (from news/event stream) OR token_id (from watch_token CLOB stream)
+            if ticker.market_id == self.poly_market_id or (
+                self.poly_token_id and ticker.token_id == self.poly_token_id
+            ):
                 self._poly_yes_price = price
                 if self._poly_ticker is None:
                     self._poly_ticker = ticker
                     logger.debug(
-                        'DirectArb: matched poly ticker %s (market_id=%s)',
+                        'DirectArb: matched poly ticker %s (market_id=%s token=%s)',
                         ticker.symbol[:20],
                         self.poly_market_id[:16],
+                        ticker.token_id[:16] if ticker.token_id else '',
                     )
 
         # --- Match and store Kalshi price ---
@@ -215,24 +388,33 @@ class DirectArbStrategy(Strategy):
         label = f'poly:{self.poly_market_id[:16]}'
         executed = False
 
-        # Leg 1: Buy Poly YES
+        # Leg 1: Buy Poly YES — use actual ask price so paper fill succeeds
+        poly_limit = (
+            self._poly_ask_price if self._poly_ask_price is not None else poly_yes
+        )
         try:
             result = await trader.place_order(
                 side=TradeSide.BUY,
                 ticker=poly_ticker,
-                limit_price=poly_yes,
+                limit_price=poly_limit,
                 quantity=self.trade_size,
             )
             if not result.failure_reason:
                 executed = True
-                logger.info('ARB leg1: buy Poly YES @ %s', poly_yes)
+                logger.info('ARB leg1: buy Poly YES @ %s', poly_limit)
         except Exception:
             logger.exception('ARB leg1 failed (buy Poly YES)')
 
-        # Leg 2: Buy Kalshi NO
+        # Leg 2: Buy Kalshi NO — no_ask = 1 - kalshi_bid
         kalshi_no = trader.market_data.find_complement(kalshi_ticker)
         if kalshi_no is not None and executed:
-            no_price = Decimal('1') - kalshi_yes
+            # Buying NO = paying (1 - bid), use bid price to derive realistic NO ask
+            kalshi_bid = (
+                self._kalshi_bid_price
+                if self._kalshi_bid_price is not None
+                else kalshi_yes
+            )
+            no_price = Decimal('1') - kalshi_bid
             try:
                 result2 = await trader.place_order(
                     side=TradeSide.BUY,
@@ -277,24 +459,31 @@ class DirectArbStrategy(Strategy):
         label = f'poly:{self.poly_market_id[:16]}'
         executed = False
 
-        # Leg 1: Buy Kalshi YES
+        # Leg 1: Buy Kalshi YES — use actual ask price so paper fill succeeds
+        kalshi_limit = (
+            self._kalshi_ask_price if self._kalshi_ask_price is not None else kalshi_yes
+        )
         try:
             result = await trader.place_order(
                 side=TradeSide.BUY,
                 ticker=kalshi_ticker,
-                limit_price=kalshi_yes,
+                limit_price=kalshi_limit,
                 quantity=self.trade_size,
             )
             if not result.failure_reason:
                 executed = True
-                logger.info('ARB leg1: buy Kalshi YES @ %s', kalshi_yes)
+                logger.info('ARB leg1: buy Kalshi YES @ %s', kalshi_limit)
         except Exception:
             logger.exception('ARB leg1 failed (buy Kalshi YES)')
 
-        # Leg 2: Buy Poly NO
+        # Leg 2: Buy Poly NO — no_ask = 1 - poly_bid
         poly_no = trader.market_data.find_complement(poly_ticker)
         if poly_no is not None and executed:
-            no_price = Decimal('1') - poly_yes
+            # Buying NO = paying (1 - bid), use bid price to derive realistic NO ask
+            poly_bid = (
+                self._poly_bid_price if self._poly_bid_price is not None else poly_yes
+            )
+            no_price = Decimal('1') - poly_bid
             try:
                 result2 = await trader.place_order(
                     side=TradeSide.BUY,
