@@ -305,14 +305,14 @@ async def _fetch_leg_prices(
 async def _fetch_relation_prices(
     relation: MarketRelation,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Fetch price history for both legs (dispatches by platform)."""
-    token_a = relation.get_token_id(0)
-    token_b = relation.get_token_id(1)
-    prices_a, prices_b = await asyncio.gather(
-        _fetch_leg_prices(relation.markets[0], token_a),
-        _fetch_leg_prices(relation.markets[1], token_b),
+    """Fetch price history for two legs of a relation (dispatches by platform)."""
+    token_0 = relation.get_token_id(0)
+    token_1 = relation.get_token_id(1)
+    prices_0, prices_1 = await asyncio.gather(
+        _fetch_leg_prices(relation.markets[0], token_0),
+        _fetch_leg_prices(relation.markets[1], token_1),
     )
-    return prices_a, prices_b
+    return prices_0, prices_1
 
 
 # ---------------------------------------------------------------------------

@@ -150,66 +150,53 @@ def _detect_exchange(market_id: str) -> str:
 
 
 @market_relations_group.command('add')
-@click.option('--market-id-a', required=True, help='Market ID for leg A.')
-@click.option('--market-id-b', required=True, help='Market ID for leg B.')
+@click.option(
+    '--market-id',
+    '-m',
+    'market_ids',
+    required=True,
+    multiple=True,
+    help='Market ID (repeatable, >=2 required). e.g. -m 610380 -m 610381 -m 610382',
+)
 @click.option(
     '--exchange',
     'exc',
     type=click.Choice(['polymarket', 'kalshi', 'auto']),
     default='auto',
     show_default=True,
-    help='Exchange for both markets. Use "auto" to detect per market ID (numeric=polymarket, else=kalshi).',
-)
-@click.option(
-    '--exchange-a',
-    'exc_a',
-    type=click.Choice(['polymarket', 'kalshi']),
-    default=None,
-    help='Exchange for market A (overrides --exchange).',
-)
-@click.option(
-    '--exchange-b',
-    'exc_b',
-    type=click.Choice(['polymarket', 'kalshi']),
-    default=None,
-    help='Exchange for market B (overrides --exchange).',
+    help='Exchange for all markets. Use "auto" to detect per market ID (numeric=polymarket, else=kalshi).',
 )
 @click.option(
     '--spread-type',
     default='correlated',
     show_default=True,
-    help='Relation type (same_event, complementary, implication, exclusivity, correlated).',
+    help='Relation type (same_event, complementary, implication, exclusivity, correlated, structural, conditional, temporal).',
 )
 @click.option('--hypothesis', default='', help='Price relationship hypothesis.')
 @click.option('--reasoning', default='', help='Why these markets are related.')
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 def relations_add(
-    market_id_a: str,
-    market_id_b: str,
+    market_ids: tuple[str, ...],
     exc: str,
-    exc_a: str | None,
-    exc_b: str | None,
     spread_type: str,
     hypothesis: str,
     reasoning: str,
     as_json: bool,
 ) -> None:
-    """Create a relation between two markets.
+    """Create a relation between markets (group of 2+).
 
     Fetches market info from the API and persists the relation.
 
     \b
       coinjure market relations add \\
-        --market-id-a 610380 --market-id-b 610381 \\
-        --spread-type correlated \\
-        --hypothesis "p_A ~ p_B (positive)" \\
-        --reasoning "election called is prerequisite for held" --json
+        -m 553856 -m 553860 -m 553875 \\
+        --spread-type exclusivity \\
+        --hypothesis "sum(prices) <= 1"
     """
     from coinjure.market.relations import MarketRelation, RelationStore
 
-    # Resolve per-market exchange
-    resolved_exc_a = exc_a or (exc if exc != 'auto' else _detect_exchange(market_id_a))
-    resolved_exc_b = exc_b or (exc if exc != 'auto' else _detect_exchange(market_id_b))
+    if len(market_ids) < 2:
+        raise click.ClickException('At least 2 market IDs required.')
 
     async def _fetch_info(mid: str, platform: str) -> dict:
         if platform == 'polymarket':
@@ -225,19 +212,25 @@ def relations_add(
         info['platform'] = platform
         return info
 
+    infos: list[dict] = []
     try:
-        info_a = asyncio.run(_fetch_info(market_id_a, resolved_exc_a))
-        info_b = asyncio.run(_fetch_info(market_id_b, resolved_exc_b))
+        for mid in market_ids:
+            platform = exc if exc != 'auto' else _detect_exchange(mid)
+            infos.append(asyncio.run(_fetch_info(mid, platform)))
     except Exception as exc_err:
         raise click.ClickException(
             f'Failed to fetch market info: {exc_err}'
         ) from exc_err
 
-    rid = f'{market_id_a[:8]}-{market_id_b[:8]}'
+    # Build relation ID: first 3 IDs + overflow count
+    sorted_ids = sorted(mid[:8] for mid in market_ids)
+    rid = '-'.join(sorted_ids[:3])
+    if len(sorted_ids) > 3:
+        rid += f'-+{len(sorted_ids) - 3}'
 
     rel = MarketRelation(
         relation_id=rid,
-        markets=[info_a, info_b],
+        markets=infos,
         spread_type=spread_type,
         reasoning=reasoning,
         hypothesis=hypothesis,
@@ -259,9 +252,10 @@ def relations_add(
         )
         return
 
-    click.echo(f'\nRelation created: {rid}')
-    click.echo(f'  A: [{info_a.get("platform")}] {info_a.get("question", "")[:60]}')
-    click.echo(f'  B: [{info_b.get("platform")}] {info_b.get("question", "")[:60]}')
+    click.echo(f'\nRelation created: {rid} ({len(infos)} markets)')
+    for i, info in enumerate(infos):
+        q = info.get('question', '')[:60]
+        click.echo(f'  [{i}] [{info.get("platform")}] {q}')
     click.echo(f'  type={spread_type} hypothesis={hypothesis}')
     click.echo()
 
@@ -331,7 +325,7 @@ def relations_remove(relation_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# market discover (multi-keyword search + structural pair detection)
+# market discover (multi-keyword search + structural relation detection)
 # ---------------------------------------------------------------------------
 
 
@@ -411,8 +405,8 @@ def market_discover(
     # ── Fetch markets ──────────────────────────────────────────────────
 
     async def _fetch_markets() -> tuple[list[dict], list[dict]]:
-        # Over-fetch to compensate for zombie filtering downstream
-        fetch_limit = limit * 2
+        # Fetch all matching markets — limit is only applied at output time.
+        _NO_LIMIT = 10_000
 
         poly_markets: list[dict] = []
         kalshi_markets: list[dict] = []
@@ -433,15 +427,13 @@ def market_discover(
                     kalshi_seen.add(mid)
                     kalshi_markets.append(mk)
 
-        has_filters = query or tag
-
         if query or tag:
             for q in query:
                 if exchange in ('polymarket', 'both'):
                     _merge_poly(
                         await polymarket_search_markets(
                             q,
-                            fetch_limit,
+                            _NO_LIMIT,
                             with_rules=with_rules,
                         )
                     )
@@ -449,7 +441,7 @@ def market_discover(
                     _merge_kalshi(
                         await kalshi_search_markets(
                             q,
-                            fetch_limit,
+                            _NO_LIMIT,
                             kalshi_api_key_id,
                             kalshi_private_key_path,
                             with_rules=with_rules,
@@ -459,7 +451,7 @@ def market_discover(
                 if exchange in ('polymarket', 'both'):
                     _merge_poly(
                         await polymarket_list_markets(
-                            fetch_limit,
+                            _NO_LIMIT,
                             tag=t,
                             with_rules=with_rules,
                         )
@@ -467,12 +459,12 @@ def market_discover(
         else:
             if exchange in ('polymarket', 'both'):
                 poly_markets = await polymarket_list_markets(
-                    fetch_limit,
+                    _NO_LIMIT,
                     with_rules=with_rules,
                 )
             if exchange in ('kalshi', 'both'):
                 kalshi_markets = await kalshi_list_markets(
-                    fetch_limit,
+                    _NO_LIMIT,
                     kalshi_api_key_id,
                     kalshi_private_key_path,
                 )
@@ -500,8 +492,9 @@ def market_discover(
         except (ValueError, TypeError):
             return False
 
-    poly_markets = [m for m in poly_markets if _is_alive(m)][:limit]
-    kalshi_markets = [m for m in kalshi_markets if _is_alive(m)][:limit]
+    # Filter zombies but don't limit yet — auto-discover needs full pool
+    poly_alive = [m for m in poly_markets if _is_alive(m)]
+    kalshi_alive = [m for m in kalshi_markets if _is_alive(m)]
 
     # ── Annotate with existing relations ──────────────────────────────
 
@@ -520,11 +513,11 @@ def market_discover(
                     related_ids.setdefault(mid, []).append(r.relation_id)
 
     # Tag each market with its existing relations
-    for mk in poly_markets:
+    for mk in poly_alive:
         mid = mk.get('id', '')
         if mid and mid in related_ids:
             mk['existing_relations'] = related_ids[mid]
-    for mk in kalshi_markets:
+    for mk in kalshi_alive:
         mid = mk.get('ticker', '')
         if mid and mid in related_ids:
             mk['existing_relations'] = related_ids[mid]
@@ -548,7 +541,8 @@ def market_discover(
     if auto_discover:
         from coinjure.market.auto_discover import discover_relations
 
-        result = discover_relations(poly_markets, kalshi_markets)
+        # Use full pool for discovery, not limited
+        result = discover_relations(poly_alive, kalshi_alive)
 
         # Persist candidates to relation store
         stored_new = 0
@@ -573,27 +567,29 @@ def market_discover(
                     'market_count': len(r.markets),
                     'market_ids': [m.get('id', '') for m in r.markets],
                     'market_questions': [m.get('question', '')[:60] for m in r.markets],
-                    'current_arb': r.markets[0].get('current_arb', 0)
-                    if r.markets
-                    else 0,
-                    'market_mids': [m.get('current_mid') for m in r.markets],
                 }
                 for r in result.candidates
             ],
         }
 
+    # ── Apply limit for output (discovery used full pool above) ─────
+    poly_out = poly_alive[:limit]
+    kalshi_out = kalshi_alive[:limit]
+
     # ── Output ─────────────────────────────────────────────────────────
 
-    total = len(poly_markets) + len(kalshi_markets)
+    total = len(poly_out) + len(kalshi_out)
+    total_alive = len(poly_alive) + len(kalshi_alive)
 
     if as_json:
         payload: dict[str, Any] = {
             'ok': True,
             'markets': {
-                'polymarket': poly_markets,
-                'kalshi': kalshi_markets,
+                'polymarket': poly_out,
+                'kalshi': kalshi_out,
             },
             'total_markets': total,
+            'total_alive': total_alive,
             'existing_relations': relation_summary,
             'existing_relation_count': len(relation_summary),
         }
@@ -605,9 +601,12 @@ def market_discover(
     parts = [f'"{q}"' for q in query] + [f'tag:{t}' for t in tag]
     query_desc = ', '.join(parts) if parts else 'top by volume'
     click.echo(
-        f'\nDiscovered {len(poly_markets)} Polymarket + {len(kalshi_markets)} Kalshi '
-        f'markets (queries: {query_desc})\n'
+        f'\nDiscovered {len(poly_alive)} Polymarket + {len(kalshi_alive)} Kalshi '
+        f'alive markets (queries: {query_desc})'
     )
+    if total_alive > total:
+        click.echo(f'  (showing {total} of {total_alive}, use --limit to show more)')
+    click.echo()
 
     def _fmt_table(
         markets: list[dict],
@@ -644,8 +643,8 @@ def market_discover(
                     click.echo(f'  {"":>12}  Rules: {desc[:120]}...')
         click.echo()
 
-    _fmt_table(poly_markets, 'Polymarket')
-    _fmt_table(kalshi_markets, 'Kalshi')
+    _fmt_table(poly_out, 'Polymarket')
+    _fmt_table(kalshi_out, 'Kalshi')
 
     if auto_discover_summary:
         s = auto_discover_summary
@@ -659,20 +658,14 @@ def market_discover(
             click.echo(f'    By type: {s["by_type"]}')
         click.echo()
         for r in s['candidates'][:20]:
-            arb = r.get('current_arb', 0)
-            arb_s = f'   arb={arb:.3f}' if arb else ''
             n = r.get('market_count', 0)
             ids = r.get('market_ids', [])
             ids_s = ', '.join(str(i) for i in ids[:3])
             if len(ids) > 3:
                 ids_s += f' +{len(ids)-3} more'
-            click.echo(f'    [{r["type"]}] {n} markets: {ids_s}{arb_s}')
+            click.echo(f'    [{r["type"]}] {n} markets: {ids_s}')
             for q in r.get('market_questions', [])[:5]:
                 click.echo(f'      - {q}')
-            mids = r.get('market_mids', [])
-            if mids:
-                mid_sum = sum(m for m in mids if m is not None)
-                click.echo(f'      sum(mids)={mid_sum:.3f}')
             click.echo(f'      {r["reasoning"]}')
             click.echo()
         if len(s['candidates']) > 20:

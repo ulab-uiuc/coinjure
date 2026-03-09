@@ -1,9 +1,12 @@
 """Automatic market relation discovery from fetched market data.
 
-Detection layers (intra-event only — cross-event/cross-platform left to agent):
+Detection layers (intra-event structural only):
   1. Intra-event date nesting → implication (A ≤ B)
   2. Intra-event exclusivity (small winner-take-all events)
   3. Intra-event complementary outcomes (sum ≈ 1)
+
+Cross-event and cross-platform (same_event) relations require semantic
+understanding and are left for the LLM agent to discover.
 """
 
 from __future__ import annotations
@@ -53,29 +56,32 @@ def parse_deadline(question: str) -> date | None:
     """
     q = question.strip()
 
-    m = _RE_MONTH_DAY_YEAR.search(q)
-    if m:
-        month_name = m.group(1).lower()
-        if month_name in _MONTH_MAP:
-            return date(int(m.group(3)), _MONTH_MAP[month_name], int(m.group(2)))
+    try:
+        m = _RE_MONTH_DAY_YEAR.search(q)
+        if m:
+            month_name = m.group(1).lower()
+            if month_name in _MONTH_MAP:
+                return date(int(m.group(3)), _MONTH_MAP[month_name], int(m.group(2)))
 
-    m = _RE_MONTH_DAY.search(q)
-    if m:
-        month_name = m.group(1).lower()
-        if month_name in _MONTH_MAP:
-            return date(date.today().year, _MONTH_MAP[month_name], int(m.group(2)))
+        m = _RE_MONTH_DAY.search(q)
+        if m:
+            month_name = m.group(1).lower()
+            if month_name in _MONTH_MAP:
+                return date(date.today().year, _MONTH_MAP[month_name], int(m.group(2)))
 
-    m = _RE_BEFORE_YEAR.search(q)
-    if m:
-        yr = int(m.group(1))
-        if 2020 <= yr <= 2040:
-            return date(yr - 1, 12, 31)
+        m = _RE_BEFORE_YEAR.search(q)
+        if m:
+            yr = int(m.group(1))
+            if 2020 <= yr <= 2040:
+                return date(yr - 1, 12, 31)
 
-    m = _RE_IN_YEAR.search(q)
-    if m:
-        yr = int(m.group(1))
-        if 2020 <= yr <= 2040:
-            return date(yr, 12, 31)
+        m = _RE_IN_YEAR.search(q)
+        if m:
+            yr = int(m.group(1))
+            if 2020 <= yr <= 2040:
+                return date(yr, 12, 31)
+    except ValueError:
+        return None
 
     return None
 
@@ -87,14 +93,15 @@ def parse_deadline(question: str) -> date | None:
 
 def _enrich(m: dict, platform: str) -> dict:
     """Ensure market dict has fields expected by RelationStore."""
+    b, a = _bid_ask(m)
     return {
         'id': str(m.get('id', m.get('ticker', ''))),
-        'question': m.get('question', m.get('title', '')),
+        'question': _question(m),
         'event_id': str(m.get('event_id', m.get('event_ticker', ''))),
         'event_title': m.get('event_title', ''),
         'token_ids': m.get('token_ids', []),
-        'best_bid': m.get('best_bid', m.get('yes_bid', '')),
-        'best_ask': m.get('best_ask', m.get('yes_ask', '')),
+        'best_bid': b,
+        'best_ask': a,
         'volume': m.get('volume', ''),
         'end_date': m.get('end_date', m.get('close_time', '')),
         'platform': platform,
@@ -105,61 +112,25 @@ def _mid(m: dict) -> str:
     return str(m.get('id', m.get('ticker', '')))
 
 
-# Types with a structural pricing constraint that can be checked from snapshot
-_STRUCTURAL_TYPES = frozenset({'implication', 'exclusivity', 'complementary'})
+def _question(m: dict) -> str:
+    return m.get('question', '') or m.get('title', '')
 
 
-def _compute_mid_price(m: dict) -> float | None:
-    """Compute mid-price from bid/ask already in a market dict."""
-    bid = m.get('best_bid', '')
-    ask = m.get('best_ask', '')
-    try:
-        b = float(bid) if bid not in (None, '') else 0.0
-        a = float(ask) if ask not in (None, '') else 0.0
-    except (ValueError, TypeError):
-        return None
-    return (b + a) / 2 if (b or a) else None
+def _bid_ask(m: dict) -> tuple[float, float]:
+    """Return (bid, ask) normalised to 0-1 range.
 
-
-def _has_liquidity(m: dict) -> bool:
-    """Check that a market has non-zero bid AND ask (not a zombie market)."""
-    bid = m.get('best_bid', '')
-    ask = m.get('best_ask', '')
-    try:
-        return float(bid) > 0 and float(ask) > 0 if bid and ask else False
-    except (ValueError, TypeError):
-        return False
-
-
-def _compute_current_arb(rel: MarketRelation) -> float:
-    """Compute current constraint violation from snapshot bid/ask prices.
-
-    Returns 0.0 if no violation, prices unavailable, any leg has no
-    liquidity, or non-structural type.
+    Kalshi prices are in cents (0-100); Polymarket prices are 0-1 decimals.
     """
-    if rel.spread_type == 'implication':
-        if len(rel.markets) < 2:
-            return 0.0
-        if not _has_liquidity(rel.markets[0]) or not _has_liquidity(rel.markets[1]):
-            return 0.0
-        mid_a = _compute_mid_price(rel.markets[0])
-        mid_b = _compute_mid_price(rel.markets[1])
-        if mid_a is None or mid_b is None:
-            return 0.0
-        return max(mid_a - mid_b, 0.0)
-
-    if rel.spread_type in ('exclusivity', 'complementary'):
-        mids = []
-        for m in rel.markets:
-            if not _has_liquidity(m):
-                return 0.0
-            mid = _compute_mid_price(m)
-            if mid is None:
-                return 0.0
-            mids.append(mid)
-        return max(sum(mids) - 1.0, 0.0)
-
-    return 0.0
+    bid = m.get('best_bid') or m.get('yes_bid') or 0
+    ask = m.get('best_ask') or m.get('yes_ask') or 0
+    try:
+        b, a = float(bid), float(ask)
+    except (ValueError, TypeError):
+        return 0.0, 0.0
+    # Kalshi cents → decimal
+    if b > 1 or a > 1:
+        b, a = b / 100, a / 100
+    return b, a
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +146,7 @@ def detect_date_nesting(
     """Detect ordered deadline chains within a single event."""
     dated = []
     for m in markets:
-        d = parse_deadline(m.get('question', ''))
+        d = parse_deadline(_question(m))
         if d is not None:
             dated.append((d, m))
 
@@ -227,23 +198,21 @@ def detect_exclusivity(
 
     active = []
     for m in markets:
-        bid = m.get('best_bid') or m.get('yes_bid')
-        try:
-            if bid and float(bid) > 0:
-                active.append(m)
-        except (ValueError, TypeError):
-            continue
+        b, a = _bid_ask(m)
+        if b > 0 and a > 0:
+            active.append(m)
     if len(active) < 2:
         return []
 
-    winner_count = sum(1 for m in active if _RE_WINNER.search(m.get('question', '')))
+    winner_count = sum(1 for m in active if _RE_WINNER.search(_question(m)))
     if winner_count < len(active) * 0.8:
         return []
 
     market_ids = sorted(_mid(m) for m in active if _mid(m))
-    relation_id = '-'.join(market_ids[:3]) + (
+    id_part = '-'.join(market_ids[:3]) + (
         f'-+{len(market_ids)-3}' if len(market_ids) > 3 else ''
     )
+    relation_id = f'excl-{id_part}'
     return [
         MarketRelation(
             relation_id=relation_id,
@@ -274,13 +243,7 @@ def detect_complementary(
 
     priced: list[tuple[float, dict]] = []
     for m in markets:
-        bid = m.get('best_bid') or m.get('yes_bid')
-        ask = m.get('best_ask') or m.get('yes_ask')
-        try:
-            b = float(bid) if bid else 0.0
-            a = float(ask) if ask else 0.0
-        except (ValueError, TypeError):
-            continue
+        b, a = _bid_ask(m)
         mid = (b + a) / 2 if (b or a) else 0.0
         if mid > 0:
             priced.append((mid, m))
@@ -294,9 +257,10 @@ def detect_complementary(
 
     enriched = [_enrich(m, platform) for _, m in priced]
     market_ids = sorted(_mid(m) for _, m in priced if _mid(m))
-    relation_id = '-'.join(market_ids[:3]) + (
+    id_part = '-'.join(market_ids[:3]) + (
         f'-+{len(market_ids)-3}' if len(market_ids) > 3 else ''
     )
+    relation_id = f'comp-{id_part}'
     return [
         MarketRelation(
             relation_id=relation_id,
@@ -409,30 +373,20 @@ def discover_relations(
     seen: set[tuple[str, ...]] = set()
 
     for rel in all_rels:
-        market_ids = tuple(sorted(m.get('id', '') for m in rel.markets))
-        if market_ids in seen:
+        dedup_key = (rel.spread_type, *sorted(m.get('id', '') for m in rel.markets))
+        if dedup_key in seen:
             continue
-        seen.add(market_ids)
+        seen.add(dedup_key)
         deduped.append(rel)
 
     total_detected = len(deduped)
 
-    # --- Keep ALL structural relations (no arb > 0 gate) ---
-    candidates: list[MarketRelation] = []
-    for rel in deduped:
-        arb = _compute_current_arb(rel)
-        for m in rel.markets:
-            m['current_mid'] = _compute_mid_price(m)
-        if rel.markets:
-            rel.markets[0]['current_arb'] = round(arb, 4)
-        candidates.append(rel)
-
     by_type: dict[str, int] = {}
-    for r in candidates:
+    for r in deduped:
         by_type[r.spread_type] = by_type.get(r.spread_type, 0) + 1
 
     return DiscoveryResult(
-        candidates=candidates,
+        candidates=deduped,
         total_detected=total_detected,
         by_type=by_type,
         by_layer=by_layer,
