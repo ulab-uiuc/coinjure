@@ -32,8 +32,9 @@ STRUCTURAL_TYPES = frozenset(
 )
 STATISTICAL_TYPES = frozenset({'correlated', 'structural', 'conditional', 'temporal'})
 
-# Synthetic half-spread for generating bid/ask from mid price
-_HALF_SPREAD = Decimal('0.005')
+# Synthetic half-spread for generating bid/ask from mid price.
+# Zero by default: backtest assumes no slippage. Set > 0 to simulate spread.
+_HALF_SPREAD = Decimal('0')
 _BOOK_SIZE = Decimal('1000')
 
 
@@ -63,9 +64,8 @@ class BacktestResult:
 class PriceHistoryDataSource(DataSource):
     """DataSource that replays price history as PriceChange + OrderBook events.
 
-    Accepts two price series (one per leg of a relation) and interleaves them
-    by timestamp. Generates synthetic bid/ask OrderBookEvents so PaperTrader
-    has liquidity to fill against.
+    Accepts N price series (one per leg) and interleaves them by timestamp.
+    Generates synthetic bid/ask OrderBookEvents so PaperTrader has liquidity.
 
     If NO-side tickers are provided, also generates complementary (1 - price)
     events for each YES price point, enabling strategies that trade NO sides.
@@ -81,45 +81,41 @@ class PriceHistoryDataSource(DataSource):
         no_ticker_a: Ticker | None = None,
         no_ticker_b: Ticker | None = None,
     ) -> None:
+        legs = [
+            (ticker_a, prices_a, no_ticker_a),
+            (ticker_b, prices_b, no_ticker_b),
+        ]
         self._events: list[Event] = []
         self._idx = 0
-        self._build_events(
-            ticker_a,
-            prices_a,
-            ticker_b,
-            prices_b,
-            no_ticker_a=no_ticker_a,
-            no_ticker_b=no_ticker_b,
-        )
+        self._build_events(legs)
+
+    @classmethod
+    def from_legs(
+        cls,
+        legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]],
+    ) -> PriceHistoryDataSource:
+        """Create from N legs, each (yes_ticker, prices, no_ticker)."""
+        instance = object.__new__(cls)
+        instance._events = []
+        instance._idx = 0
+        instance._build_events(legs)
+        return instance
 
     def _build_events(
         self,
-        ticker_a: Ticker,
-        prices_a: list[dict[str, Any]],
-        ticker_b: Ticker,
-        prices_b: list[dict[str, Any]],
-        *,
-        no_ticker_a: Ticker | None = None,
-        no_ticker_b: Ticker | None = None,
+        legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]],
     ) -> None:
         """Convert raw {t, p} points into engine events, sorted by timestamp."""
         raw: list[tuple[int, Ticker, Decimal]] = []
-        for pt in prices_a:
-            try:
-                price = Decimal(str(pt['p']))
-                raw.append((int(pt['t']), ticker_a, price))
-                if no_ticker_a is not None:
-                    raw.append((int(pt['t']), no_ticker_a, Decimal('1') - price))
-            except (ValueError, TypeError, KeyError):
-                continue
-        for pt in prices_b:
-            try:
-                price = Decimal(str(pt['p']))
-                raw.append((int(pt['t']), ticker_b, price))
-                if no_ticker_b is not None:
-                    raw.append((int(pt['t']), no_ticker_b, Decimal('1') - price))
-            except (ValueError, TypeError, KeyError):
-                continue
+        for yes_ticker, prices, no_ticker in legs:
+            for pt in prices:
+                try:
+                    price = Decimal(str(pt['p']))
+                    raw.append((int(pt['t']), yes_ticker, price))
+                    if no_ticker is not None:
+                        raw.append((int(pt['t']), no_ticker, Decimal('1') - price))
+                except (ValueError, TypeError, KeyError):
+                    continue
 
         raw.sort(key=lambda x: x[0])
 
@@ -173,8 +169,10 @@ def _make_ticker(relation: MarketRelation, index: int, side: str = 'yes') -> Tic
 
     if platform == 'kalshi':
         market_ticker = str(m.get('ticker', m.get('id', '')))
+        # Differentiate YES/NO symbols to avoid PositionManager collision
+        symbol = f'{market_ticker}:{side}' if side == 'no' else market_ticker
         return KalshiTicker(
-            symbol=market_ticker,
+            symbol=symbol,
             name=question,
             market_ticker=market_ticker,
             event_ticker=str(m.get('event_ticker', '')),
@@ -242,15 +240,67 @@ def _build_engine(
             realized_pnl=Decimal('0'),
         )
     )
+    # Fund Kalshi USD too so cross-platform arbs (same_event) can trade both legs
+    position_manager.update_position(
+        Position(
+            ticker=CashTicker.KALSHI_USD,
+            quantity=initial_capital,
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
     trader = PaperTrader(
         market_data=market_data,
         risk_manager=NoRiskManager(),
         position_manager=position_manager,
-        min_fill_rate=Decimal('0.5'),
+        min_fill_rate=Decimal('1.0'),
         max_fill_rate=Decimal('1.0'),
         commission_rate=Decimal('0.0'),
     )
     return TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
+
+
+def _engine_total_pnl(
+    engine: TradingEngine, initial_capital: Decimal = Decimal('10000')
+) -> tuple[Decimal, int]:
+    """Return (total_pnl, trade_count) as ending equity minus initial capital.
+
+    Computes actual equity: cash remaining + market value of all open positions.
+    This correctly handles buy-only strategies (structural arbs) where
+    PerformanceAnalyzer only sees negative cash flows from BUY trades.
+
+    initial_capital is the amount funded PER cash ticker (both Poly USDC
+    and Kalshi USD get this amount).  PnL = total_equity - total_funded.
+    """
+    pm = engine.trader.position_manager
+    md = engine.trader.market_data
+    total_equity = Decimal('0')
+    cash_tickers_count = 0
+
+    for pos in pm.positions.values():
+        if isinstance(pos.ticker, CashTicker):
+            total_equity += pos.quantity
+            cash_tickers_count += 1
+        elif pos.quantity > 0:
+            # Mark to current market price
+            current_price = Decimal('0')
+            best_bid = md.get_best_bid(pos.ticker)
+            if best_bid is not None:
+                current_price = best_bid.price
+            else:
+                best_ask = md.get_best_ask(pos.ticker)
+                if best_ask is not None:
+                    current_price = best_ask.price
+            if current_price > 0:
+                total_equity += current_price * pos.quantity
+            else:
+                # No price data — fall back to cost basis (conservative)
+                total_equity += pos.average_cost * pos.quantity
+
+    total_funded = initial_capital * max(cash_tickers_count, 1)
+    pnl = total_equity - total_funded
+    trade_count = len(engine._perf.trades)
+    return pnl, trade_count
 
 
 async def _resolve_polymarket_token(
@@ -302,19 +352,6 @@ async def _fetch_leg_prices(
     return await fetch_price_history(token_id, fidelity=1)
 
 
-async def _fetch_relation_prices(
-    relation: MarketRelation,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Fetch price history for two legs of a relation (dispatches by platform)."""
-    token_0 = relation.get_token_id(0)
-    token_1 = relation.get_token_id(1)
-    prices_0, prices_1 = await asyncio.gather(
-        _fetch_leg_prices(relation.markets[0], token_0),
-        _fetch_leg_prices(relation.markets[1], token_1),
-    )
-    return prices_0, prices_1
-
-
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -355,8 +392,12 @@ async def run_backtest_relation(
     if spread_type == 'same_event':
         _build_same_event_kwargs(kwargs, relation)
         kwargs.setdefault('backtest_mode', True)
+        # Disable cooldown — time.monotonic() doesn't advance in backtest
+        kwargs.setdefault('cooldown_seconds', 0)
     elif spread_type in ('complementary', 'exclusivity'):
         kwargs.setdefault('relation_id', relation.relation_id)
+        # Disable cooldown — time.monotonic() doesn't advance in backtest
+        kwargs.setdefault('cooldown_seconds', 0)
         for m in relation.markets:
             eid = m.get('event_id', '')
             if eid:
@@ -383,9 +424,7 @@ async def run_backtest_relation(
         strategy = strategy_cls(**kwargs)
         engine = _build_engine(data_source, strategy, initial_capital)
         await engine.start()
-        stats = engine._perf.get_stats()
-        pnl = stats.total_pnl
-        trades = stats.total_trades
+        pnl, trades = _engine_total_pnl(engine, initial_capital)
         return BacktestResult(
             **result_base,
             total_pnl=pnl,
@@ -394,56 +433,65 @@ async def run_backtest_relation(
         )
 
     # --- Price history from API ---
+    # Fetch prices for ALL legs (N markets, not just 2).
+    # Limit concurrency to avoid API rate-limiting (503 errors).
+    n_markets = len(relation.markets)
+    _API_CONCURRENCY = 5
+    sem = asyncio.Semaphore(_API_CONCURRENCY)
+
+    async def _fetch_with_limit(i: int) -> list[dict[str, Any]]:
+        async with sem:
+            return await _fetch_leg_prices(
+                relation.markets[i], relation.get_token_id(i)
+            )
+
     try:
-        prices_a, prices_b = await _fetch_relation_prices(relation)
+        all_prices = await asyncio.gather(
+            *[_fetch_with_limit(i) for i in range(n_markets)]
+        )
     except Exception as exc:
         return BacktestResult(**result_base, error=str(exc))
 
-    if len(prices_a) < 10 or len(prices_b) < 10:
+    # Build legs: (yes_ticker, prices, no_ticker) for each market with data
+    legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]] = []
+    for i, prices in enumerate(all_prices):
+        if len(prices) < 10:
+            continue
+        yes_ticker = _make_ticker(relation, i)
+        no_tid = relation.get_no_token_id(i)
+        no_ticker = _make_ticker(relation, i, side='no') if no_tid else None
+        legs.append((yes_ticker, prices, no_ticker))
+
+    if len(legs) < 2:
+        data_lens = ', '.join(f'{i}={len(p)}' for i, p in enumerate(all_prices))
         return BacktestResult(
             **result_base,
-            error=f'Insufficient price data: A={len(prices_a)}, B={len(prices_b)}',
+            error=f'Insufficient price data: {data_lens}',
         )
-
-    ticker_a = _make_ticker(relation, 0)
-    ticker_b = _make_ticker(relation, 1)
-
-    # Build NO-side tickers if available (needed by EventSumArb etc.)
-    no_ticker_a: Ticker | None = None
-    no_ticker_b: Ticker | None = None
-    if relation.get_no_token_id(0):
-        no_ticker_a = _make_ticker(relation, 0, side='no')
-    if relation.get_no_token_id(1):
-        no_ticker_b = _make_ticker(relation, 1, side='no')
 
     if spread_type in STRUCTURAL_TYPES:
         # Structural: run on full data
-        ds = PriceHistoryDataSource(
-            ticker_a,
-            prices_a,
-            ticker_b,
-            prices_b,
-            no_ticker_a=no_ticker_a,
-            no_ticker_b=no_ticker_b,
-        )
+        ds = PriceHistoryDataSource.from_legs(legs)
         strategy = strategy_cls(**kwargs)
         engine = _build_engine(ds, strategy, initial_capital)
         await engine.start()
-        stats = engine._perf.get_stats()
+        pnl, trades = _engine_total_pnl(engine, initial_capital)
         return BacktestResult(
             **result_base,
-            total_pnl=stats.total_pnl,
-            trade_count=stats.total_trades,
-            passed=stats.total_pnl > 0,
+            total_pnl=pnl,
+            trade_count=trades,
+            passed=pnl > 0,
         )
 
     # Statistical: walk-forward 60/40
-    split_a = int(len(prices_a) * 0.6)
-    split_b = int(len(prices_b) * 0.6)
-    train_a, test_a = prices_a[:split_a], prices_a[split_a:]
-    train_b, test_b = prices_b[:split_b], prices_b[split_b:]
+    train_legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]] = []
+    test_legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]] = []
+    for yes_ticker, prices, no_ticker in legs:
+        split = int(len(prices) * 0.6)
+        train_legs.append((yes_ticker, prices[:split], no_ticker))
+        test_legs.append((yes_ticker, prices[split:], no_ticker))
 
-    if len(test_a) < 5 or len(test_b) < 5:
+    if any(len(p) < 5 for _, p, _ in test_legs):
         return BacktestResult(
             **result_base,
             error='Insufficient test data after 60/40 split',
@@ -451,33 +499,20 @@ async def run_backtest_relation(
 
     # Train phase: warm up strategy
     strategy = strategy_cls(**kwargs)
-    train_ds = PriceHistoryDataSource(
-        ticker_a,
-        train_a,
-        ticker_b,
-        train_b,
-        no_ticker_a=no_ticker_a,
-        no_ticker_b=no_ticker_b,
-    )
+    train_ds = PriceHistoryDataSource.from_legs(train_legs)
     train_engine = _build_engine(train_ds, strategy, initial_capital)
     await train_engine.start()
 
     # Test phase: reuse calibrated strategy, fresh engine
-    test_ds = PriceHistoryDataSource(
-        ticker_a,
-        test_a,
-        ticker_b,
-        test_b,
-        no_ticker_a=no_ticker_a,
-        no_ticker_b=no_ticker_b,
-    )
+    strategy.reset_live_state()
+    test_ds = PriceHistoryDataSource.from_legs(test_legs)
     test_engine = _build_engine(test_ds, strategy, initial_capital)
     await test_engine.start()
 
-    stats = test_engine._perf.get_stats()
+    pnl, trades = _engine_total_pnl(test_engine, initial_capital)
     return BacktestResult(
         **result_base,
-        total_pnl=stats.total_pnl,
-        trade_count=stats.total_trades,
-        passed=stats.total_pnl > 0,
+        total_pnl=pnl,
+        trade_count=trades,
+        passed=pnl > 0,
     )

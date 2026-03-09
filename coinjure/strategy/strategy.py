@@ -8,9 +8,9 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from coinjure.data.manager import DataPoint
-from coinjure.trading.trader import Trader
 from coinjure.events import Event
 from coinjure.ticker import CashTicker, Ticker
+from coinjure.trading.trader import Trader
 
 
 @dataclass
@@ -238,6 +238,16 @@ class Strategy(ABC):
 
     async def on_stop(self) -> None:  # noqa: B027
         """Called once when the engine shuts down, after the last event."""
+
+    def reset_live_state(self) -> None:  # noqa: B027
+        """Reset live trading state while preserving calibration.
+
+        Called between walk-forward train and test phases so that
+        calibrated parameters (means, thresholds) survive but ephemeral
+        state (current prices, position tracking) is cleared.
+
+        Subclasses should override to reset their own live state.
+        """
 
     def watch_tokens(self) -> list[str]:
         """Return token IDs that the data source should prioritize refreshing.
