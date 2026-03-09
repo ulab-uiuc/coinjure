@@ -40,62 +40,85 @@ async def polymarket_list_markets(
     tag: str | None = None,
     with_rules: bool = False,
 ) -> list[dict]:
-    markets: list[dict[str, Any]] = []
-    offset = 0
-    page_size = 100  # Gamma API max per request
+    """Fetch top markets by volume (parallel pages). Alias for sorted fetch."""
+    return await _polymarket_list_markets_sorted(
+        limit, 'volume', False, tag, with_rules
+    )
+
+
+def _parse_events_to_markets(events: list[dict], with_rules: bool) -> list[dict]:
+    """Convert Gamma API event list to flat market list."""
+    markets: list[dict] = []
+    for event in events:
+        tags_list = [
+            t.get('label', '') for t in event.get('tags', []) if t.get('label')
+        ]
+        category = event.get('category', '')
+        for mkt in event.get('markets', []):
+            clob_ids = parse_clob_ids(mkt)
+            entry: dict[str, Any] = {
+                'id': mkt.get('id', ''),
+                'question': mkt.get('question', ''),
+                'event_id': str(event.get('id', '')),
+                'event_title': event.get('title', ''),
+                'token_ids': clob_ids,
+                'best_bid': mkt.get('bestBid', ''),
+                'best_ask': mkt.get('bestAsk', ''),
+                'volume': mkt.get('volume', ''),
+                'end_date': mkt.get('endDate', ''),
+                'tags': tags_list,
+                'category': category,
+            }
+            if with_rules:
+                entry['description'] = mkt.get('description', '')
+            markets.append(entry)
+    return markets
+
+
+async def _polymarket_list_markets_sorted(
+    limit: int,
+    order: str,
+    ascending: bool,
+    tag: str | None,
+    with_rules: bool,
+) -> list[dict]:
+    """Fetch markets with a specific sort order, using parallel page requests."""
+    page_size = 100
+    num_pages = (limit + page_size - 1) // page_size
+
+    base_params: dict[str, Any] = {
+        'active': 'true',
+        'closed': 'false',
+        'limit': page_size,
+        'order': order,
+        'ascending': 'true' if ascending else 'false',
+    }
+    if tag:
+        base_params['tag'] = tag
+
+    async def fetch_page(client: httpx.AsyncClient, offset: int) -> list[dict]:
+        resp = await client.get(
+            GAMMA_EVENTS_URL, params={**base_params, 'offset': offset}
+        )
+        if resp.status_code != 200:
+            return []
+        return resp.json() or []
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        while len(markets) < limit:
-            params: dict[str, Any] = {
-                'active': 'true',
-                'closed': 'false',
-                'limit': page_size,
-                'offset': offset,
-            }
-            if tag:
-                params['tag'] = tag
-            resp = await client.get(GAMMA_EVENTS_URL, params=params)
-            if resp.status_code != 200:
-                if offset == 0:
-                    raise ValueError(
-                        f'Polymarket API returned HTTP {resp.status_code}: {resp.text[:200]}'
-                    )
-                break
-            events = resp.json()
-            if not events:
-                break
-            for event in events:
-                tags_list = [
-                    t.get('label', '') for t in event.get('tags', []) if t.get('label')
-                ]
-                category = event.get('category', '')
-                for mkt in event.get('markets', []):
-                    if len(markets) >= limit:
-                        break
-                    clob_ids = parse_clob_ids(mkt)
-                    entry: dict[str, Any] = {
-                        'id': mkt.get('id', ''),
-                        'question': mkt.get('question', ''),
-                        'event_id': str(event.get('id', '')),
-                        'event_title': event.get('title', ''),
-                        'token_ids': clob_ids,
-                        'best_bid': mkt.get('bestBid', ''),
-                        'best_ask': mkt.get('bestAsk', ''),
-                        'volume': mkt.get('volume', ''),
-                        'end_date': mkt.get('endDate', ''),
-                        'tags': tags_list,
-                        'category': category,
-                    }
-                    if with_rules:
-                        entry['description'] = mkt.get('description', '')
-                    markets.append(entry)
-                if len(markets) >= limit:
-                    break
-            offset += len(events)
-            if len(events) < page_size:
-                break  # No more pages
+        # Fetch first page to check if data exists, then fetch rest in parallel
+        first_events = await fetch_page(client, 0)
+        if not first_events:
+            return []
 
-    return markets[:limit]
+        if num_pages == 1:
+            return _parse_events_to_markets(first_events, with_rules)[:limit]
+
+        # Fetch remaining pages in parallel
+        offsets = [i * page_size for i in range(1, num_pages)]
+        pages = await asyncio.gather(*[fetch_page(client, off) for off in offsets])
+
+    all_events = first_events + [ev for page in pages for ev in page]
+    return _parse_events_to_markets(all_events, with_rules)[:limit]
 
 
 async def polymarket_search_markets(
@@ -105,7 +128,22 @@ async def polymarket_search_markets(
     tag: str | None = None,
     with_rules: bool = False,
 ) -> list[dict]:
-    all_markets = await polymarket_list_markets(500, tag=tag, with_rules=with_rules)
+    # Fetch from two sort orders: top by volume AND newest by startDate.
+    # Fetch top 2500 by volume (parallel pages, ~2s) to cover mid-tier markets like Fed (~rank 1961).
+    # Also fetch 300 newest to catch recently-created markets.
+    by_volume, by_recent = await asyncio.gather(
+        _polymarket_list_markets_sorted(2500, 'volume', False, tag, with_rules),
+        _polymarket_list_markets_sorted(300, 'startDate', False, tag, with_rules),
+    )
+    # Merge, deduplicate by market id
+    seen: set[str] = set()
+    all_markets: list[dict] = []
+    for m in by_volume + by_recent:
+        mid = str(m.get('id', ''))
+        if mid and mid not in seen:
+            seen.add(mid)
+            all_markets.append(m)
+
     q = query.lower()
     filtered = [
         m
@@ -113,6 +151,20 @@ async def polymarket_search_markets(
         if q in m.get('question', '').lower() or q in m.get('event_title', '').lower()
     ]
     return filtered[:limit]
+
+
+async def polymarket_fetch_by_slug(
+    slug: str, *, with_rules: bool = False
+) -> list[dict]:
+    """Fetch all markets in a Polymarket event by its URL slug."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(GAMMA_EVENTS_URL, params={'slug': slug})
+    if resp.status_code != 200:
+        return []
+    events = resp.json()
+    if not events:
+        return []
+    return _parse_events_to_markets(events, with_rules)
 
 
 async def polymarket_market_info(market_id: str) -> dict | None:
@@ -189,18 +241,17 @@ async def kalshi_list_markets(
     return markets
 
 
-async def kalshi_search_via_events(
+async def kalshi_search_markets(
     query: str,
     limit: int,
+    api_key_id: str | None = None,
+    private_key_path: str | None = None,
     with_rules: bool = False,
 ) -> list[dict]:
     """Search Kalshi events by keyword via raw HTTP and extract nested markets.
 
-    The SDK's EventsApi crashes due to a pydantic validation bug, and the
-    SDK's get_markets endpoint is dominated by sports parlays with no
-    server-side text search.  Hitting the events endpoint directly with
-    httpx (read-only, no auth required) and filtering by title is the
-    most reliable approach.
+    Scans all pages (up to 4000 events) before trimming to limit, so that
+    markets on later pages (e.g. KXFEDDECISION-26APR) are not missed.
     """
     q = query.lower()
     matched_markets: list[dict] = []
@@ -208,68 +259,52 @@ async def kalshi_search_via_events(
     pages = 0
     max_pages = 20  # up to 4 000 events
 
-    while pages < max_pages and len(matched_markets) < limit:
-        params: dict[str, Any] = {
-            'status': 'open',
-            'limit': 200,
-            'with_nested_markets': 'true',
-        }
-        if cursor:
-            params['cursor'] = cursor
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while pages < max_pages:
+            params: dict[str, Any] = {
+                'status': 'open',
+                'limit': 200,
+                'with_nested_markets': 'true',
+            }
+            if cursor:
+                params['cursor'] = cursor
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(
-                f'{KALSHI_API_URL}/events',
-                params=params,
-            )
-        if resp.status_code != 200:
-            break
-
-        data = resp.json()
-        events = data.get('events', [])
-        if not events:
-            break
-
-        for event in events:
-            title = event.get('title', '').lower()
-            if q not in title:
-                continue
-            for mkt in event.get('markets', []) or []:
-                if len(matched_markets) >= limit:
-                    break
-                entry = {
-                    'ticker': mkt.get('ticker', ''),
-                    'title': mkt.get('title', ''),
-                    'event_ticker': mkt.get('event_ticker', ''),
-                    'series_ticker': mkt.get('series_ticker', ''),
-                    'yes_bid': mkt.get('yes_bid', 0),
-                    'yes_ask': mkt.get('yes_ask', 0),
-                    'volume': mkt.get('volume', 0),
-                    'close_time': str(mkt.get('close_time', '')),
-                    'status': mkt.get('status', ''),
-                }
-                if with_rules:
-                    entry['rules_primary'] = mkt.get('rules_primary', '')
-                matched_markets.append(entry)
-            if len(matched_markets) >= limit:
+            resp = await client.get(f'{KALSHI_API_URL}/events', params=params)
+            if resp.status_code != 200:
                 break
 
-        cursor = data.get('cursor')
-        pages += 1
-        if not cursor:
-            break
+            data = resp.json()
+            events = data.get('events', [])
+            if not events:
+                break
 
+            for event in events:
+                if q not in event.get('title', '').lower():
+                    continue
+                for mkt in event.get('markets', []) or []:
+                    entry = {
+                        'ticker': mkt.get('ticker', ''),
+                        'title': mkt.get('title', ''),
+                        'event_ticker': mkt.get('event_ticker', ''),
+                        'series_ticker': mkt.get('series_ticker', ''),
+                        'yes_bid': mkt.get('yes_bid', 0),
+                        'yes_ask': mkt.get('yes_ask', 0),
+                        'volume': mkt.get('volume', 0),
+                        'close_time': str(mkt.get('close_time', '')),
+                        'status': mkt.get('status', ''),
+                    }
+                    if with_rules:
+                        entry['rules_primary'] = mkt.get('rules_primary', '')
+                    matched_markets.append(entry)
+
+            cursor = data.get('cursor')
+            pages += 1
+            if not cursor:
+                break
+
+    # Sort by volume descending so highest-liquidity markets surface first
+    matched_markets.sort(key=lambda m: m.get('volume', 0) or 0, reverse=True)
     return matched_markets[:limit]
-
-
-async def kalshi_search_markets(
-    query: str,
-    limit: int,
-    api_key_id: str | None,
-    private_key_path: str | None,
-    with_rules: bool = False,
-) -> list[dict]:
-    return await kalshi_search_via_events(query, limit, with_rules=with_rules)
 
 
 async def kalshi_market_info(
