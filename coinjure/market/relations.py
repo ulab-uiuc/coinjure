@@ -98,11 +98,10 @@ class ValidationResult:
 
 @dataclass
 class MarketRelation:
-    """A discovered relationship between two prediction markets."""
+    """A discovered relationship between prediction markets."""
 
     relation_id: str
-    market_a: dict[str, Any] = field(default_factory=dict)
-    market_b: dict[str, Any] = field(default_factory=dict)
+    markets: list[dict[str, Any]] = field(default_factory=list)
     spread_type: str = 'unknown'
     confidence: float = 0.0
     reasoning: str = ''
@@ -159,13 +158,15 @@ class MarketRelation:
             **{k: v for k, v in self.validation.items() if k in known}
         )
 
-    def get_token_id(self, leg: str = 'a') -> str:
-        """Get the first YES-side CLOB token_id for leg 'a' or 'b'.
+    def get_token_id(self, index: int = 0) -> str:
+        """Get the first YES-side CLOB token_id for market at *index*.
 
         Checks token_ids (list), then token_id (singular), then falls back
         to the market dict's 'id' field.
         """
-        m = self.market_a if leg == 'a' else self.market_b
+        if index < 0 or index >= len(self.markets):
+            return ''
+        m = self.markets[index]
         token_ids = m.get('token_ids', [])
         if token_ids:
             return str(token_ids[0])
@@ -174,13 +175,15 @@ class MarketRelation:
             return str(token_id)
         return str(m.get('id', ''))
 
-    def get_no_token_id(self, leg: str = 'a') -> str:
-        """Get the NO-side CLOB token_id for leg 'a' or 'b'.
+    def get_no_token_id(self, index: int = 0) -> str:
+        """Get the NO-side CLOB token_id for market at *index*.
 
         Checks token_ids[1] (list), then no_token_id (singular).
         Returns empty string if not available.
         """
-        m = self.market_a if leg == 'a' else self.market_b
+        if index < 0 or index >= len(self.markets):
+            return ''
+        m = self.markets[index]
         token_ids = m.get('token_ids', [])
         if len(token_ids) >= 2:
             return str(token_ids[1])
@@ -194,7 +197,11 @@ class MarketRelation:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> MarketRelation:
+        d = dict(d)
         known = {f.name for f in cls.__dataclass_fields__.values()}
+        # Auto-migrate old pair format
+        if 'market_a' in d and 'markets' not in d:
+            d['markets'] = [d.pop('market_a'), d.pop('market_b', {})]
         filtered = {k: v for k, v in d.items() if k in known}
         return cls(**filtered)
 
@@ -302,20 +309,16 @@ class RelationStore:
         """Return all relations involving a given market (by any id field)."""
         results = []
         for r in self.list():
-            a_ids = {
-                r.market_a.get('market_id', ''),
-                r.market_a.get('id', ''),
-                r.market_a.get('ticker', ''),
-                *r.market_a.get('token_ids', []),
-            }
-            b_ids = {
-                r.market_b.get('market_id', ''),
-                r.market_b.get('id', ''),
-                r.market_b.get('ticker', ''),
-                *r.market_b.get('token_ids', []),
-            }
-            if market_id in a_ids or market_id in b_ids:
-                results.append(r)
+            for m in r.markets:
+                ids = {
+                    m.get('market_id', ''),
+                    m.get('id', ''),
+                    m.get('ticker', ''),
+                    *m.get('token_ids', []),
+                }
+                if market_id in ids:
+                    results.append(r)
+                    break
         return results
 
     def strongest(self, n: int = 10, status: str | None = None) -> list[MarketRelation]:
