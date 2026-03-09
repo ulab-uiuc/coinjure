@@ -212,12 +212,20 @@ class LiveKalshiDataSource(DataSource):
         yes_bid = market.get('yes_bid', 0) or 0
         yes_ask = market.get('yes_ask', 0) or 0
 
-        ticker = KalshiTicker(
+        ticker_yes = KalshiTicker(
             symbol=market_ticker,
             name=market_title,
             market_ticker=market_ticker,
             event_ticker=event_ticker,
             series_ticker=series_ticker,
+        )
+        ticker_no = KalshiTicker(
+            symbol=f'{market_ticker}_NO',
+            name=f'{market_title} (NO)',
+            market_ticker=market_ticker,
+            event_ticker=event_ticker,
+            series_ticker=series_ticker,
+            side='no',
         )
 
         prev = self.last_prices.get(market_ticker, (0, 0))
@@ -226,12 +234,12 @@ class LiveKalshiDataSource(DataSource):
         # Synthetic size for top-of-book
         size = Decimal('100')
 
-        # Emit bid event if price changed
+        # YES side: emit bid/ask events
         if yes_bid > 0 and yes_bid != prev_bid:
             bid_price = Decimal(str(yes_bid)) / Decimal('100')
             events.append(
                 OrderBookEvent(
-                    ticker=ticker,
+                    ticker=ticker_yes,
                     price=bid_price,
                     size=size,
                     size_delta=size,
@@ -239,13 +247,37 @@ class LiveKalshiDataSource(DataSource):
                 )
             )
 
-        # Emit ask event if price changed
         if yes_ask > 0 and yes_ask != prev_ask:
             ask_price = Decimal(str(yes_ask)) / Decimal('100')
             events.append(
                 OrderBookEvent(
-                    ticker=ticker,
+                    ticker=ticker_yes,
                     price=ask_price,
+                    size=size,
+                    size_delta=size,
+                    side='ask',
+                )
+            )
+
+        # NO side: derive from YES prices (no_bid = 1 - yes_ask, no_ask = 1 - yes_bid)
+        if yes_ask > 0 and yes_ask != prev_ask:
+            no_bid_price = Decimal('1') - Decimal(str(yes_ask)) / Decimal('100')
+            events.append(
+                OrderBookEvent(
+                    ticker=ticker_no,
+                    price=no_bid_price,
+                    size=size,
+                    size_delta=size,
+                    side='bid',
+                )
+            )
+
+        if yes_bid > 0 and yes_bid != prev_bid:
+            no_ask_price = Decimal('1') - Decimal(str(yes_bid)) / Decimal('100')
+            events.append(
+                OrderBookEvent(
+                    ticker=ticker_no,
+                    price=no_ask_price,
                     size=size,
                     size_delta=size,
                     side='ask',
@@ -254,7 +286,7 @@ class LiveKalshiDataSource(DataSource):
 
         self.last_prices[market_ticker] = (yes_bid, yes_ask)
 
-        # Derive PriceChangeEvent from mid-price
+        # Derive PriceChangeEvent from mid-price (YES side only)
         if yes_bid > 0 and yes_ask > 0:
             mid = (Decimal(str(yes_bid)) + Decimal(str(yes_ask))) / Decimal('200')
         elif yes_bid > 0:
@@ -265,7 +297,7 @@ class LiveKalshiDataSource(DataSource):
             mid = None
 
         if mid is not None and (yes_bid != prev_bid or yes_ask != prev_ask):
-            events.append(PriceChangeEvent(ticker=ticker, price=mid))
+            events.append(PriceChangeEvent(ticker=ticker_yes, price=mid))
 
         return events
 

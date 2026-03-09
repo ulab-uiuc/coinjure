@@ -27,7 +27,11 @@ class RelationArbMixin:
 
         if self._relation:
             for m in self._relation.markets:
-                self._ids.append(m.get('condition_id', '') or m.get('id', ''))
+                self._ids.append(
+                    m.get('condition_id', '')
+                    or m.get('market_ticker', '')
+                    or m.get('id', '')
+                )
                 self._tokens.append(m.get('token_id', ''))
 
     def watch_tokens(self) -> list[str]:
