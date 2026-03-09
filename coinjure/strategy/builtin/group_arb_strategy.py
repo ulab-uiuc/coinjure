@@ -31,7 +31,7 @@ from decimal import Decimal
 from coinjure.events import Event
 from coinjure.market.relations import RelationStore
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker import PolyMarketTicker
+from coinjure.ticker import KalshiTicker, PolyMarketTicker
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -94,10 +94,10 @@ class GroupArbStrategy(Strategy):
             rel = store.get(relation_id)
             if rel:
                 for m in rel.markets:
-                    eid = m.get('event_id', '')
+                    eid = m.get('event_id', '') or m.get('event_ticker', '')
                     if eid and not self._event_id:
                         self._event_id = eid
-                    mid = m.get('id', '')
+                    mid = m.get('id', '') or m.get('market_ticker', '')
                     if mid:
                         self._relation_market_ids.add(mid)
                     token_ids = m.get('token_ids', [])
@@ -146,10 +146,12 @@ class GroupArbStrategy(Strategy):
                 tokens.append(tid)
         return tokens
 
-    def _should_track(self, ticker: PolyMarketTicker) -> bool:
-        if self._event_id and ticker.event_id == self._event_id:
+    def _should_track(self, ticker: PolyMarketTicker | KalshiTicker) -> bool:
+        eid = getattr(ticker, 'event_id', '') or getattr(ticker, 'event_ticker', '')
+        mid = getattr(ticker, 'market_id', '') or getattr(ticker, 'market_ticker', '')
+        if self._event_id and eid == self._event_id:
             return True
-        if self._relation_market_ids and ticker.market_id in self._relation_market_ids:
+        if self._relation_market_ids and mid in self._relation_market_ids:
             return True
         # Match by token_id for tickers from watch_token (may lack market_id/event_id)
         tid = getattr(ticker, 'token_id', '')
@@ -162,7 +164,7 @@ class GroupArbStrategy(Strategy):
             return
 
         ticker = getattr(event, 'ticker', None)
-        if not isinstance(ticker, PolyMarketTicker):
+        if not isinstance(ticker, (PolyMarketTicker, KalshiTicker)):
             return
         # Only track YES-side prices for sum calculation; NO-side events
         # still flow through the engine (registered in DataManager for
@@ -172,7 +174,7 @@ class GroupArbStrategy(Strategy):
         if not self._should_track(ticker):
             return
 
-        mid = ticker.market_id
+        mid = getattr(ticker, 'market_id', '') or getattr(ticker, 'market_ticker', '')
         if not mid:
             # Resolve via token_id mapping (for tickers from watch_token)
             tid = getattr(ticker, 'token_id', '')

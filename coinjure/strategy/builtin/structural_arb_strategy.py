@@ -96,6 +96,7 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
 
         tid = (
             getattr(ticker, 'market_id', '')
+            or getattr(ticker, 'market_ticker', '')
             or getattr(ticker, 'token_id', '')
             or ticker.symbol
         )
