@@ -78,6 +78,11 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         # flat | long_a_short_b (A too low) | short_a_long_b (A too high)
         self._position_state = 'flat'
 
+    def reset_live_state(self) -> None:
+        self._price_a = None
+        self._price_b = None
+        self._position_state = 'flat'
+
     def _compute_bounds(self, price_b: float) -> tuple[float, float]:
         """Compute the valid range for p(A) given p(B) and conditional bounds."""
         # p(A) = p(A|B)*p(B) + p(A|¬B)*(1-p(B))

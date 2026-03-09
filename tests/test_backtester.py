@@ -257,12 +257,12 @@ class TestRunBacktestRelation:
         """When API returns too few price points, should error."""
         rel = _make_relation(spread_type='implication')
 
-        async def mock_fetch(relation):
-            return ([{'t': 1000, 'p': 0.5}], [{'t': 1000, 'p': 0.3}])
+        async def mock_fetch_leg(market, token_id):
+            return [{'t': 1000, 'p': 0.5}]
 
         monkeypatch.setattr(
-            'coinjure.engine.backtester._fetch_relation_prices',
-            mock_fetch,
+            'coinjure.engine.backtester._fetch_leg_prices',
+            mock_fetch_leg,
         )
         result = asyncio.run(run_backtest_relation(rel))
         assert result.error is not None
@@ -286,15 +286,16 @@ class TestRunBacktestRelation:
         """When price fetch raises, should capture the error."""
         rel = _make_relation(spread_type='implication')
 
-        async def mock_fetch(relation):
+        async def mock_fetch_leg(market, token_id):
             raise RuntimeError('API down')
 
         monkeypatch.setattr(
-            'coinjure.engine.backtester._fetch_relation_prices',
-            mock_fetch,
+            'coinjure.engine.backtester._fetch_leg_prices',
+            mock_fetch_leg,
         )
         result = asyncio.run(run_backtest_relation(rel))
-        assert result.error == 'API down'
+        assert result.error is not None
+        assert 'API down' in result.error
         assert not result.passed
 
     def test_structural_type_runs_full_data(self, monkeypatch, tmp_path):
@@ -314,13 +315,18 @@ class TestRunBacktestRelation:
         # A > B means implication violation → strategy should trade
         prices_a = _price_series([0.6 + i * 0.001 for i in range(50)])
         prices_b = _price_series([0.4 + i * 0.001 for i in range(50)])
+        leg_prices = [prices_a, prices_b]
+        call_idx = 0
 
-        async def mock_fetch(relation):
-            return (prices_a, prices_b)
+        async def mock_fetch_leg(market, token_id):
+            nonlocal call_idx
+            idx = call_idx
+            call_idx += 1
+            return leg_prices[idx % len(leg_prices)]
 
         monkeypatch.setattr(
-            'coinjure.engine.backtester._fetch_relation_prices',
-            mock_fetch,
+            'coinjure.engine.backtester._fetch_leg_prices',
+            mock_fetch_leg,
         )
         result = asyncio.run(run_backtest_relation(rel))
         assert result.error is None
@@ -342,13 +348,18 @@ class TestRunBacktestRelation:
         # Need enough data for 60/40 split (at least ~13 points so test has ≥5)
         prices_a = _price_series([0.5 + i * 0.002 for i in range(50)])
         prices_b = _price_series([0.5 - i * 0.001 for i in range(50)])
+        leg_prices = [prices_a, prices_b]
+        call_idx = 0
 
-        async def mock_fetch(relation):
-            return (prices_a, prices_b)
+        async def mock_fetch_leg(market, token_id):
+            nonlocal call_idx
+            idx = call_idx
+            call_idx += 1
+            return leg_prices[idx % len(leg_prices)]
 
         monkeypatch.setattr(
-            'coinjure.engine.backtester._fetch_relation_prices',
-            mock_fetch,
+            'coinjure.engine.backtester._fetch_leg_prices',
+            mock_fetch_leg,
         )
         result = asyncio.run(run_backtest_relation(rel))
         assert result.error is None

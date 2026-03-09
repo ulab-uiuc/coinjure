@@ -230,7 +230,8 @@ def _run_batch_paper(
         cmd = shlex.split(_coinjure_cmd()) + [
             'engine',
             'paper-run',
-            '--exchange', 'cross_platform',
+            '--exchange',
+            'cross_platform',
             '--strategy-ref',
             ref,
             '--strategy-kwargs-json',
@@ -520,7 +521,6 @@ def engine_paper_run(
         )
         return
 
-
     from coinjure.engine.runner import (
         run_live_kalshi_paper_trading,
         run_live_paper_trading,
@@ -569,7 +569,9 @@ def engine_paper_run(
         from coinjure.data.source import CompositeDataSource
         from coinjure.hub.subscriber import HubDataSource
 
-        data_source = CompositeDataSource([HubDataSource(hub_socket), LiveRSSNewsDataSource()])
+        data_source = CompositeDataSource(
+            [HubDataSource(hub_socket), LiveRSSNewsDataSource()]
+        )
     else:
         data_source = _build_market_source(exchange)
 
@@ -1325,7 +1327,9 @@ def engine_monitor(socket: str | None) -> None:
             socket_paths = sorted(SOCKET_DIR.glob('*.sock')) or [SOCKET_PATH]
 
     try:
-        app = SocketTradingMonitorApp(socket_paths=socket_paths, socket_labels=socket_labels)
+        app = SocketTradingMonitorApp(
+            socket_paths=socket_paths, socket_labels=socket_labels
+        )
         app.run()
     except (KeyboardInterrupt, SystemExit):
         pass
@@ -1743,7 +1747,13 @@ def engine_allocate(
     '--all-relations',
     is_flag=True,
     default=False,
-    help='Backtest all active relations.',
+    help='Backtest all active relations (skips already-tested by default).',
+)
+@click.option(
+    '--rerun',
+    is_flag=True,
+    default=False,
+    help='Re-run all relations including already backtest_passed/backtest_failed.',
 )
 @click.option(
     '--parquet',
@@ -1762,6 +1772,7 @@ def engine_allocate(
 def engine_backtest(
     relation_ids: tuple[str, ...],
     all_relations: bool,
+    rerun: bool,
     parquet_paths: tuple[str, ...],
     initial_capital: str,
     strategy_kwargs_json: str | None,
@@ -1778,6 +1789,9 @@ def engine_backtest(
     if not relation_ids and not all_relations:
         raise click.ClickException('Provide --relation <id> or --all-relations')
 
+    if rerun and not all_relations:
+        raise click.ClickException('--rerun only works with --all-relations')
+
     store = RelationStore()
     strategy_kwargs = _parse_strategy_kwargs_json(strategy_kwargs_json)
     capital = Decimal(initial_capital)
@@ -1791,7 +1805,10 @@ def engine_backtest(
 
     # Resolve relations
     if all_relations:
-        relations = [r for r in store.list() if r.status != 'retired']
+        if rerun:
+            relations = [r for r in store.list() if r.status != 'retired']
+        else:
+            relations = [r for r in store.list() if r.status == 'active']
     else:
         relations = []
         for rid in relation_ids:
@@ -1801,7 +1818,22 @@ def engine_backtest(
             relations.append(r)
 
     if not relations:
+        if all_relations and not rerun:
+            total = len([r for r in store.list() if r.status != 'retired'])
+            raise click.ClickException(
+                f'No untested relations (all {total} already tested). '
+                f'Use --rerun to re-test.'
+            )
         raise click.ClickException('No relations to backtest')
+
+    if all_relations and not rerun:
+        skipped = len([r for r in store.list() if r.status != 'retired']) - len(
+            relations
+        )
+        if skipped > 0:
+            click.echo(
+                f'Skipping {skipped} already-tested relation(s). Use --rerun to include them.'
+            )
 
     _emit(
         {

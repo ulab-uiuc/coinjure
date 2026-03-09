@@ -110,6 +110,14 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         self._entry_follower_price: float = 0.0  # follower price at entry
         self._hold_count = 0  # count of follower updates since entry
 
+    def reset_live_state(self) -> None:
+        self._leader_price = None
+        self._follower_price = None
+        self._position_state = 'flat'
+        self._entry_leader_price = 0.0
+        self._entry_follower_price = 0.0
+        self._hold_count = 0
+
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused() or not isinstance(event, PriceChangeEvent):
             return
