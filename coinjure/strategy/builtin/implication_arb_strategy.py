@@ -21,11 +21,11 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +78,11 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             or ticker.symbol
         )
 
-        if self._matches(tid, self._id_a, self._token_a):
+        if self._matches(tid, self._ids[0], self._tokens[0] if self._tokens else ''):
             self._price_a = event.price
-        elif self._matches(tid, self._id_b, self._token_b):
+        elif self._matches(
+            tid, self._ids[1], self._tokens[1] if len(self._tokens) > 1 else ''
+        ):
             self._price_b = event.price
         else:
             return
@@ -115,19 +117,23 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
 
     async def _enter(self, trader: Trader, violation: Decimal) -> None:
         """Sell A (buy NO), buy B (buy YES)."""
-        ticker_a_no = self._find_ticker(trader, self._id_a, yes=False)
-        ticker_b = self._find_ticker(trader, self._id_b, yes=True)
+        ticker_a_no = self._find_ticker(trader, self._ids[0], yes=False)
+        ticker_b = self._find_ticker(trader, self._ids[1], yes=True)
 
         if ticker_a_no and self._price_a:
             no_price = Decimal('1') - self._price_a
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_a_no,
-                limit_price=no_price, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_a_no,
+                limit_price=no_price,
+                quantity=self.trade_size,
             )
         if ticker_b and self._price_b:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b,
-                limit_price=self._price_b, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_b,
+                limit_price=self._price_b,
+                quantity=self.trade_size,
             )
 
         self._position_state = 'short_a_long_b'
@@ -147,7 +153,9 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         )
         logger.info(
             'ENTER implication arb: sell A=%s buy B=%s violation=%.4f',
-            self._price_a, self._price_b, violation,
+            self._price_a,
+            self._price_b,
+            violation,
         )
 
     async def _exit(self, trader: Trader, violation: Decimal) -> None:
@@ -157,8 +165,10 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
                 best_bid = trader.market_data.get_best_bid(pos.ticker)
                 if best_bid:
                     await trader.place_order(
-                        side=TradeSide.SELL, ticker=pos.ticker,
-                        limit_price=best_bid.price, quantity=pos.quantity,
+                        side=TradeSide.SELL,
+                        ticker=pos.ticker,
+                        limit_price=best_bid.price,
+                        quantity=pos.quantity,
                     )
 
         self._position_state = 'flat'

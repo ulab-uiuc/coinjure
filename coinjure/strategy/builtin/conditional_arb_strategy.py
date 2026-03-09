@@ -26,11 +26,11 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +101,11 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             or ticker.symbol
         )
 
-        if self._matches(tid, self._id_a, self._token_a):
+        if self._matches(tid, self._ids[0], self._tokens[0] if self._tokens else ''):
             self._price_a = event.price
-        elif self._matches(tid, self._id_b, self._token_b):
+        elif self._matches(
+            tid, self._ids[1], self._tokens[1] if len(self._tokens) > 1 else ''
+        ):
             self._price_b = event.price
         else:
             return
@@ -132,8 +134,10 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
                         f'(B={pb:.4f})'
                     ),
                     signal_values={
-                        'price_a': pa, 'price_b': pb,
-                        'lower': lower, 'upper': upper,
+                        'price_a': pa,
+                        'price_b': pb,
+                        'lower': lower,
+                        'upper': upper,
                     },
                 )
         else:
@@ -142,22 +146,29 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
                 await self._exit(trader, pa, lower, upper)
 
     async def _enter_short_a(
-        self, trader: Trader, pa: float, lower: float, upper: float,
+        self,
+        trader: Trader,
+        pa: float,
+        lower: float,
+        upper: float,
     ) -> None:
         """A too expensive → sell A (buy NO), buy B (buy YES)."""
-        ticker_a_no = self._find_ticker(trader, self._id_a, yes=False)
-        ticker_b = self._find_ticker(trader, self._id_b, yes=True)
+        ticker_a_no = self._find_ticker(trader, self._ids[0], yes=False)
+        ticker_b = self._find_ticker(trader, self._ids[1], yes=True)
 
         if ticker_a_no and self._price_a:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_a_no,
+                side=TradeSide.BUY,
+                ticker=ticker_a_no,
                 limit_price=Decimal('1') - self._price_a,
                 quantity=self.trade_size,
             )
         if ticker_b and self._price_b:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b,
-                limit_price=self._price_b, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_b,
+                limit_price=self._price_b,
+                quantity=self.trade_size,
             )
 
         self._position_state = 'short_a_long_b'
@@ -167,27 +178,36 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             executed=True,
             reasoning=f'A={pa:.4f} > upper={upper:.4f}: sell A, buy B',
             signal_values={
-                'price_a': pa, 'price_b': float(self._price_b or 0),
-                'lower': lower, 'upper': upper,
+                'price_a': pa,
+                'price_b': float(self._price_b or 0),
+                'lower': lower,
+                'upper': upper,
             },
         )
         logger.info('ENTER conditional arb: A too high, sell A buy B')
 
     async def _enter_long_a(
-        self, trader: Trader, pa: float, lower: float, upper: float,
+        self,
+        trader: Trader,
+        pa: float,
+        lower: float,
+        upper: float,
     ) -> None:
         """A too cheap → buy A (buy YES), sell B (buy NO)."""
-        ticker_a = self._find_ticker(trader, self._id_a, yes=True)
-        ticker_b_no = self._find_ticker(trader, self._id_b, yes=False)
+        ticker_a = self._find_ticker(trader, self._ids[0], yes=True)
+        ticker_b_no = self._find_ticker(trader, self._ids[1], yes=False)
 
         if ticker_a and self._price_a:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_a,
-                limit_price=self._price_a, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_a,
+                limit_price=self._price_a,
+                quantity=self.trade_size,
             )
         if ticker_b_no and self._price_b:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b_no,
+                side=TradeSide.BUY,
+                ticker=ticker_b_no,
                 limit_price=Decimal('1') - self._price_b,
                 quantity=self.trade_size,
             )
@@ -199,22 +219,30 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             executed=True,
             reasoning=f'A={pa:.4f} < lower={lower:.4f}: buy A, sell B',
             signal_values={
-                'price_a': pa, 'price_b': float(self._price_b or 0),
-                'lower': lower, 'upper': upper,
+                'price_a': pa,
+                'price_b': float(self._price_b or 0),
+                'lower': lower,
+                'upper': upper,
             },
         )
         logger.info('ENTER conditional arb: A too low, buy A sell B')
 
     async def _exit(
-        self, trader: Trader, pa: float, lower: float, upper: float,
+        self,
+        trader: Trader,
+        pa: float,
+        lower: float,
+        upper: float,
     ) -> None:
         for pos in trader.position_manager.positions.values():
             if pos.quantity > 0:
                 best_bid = trader.market_data.get_best_bid(pos.ticker)
                 if best_bid:
                     await trader.place_order(
-                        side=TradeSide.SELL, ticker=pos.ticker,
-                        limit_price=best_bid.price, quantity=pos.quantity,
+                        side=TradeSide.SELL,
+                        ticker=pos.ticker,
+                        limit_price=best_bid.price,
+                        quantity=pos.quantity,
                     )
 
         prev = self._position_state
@@ -225,8 +253,10 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             executed=True,
             reasoning=f'A={pa:.4f} back in [{lower:.4f}, {upper:.4f}] (was {prev})',
             signal_values={
-                'price_a': pa, 'price_b': float(self._price_b or 0),
-                'lower': lower, 'upper': upper,
+                'price_a': pa,
+                'price_b': float(self._price_b or 0),
+                'lower': lower,
+                'upper': upper,
             },
         )
         logger.info('EXIT conditional arb: A back in band')
