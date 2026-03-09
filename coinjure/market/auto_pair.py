@@ -19,17 +19,28 @@ from coinjure.market.relations import MarketRelation
 # ---------------------------------------------------------------------------
 
 _MONTH_MAP = {
-    'january': 1, 'february': 2, 'march': 3, 'april': 4,
-    'may': 5, 'june': 6, 'july': 7, 'august': 8,
-    'september': 9, 'october': 10, 'november': 11, 'december': 12,
+    'january': 1,
+    'february': 2,
+    'march': 3,
+    'april': 4,
+    'may': 5,
+    'june': 6,
+    'july': 7,
+    'august': 8,
+    'september': 9,
+    'october': 10,
+    'november': 11,
+    'december': 12,
 }
 
 # Pre-compiled patterns (ordered by specificity)
 _RE_MONTH_DAY_YEAR = re.compile(
-    r'(?:by|in|before|on)\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})\s*\??$', re.I,
+    r'(?:by|in|before|on)\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})\s*\??$',
+    re.I,
 )
 _RE_MONTH_DAY = re.compile(
-    r'(?:by|in|before|on)\s+(\w+)\s+(\d{1,2})\s*\??$', re.I,
+    r'(?:by|in|before|on)\s+(\w+)\s+(\d{1,2})\s*\??$',
+    re.I,
 )
 _RE_IN_YEAR = re.compile(r'(?:in|by\s+end\s+of)\s+(\d{4})\s*\??$', re.I)
 _RE_BEFORE_YEAR = re.compile(r'before\s+(\d{4})\s*\??$', re.I)
@@ -175,15 +186,17 @@ def detect_date_nesting(
             mid_a, mid_b = _mid(m_a), _mid(m_b)
             if not mid_a or not mid_b:
                 continue
-            relations.append(MarketRelation(
-                relation_id=f'{mid_a}-{mid_b}',
-                market_a=_enrich(m_a, platform),
-                market_b=_enrich(m_b, platform),
-                spread_type='implication',
-                confidence=0.95,
-                reasoning=f'Date nesting: {d_a} <= {d_b} within "{event_title}"',
-                hypothesis='A <= B',
-            ))
+            relations.append(
+                MarketRelation(
+                    relation_id=f'{mid_a}-{mid_b}',
+                    market_a=_enrich(m_a, platform),
+                    market_b=_enrich(m_b, platform),
+                    spread_type='implication',
+                    confidence=0.95,
+                    reasoning=f'Date nesting: {d_a} <= {d_b} within "{event_title}"',
+                    hypothesis='A <= B',
+                )
+            )
 
     return relations
 
@@ -227,15 +240,17 @@ def detect_exclusivity(
         for j in range(i + 1, len(active)):
             m_a, m_b = active[i], active[j]
             mid_a, mid_b = _mid(m_a), _mid(m_b)
-            relations.append(MarketRelation(
-                relation_id=f'{mid_a}-{mid_b}',
-                market_a=_enrich(m_a, platform),
-                market_b=_enrich(m_b, platform),
-                spread_type='exclusivity',
-                confidence=0.99,
-                reasoning=f'Mutually exclusive outcomes within "{event_title}"',
-                hypothesis='A + B <= 1',
-            ))
+            relations.append(
+                MarketRelation(
+                    relation_id=f'{mid_a}-{mid_b}',
+                    market_a=_enrich(m_a, platform),
+                    market_b=_enrich(m_b, platform),
+                    spread_type='exclusivity',
+                    confidence=0.99,
+                    reasoning=f'Mutually exclusive outcomes within "{event_title}"',
+                    hypothesis='A + B <= 1',
+                )
+            )
     return relations
 
 
@@ -290,18 +305,20 @@ def detect_complementary(
             mid_a, mid_b = _mid(m_a), _mid(m_b)
             if not mid_a or not mid_b:
                 continue
-            relations.append(MarketRelation(
-                relation_id=f'{mid_a}-{mid_b}',
-                market_a=_enrich(m_a, platform),
-                market_b=_enrich(m_b, platform),
-                spread_type='complementary',
-                confidence=0.95,
-                reasoning=(
-                    f'Complementary outcomes (sum={total:.2f}) '
-                    f'within "{event_title}" ({len(priced)} markets)'
-                ),
-                hypothesis='A + B <= 1',
-            ))
+            relations.append(
+                MarketRelation(
+                    relation_id=f'{mid_a}-{mid_b}',
+                    market_a=_enrich(m_a, platform),
+                    market_b=_enrich(m_b, platform),
+                    spread_type='complementary',
+                    confidence=0.95,
+                    reasoning=(
+                        f'Complementary outcomes (sum={total:.2f}) '
+                        f'within "{event_title}" ({len(priced)} markets)'
+                    ),
+                    hypothesis='A + B <= 1',
+                )
+            )
 
     return relations
 
@@ -314,6 +331,7 @@ def detect_complementary(
 @dataclass
 class AutoPairResult:
     """Summary of auto-pair detection run."""
+
     candidates: list[MarketRelation] = field(default_factory=list)
     total_detected: int = 0
     by_type: dict[str, int] = field(default_factory=dict)
@@ -356,7 +374,9 @@ def auto_pair_markets(
     # Layer 2: Intra-event exclusivity
     if not skip_exclusivity:
         for eid, mkts in poly_by_event.items():
-            rels = detect_exclusivity(mkts, mkts[0].get('event_title', ''), 'polymarket')
+            rels = detect_exclusivity(
+                mkts, mkts[0].get('event_title', ''), 'polymarket'
+            )
             by_layer['exclusivity'] = by_layer.get('exclusivity', 0) + len(rels)
             all_rels.extend(rels)
 
@@ -383,14 +403,17 @@ def auto_pair_markets(
 
     total_detected = len(deduped)
 
-    # --- Snapshot arb filter: keep only structural pairs with current opportunity ---
+    # --- Filter by type:
+    # - implication: save all (pairwise, small set, constraint may be violated later)
+    # - exclusivity/complementary: O(n²) pairs per event — only save if currently violated
+    #   (actual arb opportunity exists now; backtest handles future monitoring)
     candidates: list[MarketRelation] = []
     for rel in deduped:
         arb = _compute_current_arb(rel)
-        if arb > 0:
-            rel.market_a['current_mid'] = _compute_mid_price(rel.market_a)
-            rel.market_b['current_mid'] = _compute_mid_price(rel.market_b)
-            rel.market_a['current_arb'] = round(arb, 4)
+        rel.market_a['current_mid'] = _compute_mid_price(rel.market_a)
+        rel.market_b['current_mid'] = _compute_mid_price(rel.market_b)
+        rel.market_a['current_arb'] = round(arb, 4)
+        if rel.spread_type == 'implication' or arb > 0:
             candidates.append(rel)
 
     by_type: dict[str, int] = {}

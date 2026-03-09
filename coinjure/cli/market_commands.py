@@ -39,7 +39,12 @@ def market() -> None:
 
 
 @market.command('info')
-@click.option('--market-id', required=True, help='Market ID or ticker.')
+@click.option('--market-id', default=None, help='Market ID or ticker.')
+@click.option(
+    '--slug',
+    default=None,
+    help='Polymarket event slug from URL (e.g. fed-decision-in-april).',
+)
 @click.option(
     '--exchange',
     type=click.Choice(['polymarket', 'kalshi']),
@@ -52,13 +57,41 @@ def market() -> None:
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON')
 def market_info(
-    market_id: str,
+    market_id: str | None,
+    slug: str | None,
     exchange: str,
     kalshi_api_key_id: str | None,
     kalshi_private_key_path: str | None,
     as_json: bool,
 ) -> None:
-    """Fetch detailed information for a single market."""
+    """Fetch detailed information for a single market or all markets in an event (by slug)."""
+    if not market_id and not slug:
+        raise click.UsageError('Provide --market-id or --slug.')
+
+    # Slug-based: list all markets in the event
+    if slug:
+        from coinjure.data.fetcher import polymarket_fetch_by_slug
+
+        markets = asyncio.run(polymarket_fetch_by_slug(slug, with_rules=True))
+        if not markets:
+            raise click.ClickException(f'No markets found for slug: {slug}')
+        if as_json:
+            click.echo(
+                json.dumps(
+                    {'ok': True, 'exchange': 'polymarket', 'markets': markets},
+                    default=str,
+                )
+            )
+            return
+        click.echo(f'\n[polymarket] Event slug: {slug}')
+        for m in markets:
+            click.echo(
+                f'  ID: {m["id"]}  Bid: {m.get("best_bid","")}  Ask: {m.get("best_ask","")}'
+            )
+            click.echo(f'    {m.get("question","")[:80]}')
+        click.echo()
+        return
+
     try:
         if exchange == 'polymarket':
             info = asyncio.run(polymarket_market_info(market_id))
@@ -82,8 +115,16 @@ def market_info(
     question = info.get('question') or info.get('title') or '?'
     click.echo(f'\n[{exchange}] {question}')
     click.echo(f'  ID: {market_id}')
-    for key in ('best_bid', 'best_ask', 'yes_bid', 'yes_ask', 'volume',
-                'end_date', 'token_ids', 'event_id'):
+    for key in (
+        'best_bid',
+        'best_ask',
+        'yes_bid',
+        'yes_ask',
+        'volume',
+        'end_date',
+        'token_ids',
+        'event_id',
+    ):
         val = info.get(key)
         if val not in (None, '', []):
             click.echo(f'  {key}: {val}')
@@ -103,15 +144,35 @@ def market_relations_group() -> None:
     """Manage the persisted market relation graph."""
 
 
+def _detect_exchange(market_id: str) -> str:
+    """Auto-detect exchange from market ID: numeric → polymarket, else → kalshi."""
+    return 'polymarket' if market_id.isdigit() else 'kalshi'
+
+
 @market_relations_group.command('add')
 @click.option('--market-id-a', required=True, help='Market ID for leg A.')
 @click.option('--market-id-b', required=True, help='Market ID for leg B.')
 @click.option(
     '--exchange',
     'exc',
-    type=click.Choice(['polymarket', 'kalshi']),
-    default='polymarket',
+    type=click.Choice(['polymarket', 'kalshi', 'auto']),
+    default='auto',
     show_default=True,
+    help='Exchange for both markets. Use "auto" to detect per market ID (numeric=polymarket, else=kalshi).',
+)
+@click.option(
+    '--exchange-a',
+    'exc_a',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default=None,
+    help='Exchange for market A (overrides --exchange).',
+)
+@click.option(
+    '--exchange-b',
+    'exc_b',
+    type=click.Choice(['polymarket', 'kalshi']),
+    default=None,
+    help='Exchange for market B (overrides --exchange).',
 )
 @click.option(
     '--spread-type',
@@ -126,6 +187,8 @@ def relations_add(
     market_id_a: str,
     market_id_b: str,
     exc: str,
+    exc_a: str | None,
+    exc_b: str | None,
     spread_type: str,
     hypothesis: str,
     reasoning: str,
@@ -144,8 +207,12 @@ def relations_add(
     """
     from coinjure.market.relations import MarketRelation, RelationStore
 
-    async def _fetch_info(mid: str) -> dict:
-        if exc == 'polymarket':
+    # Resolve per-market exchange
+    resolved_exc_a = exc_a or (exc if exc != 'auto' else _detect_exchange(market_id_a))
+    resolved_exc_b = exc_b or (exc if exc != 'auto' else _detect_exchange(market_id_b))
+
+    async def _fetch_info(mid: str, platform: str) -> dict:
+        if platform == 'polymarket':
             info = await polymarket_market_info(mid)
         else:
             info = await kalshi_market_info(
@@ -155,12 +222,12 @@ def relations_add(
             )
         if info is None:
             raise click.ClickException(f'Market not found: {mid}')
-        info['platform'] = exc
+        info['platform'] = platform
         return info
 
     try:
-        info_a = asyncio.run(_fetch_info(market_id_a))
-        info_b = asyncio.run(_fetch_info(market_id_b))
+        info_a = asyncio.run(_fetch_info(market_id_a, resolved_exc_a))
+        info_b = asyncio.run(_fetch_info(market_id_b, resolved_exc_b))
     except Exception as exc_err:
         raise click.ClickException(
             f'Failed to fetch market info: {exc_err}'
@@ -369,12 +436,16 @@ def market_discover(
 
         has_filters = query or tag
 
-        if has_filters:
+        if query or tag:
             for q in query:
                 if exchange in ('polymarket', 'both'):
-                    _merge_poly(await polymarket_search_markets(
-                        q, fetch_limit, with_rules=with_rules,
-                    ))
+                    _merge_poly(
+                        await polymarket_search_markets(
+                            q,
+                            fetch_limit,
+                            with_rules=with_rules,
+                        )
+                    )
                 if exchange in ('kalshi', 'both'):
                     _merge_kalshi(
                         await kalshi_search_markets(
@@ -387,13 +458,18 @@ def market_discover(
                     )
             for t in tag:
                 if exchange in ('polymarket', 'both'):
-                    _merge_poly(await polymarket_list_markets(
-                        fetch_limit, tag=t, with_rules=with_rules,
-                    ))
+                    _merge_poly(
+                        await polymarket_list_markets(
+                            fetch_limit,
+                            tag=t,
+                            with_rules=with_rules,
+                        )
+                    )
         else:
             if exchange in ('polymarket', 'both'):
                 poly_markets = await polymarket_list_markets(
-                    fetch_limit, with_rules=with_rules,
+                    fetch_limit,
+                    with_rules=with_rules,
                 )
             if exchange in ('kalshi', 'both'):
                 kalshi_markets = await kalshi_list_markets(
@@ -419,7 +495,9 @@ def market_discover(
         bid = m.get('best_bid') or m.get('yes_bid', '')
         ask = m.get('best_ask') or m.get('yes_ask', '')
         try:
-            return (float(bid) > 0 if bid else False) and (float(ask) > 0 if ask else False)
+            return (float(bid) > 0 if bid else False) and (
+                float(ask) > 0 if ask else False
+            )
         except (ValueError, TypeError):
             return False
 
@@ -534,7 +612,8 @@ def market_discover(
     )
 
     def _fmt_table(
-        markets: list[dict], platform: str,
+        markets: list[dict],
+        platform: str,
     ) -> None:
         if not markets:
             return
@@ -575,7 +654,9 @@ def market_discover(
         td = s['total_detected']
         wc = s['candidate_count']
         sn = s.get('stored_new', 0)
-        click.echo(f'  Auto-pair: {td} structural pairs detected, {wc} with current opportunity')
+        click.echo(
+            f'  Auto-pair: {td} structural pairs detected, {wc} with current opportunity'
+        )
         if wc > 0:
             click.echo(f'    Stored {sn} new relation(s) ({wc - sn} already in store)')
         if s['by_type']:
@@ -584,7 +665,9 @@ def market_discover(
         for r in s['candidates'][:20]:
             arb = r.get('current_arb', 0)
             arb_s = f'   arb={arb:.3f}' if arb else ''
-            click.echo(f'    [{r["type"]}]  {r["market_a_id"]} <-> {r["market_b_id"]}{arb_s}')
+            click.echo(
+                f'    [{r["type"]}]  {r["market_a_id"]} <-> {r["market_b_id"]}{arb_s}'
+            )
             mid_a = r.get('current_mid_a')
             mid_b = r.get('current_mid_b')
             mid_a_s = f'  mid={mid_a:.3f}' if mid_a is not None else ''
@@ -592,8 +675,14 @@ def market_discover(
             click.echo(f'      A: {r["market_a"]}{mid_a_s}')
             click.echo(f'      B: {r["market_b"]}{mid_b_s}')
             if r['type'] == 'implication' and mid_a is not None and mid_b is not None:
-                click.echo(f'      Violation: A ({mid_a:.3f}) > B ({mid_b:.3f}), arb = {arb:.3f}')
-            elif r['type'] in ('exclusivity', 'complementary') and mid_a is not None and mid_b is not None:
+                click.echo(
+                    f'      Violation: A ({mid_a:.3f}) > B ({mid_b:.3f}), arb = {arb:.3f}'
+                )
+            elif (
+                r['type'] in ('exclusivity', 'complementary')
+                and mid_a is not None
+                and mid_b is not None
+            ):
                 click.echo(
                     f'      Violation: A ({mid_a:.3f}) + B ({mid_b:.3f})'
                     f' = {mid_a + mid_b:.3f} > 1, arb = {arb:.3f}'

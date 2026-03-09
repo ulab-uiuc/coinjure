@@ -16,18 +16,20 @@ from typing import Any
 
 from coinjure.data.manager import DataManager
 from coinjure.data.source import DataSource
-from coinjure.engine.trader.paper import PaperTrader
-from coinjure.trading.position import Position, PositionManager
-from coinjure.trading.risk import NoRiskManager
 from coinjure.engine.engine import TradingEngine
+from coinjure.engine.trader.paper import PaperTrader
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.market.relations import MarketRelation
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker, KalshiTicker, PolyMarketTicker, Ticker
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
 
 logger = logging.getLogger(__name__)
 
-STRUCTURAL_TYPES = frozenset({'same_event', 'complementary', 'implication', 'exclusivity'})
+STRUCTURAL_TYPES = frozenset(
+    {'same_event', 'complementary', 'implication', 'exclusivity'}
+)
 STATISTICAL_TYPES = frozenset({'correlated', 'structural', 'conditional', 'temporal'})
 
 # Synthetic half-spread for generating bid/ask from mid price
@@ -82,8 +84,12 @@ class PriceHistoryDataSource(DataSource):
         self._events: list[Event] = []
         self._idx = 0
         self._build_events(
-            ticker_a, prices_a, ticker_b, prices_b,
-            no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+            ticker_a,
+            prices_a,
+            ticker_b,
+            prices_b,
+            no_ticker_a=no_ticker_a,
+            no_ticker_b=no_ticker_b,
         )
 
     def _build_events(
@@ -120,19 +126,31 @@ class PriceHistoryDataSource(DataSource):
         for ts, ticker, price in raw:
             dt = datetime.fromtimestamp(ts, tz=timezone.utc)
             # Price change event
-            self._events.append(PriceChangeEvent(ticker=ticker, price=price, timestamp=dt))
+            self._events.append(
+                PriceChangeEvent(ticker=ticker, price=price, timestamp=dt)
+            )
             # Synthetic bid
             bid_price = max(price - _HALF_SPREAD, Decimal('0.001'))
-            self._events.append(OrderBookEvent(
-                ticker=ticker, price=bid_price, size=_BOOK_SIZE,
-                size_delta=_BOOK_SIZE, side='bid',
-            ))
+            self._events.append(
+                OrderBookEvent(
+                    ticker=ticker,
+                    price=bid_price,
+                    size=_BOOK_SIZE,
+                    size_delta=_BOOK_SIZE,
+                    side='bid',
+                )
+            )
             # Synthetic ask
             ask_price = min(price + _HALF_SPREAD, Decimal('0.999'))
-            self._events.append(OrderBookEvent(
-                ticker=ticker, price=ask_price, size=_BOOK_SIZE,
-                size_delta=_BOOK_SIZE, side='ask',
-            ))
+            self._events.append(
+                OrderBookEvent(
+                    ticker=ticker,
+                    price=ask_price,
+                    size=_BOOK_SIZE,
+                    size_delta=_BOOK_SIZE,
+                    side='ask',
+                )
+            )
 
     async def get_next_event(self) -> Event | None:
         if self._idx >= len(self._events):
@@ -267,6 +285,9 @@ async def _fetch_leg_prices(
 
         market_ticker = str(market.get('ticker', market.get('id', '')))
         series_ticker = str(market.get('series_ticker', ''))
+        # Derive series_ticker from market_ticker if missing (e.g. KXFEDDECISION-26APR-H0 → KXFEDDECISION)
+        if not series_ticker and market_ticker:
+            series_ticker = market_ticker.split('-')[0]
         return await fetch_kalshi_price_history(
             series_ticker=series_ticker,
             market_ticker=market_ticker,
@@ -332,6 +353,7 @@ async def run_backtest_relation(
     # All other strategies take relation_id and load from RelationStore.
     if spread_type == 'same_event':
         _build_same_event_kwargs(kwargs, relation)
+        kwargs.setdefault('backtest_mode', True)
     elif spread_type == 'complementary':
         kwargs.setdefault('event_id', str(relation.market_a.get('event_id', '')))
     else:
@@ -394,8 +416,12 @@ async def run_backtest_relation(
     if spread_type in STRUCTURAL_TYPES:
         # Structural: run on full data
         ds = PriceHistoryDataSource(
-            ticker_a, prices_a, ticker_b, prices_b,
-            no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+            ticker_a,
+            prices_a,
+            ticker_b,
+            prices_b,
+            no_ticker_a=no_ticker_a,
+            no_ticker_b=no_ticker_b,
         )
         strategy = strategy_cls(**kwargs)
         engine = _build_engine(ds, strategy, initial_capital)
@@ -423,16 +449,24 @@ async def run_backtest_relation(
     # Train phase: warm up strategy
     strategy = strategy_cls(**kwargs)
     train_ds = PriceHistoryDataSource(
-        ticker_a, train_a, ticker_b, train_b,
-        no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+        ticker_a,
+        train_a,
+        ticker_b,
+        train_b,
+        no_ticker_a=no_ticker_a,
+        no_ticker_b=no_ticker_b,
     )
     train_engine = _build_engine(train_ds, strategy, initial_capital)
     await train_engine.start()
 
     # Test phase: reuse calibrated strategy, fresh engine
     test_ds = PriceHistoryDataSource(
-        ticker_a, test_a, ticker_b, test_b,
-        no_ticker_a=no_ticker_a, no_ticker_b=no_ticker_b,
+        ticker_a,
+        test_a,
+        ticker_b,
+        test_b,
+        no_ticker_a=no_ticker_a,
+        no_ticker_b=no_ticker_b,
     )
     test_engine = _build_engine(test_ds, strategy, initial_capital)
     await test_engine.start()
