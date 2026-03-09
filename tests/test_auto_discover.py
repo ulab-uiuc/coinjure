@@ -4,19 +4,14 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 from coinjure.market.auto_discover import (
     DiscoveryResult,
-    _compute_current_arb,
-    _compute_mid_price,
     detect_complementary,
     detect_date_nesting,
     detect_exclusivity,
     discover_relations,
     parse_deadline,
 )
-from coinjure.market.relations import MarketRelation
 
 # ---------------------------------------------------------------------------
 # parse_deadline
@@ -242,11 +237,12 @@ class TestDiscoverRelations:
             },
         ]
         r = discover_relations(poly, [])
-        # Same market set should only appear once
-        market_id_sets = [
-            tuple(sorted(m.get('id', '') for m in c.markets)) for c in r.candidates
+        # Same (type, market_set) should only appear once
+        dedup_keys = [
+            (c.spread_type, *sorted(m.get('id', '') for m in c.markets))
+            for c in r.candidates
         ]
-        assert len(market_id_sets) == len(set(market_id_sets))
+        assert len(dedup_keys) == len(set(dedup_keys))
 
     def test_skip_exclusivity(self):
         poly = [
@@ -300,91 +296,13 @@ class TestDiscoverRelations:
 
 
 # ---------------------------------------------------------------------------
-# Snapshot arb filtering
+# discover_relations integration
 # ---------------------------------------------------------------------------
 
 
-class TestSnapshotArbFilter:
-    """Tests for snapshot-based arb computation in discover_relations."""
-
-    def test_implication_with_violation_passes(self):
-        """Earlier deadline priced above later -> arb exists -> candidate kept."""
-        poly = [
-            {
-                **_make_market('m1', 'Will X happen by March 31, 2025?', '1', 'E'),
-                'best_bid': '0.50',
-                'best_ask': '0.60',
-            },  # mid=0.55
-            {
-                **_make_market('m2', 'Will X happen by June 30, 2025?', '1', 'E'),
-                'best_bid': '0.30',
-                'best_ask': '0.40',
-            },  # mid=0.35
-        ]
-        r = discover_relations(poly, [])
-        assert len(r.candidates) == 1
-        assert r.candidates[0].spread_type == 'implication'
-        assert r.total_detected == 1
-        assert r.candidates[0].markets[0].get('current_arb', 0) > 0
-
-    def test_implication_without_violation_kept(self):
-        """Earlier deadline priced below later -> no arb -> still kept (no arb filter)."""
-        poly = [
-            {
-                **_make_market('m1', 'Will X happen by March 31, 2025?', '1', 'E'),
-                'best_bid': '0.10',
-                'best_ask': '0.15',
-            },  # mid=0.125
-            {
-                **_make_market('m2', 'Will X happen by June 30, 2025?', '1', 'E'),
-                'best_bid': '0.30',
-                'best_ask': '0.40',
-            },  # mid=0.35
-        ]
-        r = discover_relations(poly, [])
-        assert len(r.candidates) == 1
-        assert r.total_detected == 1
-
-    def test_complementary_with_violation_passes(self):
-        """Two outcomes sum > 1.0 -> arb exists -> kept."""
-        poly = [
-            {
-                **_make_market('m1', 'Will Alice win?', '1', 'Election'),
-                'best_bid': '0.60',
-                'best_ask': '0.65',
-            },  # mid=0.625
-            {
-                **_make_market('m2', 'Will Bob win?', '1', 'Election'),
-                'best_bid': '0.38',
-                'best_ask': '0.42',
-            },  # mid=0.400
-        ]
-        r = discover_relations(poly, [], skip_exclusivity=True)
-        comp = [c for c in r.candidates if c.spread_type == 'complementary']
-        assert len(comp) == 1
-        assert comp[0].markets[0].get('current_arb', 0) > 0
-
-    def test_complementary_without_violation_kept(self):
-        """Two outcomes sum < 1.0 -> no arb -> still kept (no arb filter)."""
-        poly = [
-            {
-                **_make_market('m1', 'Will Alice win?', '1', 'Election'),
-                'best_bid': '0.40',
-                'best_ask': '0.45',
-            },  # mid=0.425
-            {
-                **_make_market('m2', 'Will Bob win?', '1', 'Election'),
-                'best_bid': '0.30',
-                'best_ask': '0.35',
-            },  # mid=0.325
-        ]
-        r = discover_relations(poly, [], skip_exclusivity=True)
-        comp = [c for c in r.candidates if c.spread_type == 'complementary']
-        assert len(comp) == 1
-
+class TestDiscoverRelationsIntegration:
     def test_total_detected_counts_all(self):
         """total_detected equals candidates (no filtering)."""
-        # All markets have same mid=0.55 -> implication arb = 0
         poly = [
             _make_market('m1', 'Will X happen by March 31, 2025?', '1', 'Event'),
             _make_market('m2', 'Will X happen by June 30, 2025?', '1', 'Event'),
@@ -394,56 +312,6 @@ class TestSnapshotArbFilter:
         # 3 choose 2 = 3 implication pairs detected
         assert r.total_detected == 3
         assert len(r.candidates) == r.total_detected
-
-    def test_compute_mid_price_basic(self):
-        assert _compute_mid_price({'best_bid': '0.40', 'best_ask': '0.60'}) == 0.5
-        assert _compute_mid_price({'best_bid': '', 'best_ask': ''}) is None
-        assert _compute_mid_price({}) is None
-
-    def test_compute_current_arb_implication(self):
-        rel = MarketRelation(
-            relation_id='t',
-            markets=[
-                {'best_bid': '0.60', 'best_ask': '0.70'},  # mid=0.65
-                {'best_bid': '0.30', 'best_ask': '0.40'},  # mid=0.35
-            ],
-            spread_type='implication',
-        )
-        assert _compute_current_arb(rel) == pytest.approx(0.30)
-
-    def test_compute_current_arb_no_violation(self):
-        rel = MarketRelation(
-            relation_id='t',
-            markets=[
-                {'best_bid': '0.10', 'best_ask': '0.20'},  # mid=0.15
-                {'best_bid': '0.50', 'best_ask': '0.60'},  # mid=0.55
-            ],
-            spread_type='implication',
-        )
-        assert _compute_current_arb(rel) == 0.0
-
-    def test_compute_current_arb_complementary(self):
-        rel = MarketRelation(
-            relation_id='t',
-            markets=[
-                {'best_bid': '0.60', 'best_ask': '0.70'},  # mid=0.65
-                {'best_bid': '0.40', 'best_ask': '0.50'},  # mid=0.45
-            ],
-            spread_type='complementary',
-        )
-        # 0.65 + 0.45 - 1.0 = 0.10
-        assert _compute_current_arb(rel) == pytest.approx(0.10)
-
-    def test_compute_current_arb_non_structural(self):
-        rel = MarketRelation(
-            relation_id='t',
-            markets=[
-                {'best_bid': '0.50', 'best_ask': '0.60'},
-                {'best_bid': '0.50', 'best_ask': '0.60'},
-            ],
-            spread_type='correlated',
-        )
-        assert _compute_current_arb(rel) == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -472,14 +340,72 @@ class TestEdgeCases:
         assert sum(1 for rel in r.candidates if rel.spread_type == 'implication') == 0
 
     def test_parse_deadline_invalid_date(self):
-        # February 30 doesn't exist
-        # Should either return None or raise -- currently may raise ValueError
-        # This documents the current behavior
-        try:
-            result = parse_deadline('Will X happen by February 30, 2025?')
-            assert result is None or isinstance(result, date)
-        except ValueError:
-            pass  # Also acceptable -- invalid date
+        # February 30 doesn't exist — should return None, not raise
+        assert parse_deadline('Will X happen by February 30, 2025?') is None
+
+    def test_exclusivity_requires_ask(self):
+        """Markets with bid but no ask should be excluded from exclusivity."""
+        markets = [
+            {
+                **_make_market('m1', 'Will Alice win the election?'),
+                'best_bid': '0.5',
+                'best_ask': '0',
+            },
+            _make_market('m2', 'Will Bob win the election?'),
+            _make_market('m3', 'Will Charlie win the election?'),
+        ]
+        rels = detect_exclusivity(markets, 'Election', 'polymarket')
+        assert len(rels) == 1
+        # m1 excluded (no ask), only m2 and m3 in group
+        assert len(rels[0].markets) == 2
+
+    def test_exclusivity_relation_id_prefix(self):
+        """Exclusivity relation IDs should have 'excl-' prefix."""
+        markets = [
+            _make_market('m1', 'Will Alice win the election?'),
+            _make_market('m2', 'Will Bob win the election?'),
+        ]
+        rels = detect_exclusivity(markets, 'Election', 'polymarket')
+        assert len(rels) == 1
+        assert rels[0].relation_id.startswith('excl-')
+
+    def test_complementary_relation_id_prefix(self):
+        """Complementary relation IDs should have 'comp-' prefix."""
+        markets = [
+            {
+                **_make_market('m1', 'A?', '1', 'E'),
+                'best_bid': '0.55',
+                'best_ask': '0.60',
+            },
+            {
+                **_make_market('m2', 'B?', '1', 'E'),
+                'best_bid': '0.35',
+                'best_ask': '0.40',
+            },
+        ]
+        rels = detect_complementary(markets, 'E', 'polymarket')
+        assert len(rels) == 1
+        assert rels[0].relation_id.startswith('comp-')
+
+    def test_both_exclusivity_and_complementary_kept(self):
+        """Same markets matching both layers should produce two candidates."""
+        poly = [
+            {
+                **_make_market('m1', 'Will Alice win the election?', '1', 'Election'),
+                'best_bid': '0.55',
+                'best_ask': '0.60',
+            },
+            {
+                **_make_market('m2', 'Will Bob win the election?', '1', 'Election'),
+                'best_bid': '0.35',
+                'best_ask': '0.40',
+            },
+        ]
+        r = discover_relations(poly, [])
+        types = {rel.spread_type for rel in r.candidates}
+        # Both types should survive dedup (different spread_type)
+        assert 'exclusivity' in types
+        assert 'complementary' in types
 
     def test_date_nesting_same_dates(self):
         """Markets with same deadline should NOT create implication."""
