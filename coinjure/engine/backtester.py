@@ -349,13 +349,18 @@ async def run_backtest_relation(
 
     # Build strategy-specific kwargs from the relation.
     # DirectArbStrategy (same_event) needs explicit market IDs per platform.
-    # EventSumArbStrategy (complementary) needs an event_id.
+    # GroupArbStrategy (complementary/exclusivity) needs relation_id + event_id.
     # All other strategies take relation_id and load from RelationStore.
     if spread_type == 'same_event':
         _build_same_event_kwargs(kwargs, relation)
         kwargs.setdefault('backtest_mode', True)
-    elif spread_type == 'complementary':
-        kwargs.setdefault('event_id', str(relation.market_a.get('event_id', '')))
+    elif spread_type in ('complementary', 'exclusivity'):
+        kwargs.setdefault('relation_id', relation.relation_id)
+        for m in relation.markets:
+            eid = m.get('event_id', '')
+            if eid:
+                kwargs.setdefault('event_id', str(eid))
+                break
     else:
         kwargs.setdefault('relation_id', relation.relation_id)
 

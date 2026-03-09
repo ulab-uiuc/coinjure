@@ -115,8 +115,10 @@ def test_build_strategy_ref_for_relation_same_event():
     rel = MarketRelation(
         relation_id='r1',
         spread_type='same_event',
-        market_a={'id': 'poly-123', 'platform': 'polymarket', 'token_ids': ['0xabc']},
-        market_b={'id': 'kalshi-456', 'platform': 'kalshi', 'ticker': 'K-TICK'},
+        markets=[
+            {'id': 'poly-123', 'platform': 'polymarket', 'token_ids': ['0xabc']},
+            {'id': 'kalshi-456', 'platform': 'kalshi', 'ticker': 'K-TICK'},
+        ],
     )
     ref, kwargs = build_strategy_ref_for_relation(rel)
     assert ref == 'coinjure.strategy.builtin.direct_arb_strategy:DirectArbStrategy'
@@ -132,12 +134,15 @@ def test_build_strategy_ref_for_relation_complementary():
     rel = MarketRelation(
         relation_id='r2',
         spread_type='complementary',
-        market_a={'id': 'a', 'event_id': 'evt-1'},
-        market_b={'id': 'b'},
+        markets=[
+            {'id': 'a', 'event_id': 'evt-1'},
+            {'id': 'b'},
+        ],
     )
     ref, kwargs = build_strategy_ref_for_relation(rel)
-    assert 'EventSumArbStrategy' in ref
+    assert 'GroupArbStrategy' in ref
     assert kwargs['event_id'] == 'evt-1'
+    assert kwargs['relation_id'] == 'r2'
 
 
 def test_build_strategy_ref_for_relation_generic():
