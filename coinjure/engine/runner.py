@@ -6,13 +6,16 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from coinjure.data.manager import DataManager
-from coinjure.data.source import DataSource
 from coinjure.data.live.kalshi import LiveKalshiDataSource
 from coinjure.data.live.polymarket import LivePolyMarketDataSource
+from coinjure.data.manager import DataManager
+from coinjure.data.source import DataSource
+from coinjure.engine.engine import TradingEngine
 from coinjure.engine.trader.kalshi import KalshiTrader
 from coinjure.engine.trader.paper import PaperTrader
 from coinjure.engine.trader.polymarket import PolymarketTrader
+from coinjure.strategy.strategy import Strategy
+from coinjure.ticker import CashTicker
 from coinjure.trading.position import Position, PositionManager
 from coinjure.trading.risk import (
     NoRiskManager,
@@ -20,9 +23,6 @@ from coinjure.trading.risk import (
     StandardRiskManager,
 )
 from coinjure.trading.trader import Trader
-from coinjure.engine.engine import TradingEngine
-from coinjure.strategy.strategy import Strategy
-from coinjure.ticker import CashTicker
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter
@@ -166,6 +166,15 @@ async def run_live_paper_trading(
         position_manager.update_position(
             Position(
                 ticker=CashTicker.POLYMARKET_USDC,
+                quantity=initial_capital,
+                average_cost=Decimal('0'),
+                realized_pnl=Decimal('0'),
+            )
+        )
+        # Fund Kalshi USD too so cross-platform arbs (same_event) can trade both legs
+        position_manager.update_position(
+            Position(
+                ticker=CashTicker.KALSHI_USD,
                 quantity=initial_capital,
                 average_cost=Decimal('0'),
                 realized_pnl=Decimal('0'),
