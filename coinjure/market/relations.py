@@ -1,11 +1,14 @@
-"""Persistent market relation graph — stores discovered spread pairs.
+"""Persistent market relation graph — stores discovered spread groups.
 
-Relation types (by mathematical constraint):
+Relation types (8 types → 7 strategies):
+  - implication    : A implies B (A ≤ B), date/threshold nesting
+  - exclusivity    : mutually exclusive outcomes (Σ ≤ 1) → GroupArbStrategy
+  - complementary  : outcomes sum to 1 within an event (Σ ≈ 1) → GroupArbStrategy
   - same_event     : identical market across platforms (A ≈ B)
-  - complementary  : outcomes sum to 1 within an event (Σ ≈ 1)
-  - implication    : A implies B (A ≤ B)
-  - exclusivity    : A and B mutually exclusive (A + B ≤ 1)
-  - correlated     : statistically correlated prices (no structural constraint)
+  - correlated     : statistically correlated prices (shared drivers)
+  - structural     : known mathematical relationship (e.g. price nesting)
+  - conditional    : conditional probability bounds
+  - temporal       : lead-lag information flow
 """
 
 from __future__ import annotations
@@ -37,66 +40,6 @@ VALID_TYPES = frozenset(
 
 
 @dataclass
-class ValidationResult:
-    """Quantitative validation result for a market relation."""
-
-    # Analysis type that produced this result
-    analysis_type: str | None = None  # 'structural', 'cointegration', 'lead_lag'
-
-    # Structural analysis (same_event, complementary, implication, exclusivity)
-    constraint: str | None = None  # e.g. 'A <= B', 'A + B <= 1'
-    constraint_holds: bool | None = None
-    violation_count: int | None = None  # number of times constraint violated
-    violation_rate: float | None = None  # fraction of observations violating
-    current_arb: float | None = None  # current constraint violation size
-    mean_arb: float | None = None  # mean violation size when violated
-
-    # Stationarity
-    adf_statistic: float | None = None
-    adf_pvalue: float | None = None
-    is_stationary: bool | None = None
-
-    # Cointegration
-    coint_statistic: float | None = None
-    coint_pvalue: float | None = None
-    is_cointegrated: bool | None = None
-
-    # Spread characteristics
-    half_life: float | None = None  # bars to mean-revert
-    hedge_ratio: float | None = None  # beta from OLS
-    correlation: float | None = None
-    mean_spread: float | None = None
-    std_spread: float | None = None
-
-    # Lead-lag
-    lead_lag: int | None = None  # positive = A leads B by N steps
-    lead_lag_corr: float | None = None  # cross-correlation at optimal lag
-    lead_lag_significant: bool | None = None  # |corr| > threshold
-
-    validated_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-
-    @property
-    def is_valid(self) -> bool:
-        """Check validity based on the analysis type.
-
-        For structural relations (implication, exclusivity, etc.), the logical
-        relationship is always valid — constraint violations are trading
-        opportunities, not evidence that the relation is wrong.
-        """
-        if self.analysis_type == 'structural':
-            return True
-        if self.analysis_type == 'lead_lag':
-            return self.lead_lag_significant is True
-        if self.is_cointegrated is not None:
-            return self.is_cointegrated
-        if self.is_stationary is not None:
-            return self.is_stationary
-        return False
-
-
-@dataclass
 class MarketRelation:
     """A discovered relationship between prediction markets."""
 
@@ -111,19 +54,10 @@ class MarketRelation:
     hedge_ratio: float = 1.0  # β from OLS: p_A = α + β * p_B
     lead_lag: int = 0  # positive = A leads B by N steps
 
-    # Analysis results (set by discover/auto-pair)
-    analysis_a: dict[str, Any] = field(default_factory=dict)
-    analysis_b: dict[str, Any] = field(default_factory=dict)
-
-    # Quantitative validation (set by validate command)
-    validation: dict[str, Any] = field(default_factory=dict)
-
     # Lifecycle
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
-    last_validated: str | None = None
-    valid_until: str | None = None
     status: str = (
         'active'  # active, backtest_passed, backtest_failed, deployed, retired
     )
@@ -139,24 +73,6 @@ class MarketRelation:
         self.status = 'backtest_passed' if passed else 'backtest_failed'
         self.backtest_pnl = pnl
         self.backtest_trades = trades
-
-    def set_validation(self, result: ValidationResult) -> None:
-        """Store a validation result and update trading fields."""
-        self.validation = asdict(result)
-        self.last_validated = result.validated_at
-        # Propagate hedge ratio (relatively stable across windows)
-        if result.hedge_ratio is not None:
-            self.hedge_ratio = result.hedge_ratio
-        if result.lead_lag is not None:
-            self.lead_lag = result.lead_lag
-
-    def get_validation(self) -> ValidationResult | None:
-        if not self.validation:
-            return None
-        known = {f.name for f in ValidationResult.__dataclass_fields__.values()}
-        return ValidationResult(
-            **{k: v for k, v in self.validation.items() if k in known}
-        )
 
     def get_token_id(self, index: int = 0) -> str:
         """Get the first YES-side CLOB token_id for market at *index*.
@@ -199,9 +115,6 @@ class MarketRelation:
     def from_dict(cls, d: dict[str, Any]) -> MarketRelation:
         d = dict(d)
         known = {f.name for f in cls.__dataclass_fields__.values()}
-        # Auto-migrate old pair format
-        if 'market_a' in d and 'markets' not in d:
-            d['markets'] = [d.pop('market_a'), d.pop('market_b', {})]
         filtered = {k: v for k, v in d.items() if k in known}
         return cls(**filtered)
 
@@ -249,23 +162,6 @@ class RelationStore:
         data = [d for d in data if d.get('relation_id') != relation.relation_id]
         data.append(relation.to_dict())
         self._save(data)
-
-    def add_batch(self, relations: list[MarketRelation]) -> int:
-        """Add multiple relations in a single load/save cycle. Returns count added."""
-        if not relations:
-            return 0
-        data = self._load()
-        existing_ids = {d.get('relation_id') for d in data}
-        added = 0
-        for rel in relations:
-            if rel.relation_id in existing_ids:
-                # Replace existing (upsert, consistent with add())
-                data = [d for d in data if d.get('relation_id') != rel.relation_id]
-            else:
-                added += 1
-            data.append(rel.to_dict())
-        self._save(data)
-        return added
 
     def update(self, relation: MarketRelation) -> None:
         data = self._load()
@@ -320,33 +216,3 @@ class RelationStore:
                     results.append(r)
                     break
         return results
-
-    def strongest(self, n: int = 10, status: str | None = None) -> list[MarketRelation]:
-        """Return the N highest-confidence relations."""
-        relations = self.list(status=status)
-        relations.sort(key=lambda r: r.confidence, reverse=True)
-        return relations[:n]
-
-    def validated(self) -> list[MarketRelation]:
-        """Return relations that passed quantitative validation."""
-        return self.list(status='validated')
-
-    def invalidate(self, relation_id: str, reason: str = '') -> bool:
-        """Mark a relation as invalidated."""
-        r = self.get(relation_id)
-        if r is None:
-            return False
-        r.status = 'invalidated'
-        if reason:
-            r.reasoning = f'{r.reasoning} [invalidated: {reason}]'
-        self.update(r)
-        return True
-
-    def retire(self, relation_id: str) -> bool:
-        """Mark a relation as retired (end of lifecycle)."""
-        r = self.get(relation_id)
-        if r is None:
-            return False
-        r.status = 'retired'
-        self.update(r)
-        return True

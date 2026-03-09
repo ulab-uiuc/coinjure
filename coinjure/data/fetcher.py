@@ -5,9 +5,52 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
+
+# ---------------------------------------------------------------------------
+# Fuzzy text search
+# ---------------------------------------------------------------------------
+
+_RE_WORD = re.compile(r'[a-z0-9]+')
+
+
+def _tokenize(text: str) -> list[str]:
+    """Lowercase and extract alphanumeric tokens."""
+    return _RE_WORD.findall(text.lower())
+
+
+def _fuzzy_match_token(query_token: str, text_words: list[str]) -> bool:
+    """Check if a query token fuzzy-matches any word in text.
+
+    Matches if the query token is:
+      - a prefix of a text word (≥3 chars), OR
+      - similar enough (SequenceMatcher ratio ≥ 0.75, for tokens ≥4 chars)
+    """
+    for w in text_words:
+        if w.startswith(query_token):
+            return True
+        if len(w) >= 3 and query_token.startswith(w):
+            return True
+        if len(query_token) >= 4 and len(w) >= 4:
+            if SequenceMatcher(None, query_token, w).ratio() >= 0.75:
+                return True
+    return False
+
+
+def fuzzy_text_match(query: str, text: str) -> bool:
+    """Check if all query tokens fuzzy-match against text."""
+    q_tokens = _tokenize(query)
+    if not q_tokens:
+        return True
+    t_words = _tokenize(text)
+    if not t_words:
+        return False
+    return all(_fuzzy_match_token(qt, t_words) for qt in q_tokens)
+
 
 # ---------------------------------------------------------------------------
 # Polymarket (via Gamma API — no auth required)
@@ -144,11 +187,12 @@ async def polymarket_search_markets(
             seen.add(mid)
             all_markets.append(m)
 
-    q = query.lower()
     filtered = [
         m
         for m in all_markets
-        if q in m.get('question', '').lower() or q in m.get('event_title', '').lower()
+        if fuzzy_text_match(
+            query, m.get('question', '') + ' ' + m.get('event_title', '')
+        )
     ]
     return filtered[:limit]
 
@@ -253,7 +297,6 @@ async def kalshi_search_markets(
     Scans all pages (up to 4000 events) before trimming to limit, so that
     markets on later pages (e.g. KXFEDDECISION-26APR) are not missed.
     """
-    q = query.lower()
     matched_markets: list[dict] = []
     cursor: str | None = None
     pages = 0
@@ -279,7 +322,7 @@ async def kalshi_search_markets(
                 break
 
             for event in events:
-                if q not in event.get('title', '').lower():
+                if not fuzzy_text_match(query, event.get('title', '')):
                     continue
                 for mkt in event.get('markets', []) or []:
                     entry = {

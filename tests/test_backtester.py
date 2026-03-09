@@ -26,26 +26,24 @@ from coinjure.ticker import KalshiTicker, PolyMarketTicker
 def _make_relation(
     spread_type: str = 'implication',
     *,
-    market_a_id: str = 'MA',
-    market_b_id: str = 'MB',
-    token_a: str = 'TA',
-    token_b: str = 'TB',
+    market_ids: tuple[str, str] = ('MA', 'MB'),
+    token_ids: tuple[str, str] = ('TA', 'TB'),
     event_id: str = 'E1',
 ) -> MarketRelation:
     return MarketRelation(
-        relation_id=f'{market_a_id}-{market_b_id}',
+        relation_id=f'{market_ids[0]}-{market_ids[1]}',
         markets=[
             {
-                'id': market_a_id,
-                'question': 'Market A question?',
+                'id': market_ids[0],
+                'question': 'Market 0 question?',
                 'event_id': event_id,
-                'token_ids': [token_a],
+                'token_ids': [token_ids[0]],
             },
             {
-                'id': market_b_id,
-                'question': 'Market B question?',
+                'id': market_ids[1],
+                'question': 'Market 1 question?',
                 'event_id': event_id,
-                'token_ids': [token_b],
+                'token_ids': [token_ids[1]],
             },
         ],
         spread_type=spread_type,

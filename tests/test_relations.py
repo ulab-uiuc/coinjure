@@ -80,64 +80,6 @@ class TestRelationStore:
         m2_relations = store.find_by_market('M2')
         assert len(m2_relations) == 2
 
-        # strongest
-        top2 = store.strongest(n=2)
-        assert len(top2) == 2
-        assert top2[0].confidence == 0.9
-
-    def test_validation_lifecycle(self, tmp_path):
-        from coinjure.market.relations import (
-            MarketRelation,
-            RelationStore,
-            ValidationResult,
-        )
-
-        store = RelationStore(path=tmp_path / 'relations.json')
-        r = MarketRelation(relation_id='v1', confidence=0.8)
-        store.add(r)
-
-        result = ValidationResult(
-            adf_statistic=-3.5,
-            adf_pvalue=0.01,
-            is_stationary=True,
-            is_cointegrated=True,
-            coint_pvalue=0.02,
-        )
-        r.set_validation(result)
-        store.update(r)
-
-        loaded = store.get('v1')
-        assert loaded.status == 'active'  # set_validation no longer changes status
-        vr = loaded.get_validation()
-        assert vr.is_valid
-        assert vr.adf_pvalue == 0.01
-
-    def test_from_dict_migrates_old_format(self):
-        from coinjure.market.relations import MarketRelation
-
-        d = {
-            'relation_id': 'old-1',
-            'market_a': {'id': 'A'},
-            'market_b': {'id': 'B'},
-            'spread_type': 'same_event',
-        }
-        r = MarketRelation.from_dict(d)
-        assert len(r.markets) == 2
-        assert r.markets[0]['id'] == 'A'
-        assert r.markets[1]['id'] == 'B'
-
-    def test_invalidate_retire(self, tmp_path):
-        from coinjure.market.relations import MarketRelation, RelationStore
-
-        store = RelationStore(path=tmp_path / 'relations.json')
-        store.add(MarketRelation(relation_id='x1', confidence=0.5))
-
-        assert store.invalidate('x1', reason='test')
-        assert store.get('x1').status == 'invalidated'
-
-        assert store.retire('x1')
-        assert store.get('x1').status == 'retired'
-
 
 # ── Validation ───────────────────────────────────────────────────────────
 
