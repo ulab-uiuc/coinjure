@@ -433,22 +433,20 @@ async def run_backtest_relation(
         )
 
     # --- Price history from API ---
-    # Fetch prices for ALL legs (N markets, not just 2).
-    # Limit concurrency to avoid API rate-limiting (503 errors).
+    # Fetch prices for ALL legs sequentially to respect API rate limits
+    # (Kalshi rate-limits aggressively). The engine run phase is CPU-only.
     n_markets = len(relation.markets)
-    _API_CONCURRENCY = 5
-    sem = asyncio.Semaphore(_API_CONCURRENCY)
-
-    async def _fetch_with_limit(i: int) -> list[dict[str, Any]]:
-        async with sem:
-            return await _fetch_leg_prices(
-                relation.markets[i], relation.get_token_id(i)
-            )
+    _KALSHI_DELAY = 3.0  # seconds between Kalshi API calls
 
     try:
-        all_prices = await asyncio.gather(
-            *[_fetch_with_limit(i) for i in range(n_markets)]
-        )
+        all_prices: list[list[dict[str, Any]]] = []
+        for i in range(n_markets):
+            m = relation.markets[i]
+            is_kalshi = str(m.get('platform', 'polymarket')).lower() == 'kalshi'
+            if is_kalshi and all_prices:
+                await asyncio.sleep(_KALSHI_DELAY)
+            prices = await _fetch_leg_prices(m, relation.get_token_id(i))
+            all_prices.append(prices)
     except Exception as exc:
         return BacktestResult(**result_base, error=str(exc))
 
