@@ -119,6 +119,11 @@ class GroupArbStrategy(Strategy):
         ticker = getattr(event, 'ticker', None)
         if not isinstance(ticker, PolyMarketTicker):
             return
+        # Only track YES-side prices for sum calculation; NO-side events
+        # still flow through the engine (registered in DataManager for
+        # find_complement) but must not corrupt self._asks.
+        if getattr(ticker, 'side', 'yes') != 'yes':
+            return
         if not self._should_track(ticker):
             return
 

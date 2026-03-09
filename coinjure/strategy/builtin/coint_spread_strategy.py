@@ -99,6 +99,12 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
         # Position: flat, long_spread, short_spread
         self._position_state = 'flat'
 
+    def reset_live_state(self) -> None:
+        """Reset prices and position state; preserve calibration."""
+        self._price_a = None
+        self._price_b = None
+        self._position_state = 'flat'
+
     def _calibrate(self) -> None:
         n = len(self._spread_buffer)
         if n < 2:

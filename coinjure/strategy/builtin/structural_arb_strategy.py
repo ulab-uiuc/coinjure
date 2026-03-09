@@ -77,6 +77,11 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         # flat | long_a_short_b (A underpriced) | short_a_long_b (A overpriced)
         self._position_state = 'flat'
 
+    def reset_live_state(self) -> None:
+        self._price_a = None
+        self._price_b = None
+        self._position_state = 'flat'
+
     def _expected_a(self, price_b: float) -> float:
         """Compute expected p(A) from the structural relationship."""
         return self.slope * price_b + self.intercept
