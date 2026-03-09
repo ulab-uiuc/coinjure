@@ -165,9 +165,9 @@ class PriceHistoryDataSource(DataSource):
 # ---------------------------------------------------------------------------
 
 
-def _make_ticker(relation: MarketRelation, leg: str, side: str = 'yes') -> Ticker:
-    """Create a PolyMarketTicker or KalshiTicker from a relation leg."""
-    m = relation.market_a if leg == 'a' else relation.market_b
+def _make_ticker(relation: MarketRelation, index: int, side: str = 'yes') -> Ticker:
+    """Create a PolyMarketTicker or KalshiTicker from a relation market."""
+    m = relation.markets[index]
     platform = str(m.get('platform', 'polymarket')).lower()
     question = str(m.get('question', m.get('title', '')))[:40]
 
@@ -183,9 +183,9 @@ def _make_ticker(relation: MarketRelation, leg: str, side: str = 'yes') -> Ticke
         )
 
     if side == 'no':
-        token_id = relation.get_no_token_id(leg)
+        token_id = relation.get_no_token_id(index)
     else:
-        token_id = relation.get_token_id(leg)
+        token_id = relation.get_token_id(index)
     market_id = str(m.get('id', ''))
     return PolyMarketTicker(
         symbol=token_id,
@@ -206,14 +206,15 @@ def _build_same_event_kwargs(
     Identifies which leg is Polymarket and which is Kalshi, then sets
     poly_market_id, poly_token_id, and kalshi_ticker.
     """
-    plat_a = str(relation.market_a.get('platform', 'polymarket')).lower()
-    plat_b = str(relation.market_b.get('platform', 'polymarket')).lower()
-    if plat_a == 'kalshi':
-        poly_m, kalshi_m, poly_leg = relation.market_b, relation.market_a, 'b'
+    m0 = relation.markets[0] if relation.markets else {}
+    m1 = relation.markets[1] if len(relation.markets) > 1 else {}
+    plat_0 = str(m0.get('platform', 'polymarket')).lower()
+    if plat_0 == 'kalshi':
+        poly_m, kalshi_m, poly_idx = m1, m0, 1
     else:
-        poly_m, kalshi_m, poly_leg = relation.market_a, relation.market_b, 'a'
+        poly_m, kalshi_m, poly_idx = m0, m1, 0
     kwargs.setdefault('poly_market_id', str(poly_m.get('id', '')))
-    kwargs.setdefault('poly_token_id', relation.get_token_id(poly_leg))
+    kwargs.setdefault('poly_token_id', relation.get_token_id(poly_idx))
     kwargs.setdefault(
         'kalshi_ticker',
         str(kalshi_m.get('ticker', kalshi_m.get('id', ''))),
@@ -305,11 +306,11 @@ async def _fetch_relation_prices(
     relation: MarketRelation,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Fetch price history for both legs (dispatches by platform)."""
-    token_a = relation.get_token_id('a')
-    token_b = relation.get_token_id('b')
+    token_a = relation.get_token_id(0)
+    token_b = relation.get_token_id(1)
     prices_a, prices_b = await asyncio.gather(
-        _fetch_leg_prices(relation.market_a, token_a),
-        _fetch_leg_prices(relation.market_b, token_b),
+        _fetch_leg_prices(relation.markets[0], token_a),
+        _fetch_leg_prices(relation.markets[1], token_b),
     )
     return prices_a, prices_b
 
@@ -374,10 +375,7 @@ async def run_backtest_relation(
     if parquet_path is not None:
         from coinjure.data.backtest.parquet import ParquetDataSource
 
-        market_ids = [
-            relation.market_a.get('id', ''),
-            relation.market_b.get('id', ''),
-        ]
+        market_ids = [m.get('id', '') for m in relation.markets]
         data_source = ParquetDataSource(
             parquet_path,
             market_ids=[m for m in market_ids if m],
@@ -407,16 +405,16 @@ async def run_backtest_relation(
             error=f'Insufficient price data: A={len(prices_a)}, B={len(prices_b)}',
         )
 
-    ticker_a = _make_ticker(relation, 'a')
-    ticker_b = _make_ticker(relation, 'b')
+    ticker_a = _make_ticker(relation, 0)
+    ticker_b = _make_ticker(relation, 1)
 
     # Build NO-side tickers if available (needed by EventSumArb etc.)
     no_ticker_a: Ticker | None = None
     no_ticker_b: Ticker | None = None
-    if relation.get_no_token_id('a'):
-        no_ticker_a = _make_ticker(relation, 'a', side='no')
-    if relation.get_no_token_id('b'):
-        no_ticker_b = _make_ticker(relation, 'b', side='no')
+    if relation.get_no_token_id(0):
+        no_ticker_a = _make_ticker(relation, 0, side='no')
+    if relation.get_no_token_id(1):
+        no_ticker_b = _make_ticker(relation, 1, side='no')
 
     if spread_type in STRUCTURAL_TYPES:
         # Structural: run on full data
