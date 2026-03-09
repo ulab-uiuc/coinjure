@@ -18,7 +18,6 @@ from coinjure.events import OrderBookEvent, PriceChangeEvent
 from coinjure.market.relations import MarketRelation
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -35,18 +34,20 @@ def _make_relation(
 ) -> MarketRelation:
     return MarketRelation(
         relation_id=f'{market_a_id}-{market_b_id}',
-        market_a={
-            'id': market_a_id,
-            'question': 'Market A question?',
-            'event_id': event_id,
-            'token_ids': [token_a],
-        },
-        market_b={
-            'id': market_b_id,
-            'question': 'Market B question?',
-            'event_id': event_id,
-            'token_ids': [token_b],
-        },
+        markets=[
+            {
+                'id': market_a_id,
+                'question': 'Market A question?',
+                'event_id': event_id,
+                'token_ids': [token_a],
+            },
+            {
+                'id': market_b_id,
+                'question': 'Market B question?',
+                'event_id': event_id,
+                'token_ids': [token_b],
+            },
+        ],
         spread_type=spread_type,
         confidence=0.95,
     )
@@ -65,10 +66,18 @@ def _price_series(values: list[float], start_ts: int = 1000000) -> list[dict]:
 class TestPriceHistoryDataSource:
     def test_builds_events_from_two_series(self):
         ticker_a = PolyMarketTicker(
-            symbol='TA', name='A', token_id='TA', market_id='MA', event_id='E1',
+            symbol='TA',
+            name='A',
+            token_id='TA',
+            market_id='MA',
+            event_id='E1',
         )
         ticker_b = PolyMarketTicker(
-            symbol='TB', name='B', token_id='TB', market_id='MB', event_id='E1',
+            symbol='TB',
+            name='B',
+            token_id='TB',
+            market_id='MB',
+            event_id='E1',
         )
         prices_a = _price_series([0.5, 0.6])
         prices_b = _price_series([0.3, 0.4])
@@ -90,10 +99,18 @@ class TestPriceHistoryDataSource:
 
     def test_events_sorted_by_timestamp(self):
         ticker_a = PolyMarketTicker(
-            symbol='TA', name='A', token_id='TA', market_id='MA', event_id='E1',
+            symbol='TA',
+            name='A',
+            token_id='TA',
+            market_id='MA',
+            event_id='E1',
         )
         ticker_b = PolyMarketTicker(
-            symbol='TB', name='B', token_id='TB', market_id='MB', event_id='E1',
+            symbol='TB',
+            name='B',
+            token_id='TB',
+            market_id='MB',
+            event_id='E1',
         )
         # B series starts before A
         prices_a = _price_series([0.5], start_ts=2000)
@@ -107,7 +124,11 @@ class TestPriceHistoryDataSource:
 
     def test_returns_none_when_exhausted(self):
         ticker_a = PolyMarketTicker(
-            symbol='TA', name='A', token_id='TA', market_id='MA', event_id='E1',
+            symbol='TA',
+            name='A',
+            token_id='TA',
+            market_id='MA',
+            event_id='E1',
         )
         ds = PriceHistoryDataSource(ticker_a, _price_series([0.5]), ticker_a, [])
         events = asyncio.run(self._drain(ds))
@@ -116,7 +137,11 @@ class TestPriceHistoryDataSource:
 
     def test_skips_invalid_price_points(self):
         ticker_a = PolyMarketTicker(
-            symbol='TA', name='A', token_id='TA', market_id='MA', event_id='E1',
+            symbol='TA',
+            name='A',
+            token_id='TA',
+            market_id='MA',
+            event_id='E1',
         )
         prices_a = [
             {'t': 1000, 'p': 0.5},
@@ -129,10 +154,16 @@ class TestPriceHistoryDataSource:
 
     def test_mixed_poly_and_kalshi_tickers(self):
         poly = PolyMarketTicker(
-            symbol='TA', name='A', token_id='TA', market_id='MA', event_id='E1',
+            symbol='TA',
+            name='A',
+            token_id='TA',
+            market_id='MA',
+            event_id='E1',
         )
         kalshi = KalshiTicker(
-            symbol='KXBTC', name='B', market_ticker='KXBTC-25MAR14',
+            symbol='KXBTC',
+            name='B',
+            market_ticker='KXBTC-25MAR14',
         )
         prices_a = _price_series([0.5])
         prices_b = _price_series([0.6])
@@ -165,24 +196,24 @@ class TestPriceHistoryDataSource:
 class TestMakeTicker:
     def test_creates_polymarket_ticker_by_default(self):
         rel = _make_relation()
-        ticker = _make_ticker(rel, 'a')
+        ticker = _make_ticker(rel, 0)
         assert isinstance(ticker, PolyMarketTicker)
         assert ticker.symbol == 'TA'
         assert ticker.market_id == 'MA'
 
     def test_creates_kalshi_ticker_for_kalshi_platform(self):
         rel = _make_relation()
-        rel.market_b['platform'] = 'kalshi'
-        rel.market_b['ticker'] = 'KXBTC-25MAR14'
-        rel.market_b['event_ticker'] = 'KXBTC'
-        ticker = _make_ticker(rel, 'b')
+        rel.markets[1]['platform'] = 'kalshi'
+        rel.markets[1]['ticker'] = 'KXBTC-25MAR14'
+        rel.markets[1]['event_ticker'] = 'KXBTC'
+        ticker = _make_ticker(rel, 1)
         assert isinstance(ticker, KalshiTicker)
         assert ticker.market_ticker == 'KXBTC-25MAR14'
         assert ticker.event_ticker == 'KXBTC'
 
     def test_creates_polymarket_ticker_for_leg_b(self):
         rel = _make_relation()
-        ticker = _make_ticker(rel, 'b')
+        ticker = _make_ticker(rel, 1)
         assert isinstance(ticker, PolyMarketTicker)
         assert ticker.symbol == 'TB'
         assert ticker.market_id == 'MB'
@@ -196,9 +227,9 @@ class TestMakeTicker:
 class TestBuildSameEventKwargs:
     def test_poly_a_kalshi_b(self):
         rel = _make_relation(spread_type='same_event')
-        rel.market_a['platform'] = 'polymarket'
-        rel.market_b['platform'] = 'kalshi'
-        rel.market_b['ticker'] = 'KXBTC-25MAR14'
+        rel.markets[0]['platform'] = 'polymarket'
+        rel.markets[1]['platform'] = 'kalshi'
+        rel.markets[1]['ticker'] = 'KXBTC-25MAR14'
         kwargs: dict = {}
         _build_same_event_kwargs(kwargs, rel)
         assert kwargs['poly_market_id'] == 'MA'
@@ -207,9 +238,9 @@ class TestBuildSameEventKwargs:
 
     def test_kalshi_a_poly_b(self):
         rel = _make_relation(spread_type='same_event')
-        rel.market_a['platform'] = 'kalshi'
-        rel.market_a['ticker'] = 'K-MKT'
-        rel.market_b['platform'] = 'polymarket'
+        rel.markets[0]['platform'] = 'kalshi'
+        rel.markets[0]['ticker'] = 'K-MKT'
+        rel.markets[1]['platform'] = 'polymarket'
         kwargs: dict = {}
         _build_same_event_kwargs(kwargs, rel)
         assert kwargs['poly_market_id'] == 'MB'
@@ -273,6 +304,7 @@ class TestRunBacktestRelation:
         rel = _make_relation(spread_type='implication')
         # Save relation to store so strategy can load it
         from coinjure.market.relations import RelationStore
+
         store = RelationStore(tmp_path / 'rel.json')
         store.add(rel)
         monkeypatch.setattr(
@@ -301,6 +333,7 @@ class TestRunBacktestRelation:
         """Statistical types should use 60/40 walk-forward split."""
         rel = _make_relation(spread_type='correlated')
         from coinjure.market.relations import RelationStore
+
         store = RelationStore(tmp_path / 'rel.json')
         store.add(rel)
         monkeypatch.setattr(

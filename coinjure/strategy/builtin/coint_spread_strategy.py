@@ -23,11 +23,11 @@ import math
 from collections import deque
 from decimal import Decimal
 
-from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.trader import Trader
+from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,11 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
         self._calibrated = True
         logger.info(
             'Warmup done (%d): mean=%.6f std=%.6f entry=%.6f exit=%.6f',
-            n, mean, std, float(self._entry_threshold), float(self._exit_threshold),
+            n,
+            mean,
+            std,
+            float(self._entry_threshold),
+            float(self._exit_threshold),
         )
 
     async def process_event(self, event: Event, trader: Trader) -> None:
@@ -137,9 +141,11 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
             or ticker.symbol
         )
 
-        if self._matches(tid, self._id_a, self._token_a):
+        if self._matches(tid, self._ids[0], self._tokens[0] if self._tokens else ''):
             self._price_a = event.price
-        elif self._matches(tid, self._id_b, self._token_b):
+        elif self._matches(
+            tid, self._ids[1], self._tokens[1] if len(self._tokens) > 1 else ''
+        ):
             self._price_b = event.price
         else:
             return
@@ -188,17 +194,20 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
 
     async def _enter_long_spread(self, trader: Trader, deviation: Decimal) -> None:
         """Buy A, sell B — spread is below mean (B overpriced relative to A)."""
-        ticker_a = self._find_ticker(trader, self._id_a, yes=True)
-        ticker_b_no = self._find_ticker(trader, self._id_b, yes=False)
+        ticker_a = self._find_ticker(trader, self._ids[0], yes=True)
+        ticker_b_no = self._find_ticker(trader, self._ids[1], yes=False)
 
         if ticker_a and self._price_a:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_a,
-                limit_price=self._price_a, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_a,
+                limit_price=self._price_a,
+                quantity=self.trade_size,
             )
         if ticker_b_no and self._price_b:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b_no,
+                side=TradeSide.BUY,
+                ticker=ticker_b_no,
                 limit_price=Decimal('1') - self._price_b,
                 quantity=self.trade_size,
             )
@@ -219,19 +228,22 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
 
     async def _enter_short_spread(self, trader: Trader, deviation: Decimal) -> None:
         """Sell A, buy B — spread is above mean (A overpriced relative to B)."""
-        ticker_a_no = self._find_ticker(trader, self._id_a, yes=False)
-        ticker_b = self._find_ticker(trader, self._id_b, yes=True)
+        ticker_a_no = self._find_ticker(trader, self._ids[0], yes=False)
+        ticker_b = self._find_ticker(trader, self._ids[1], yes=True)
 
         if ticker_a_no and self._price_a:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_a_no,
+                side=TradeSide.BUY,
+                ticker=ticker_a_no,
                 limit_price=Decimal('1') - self._price_a,
                 quantity=self.trade_size,
             )
         if ticker_b and self._price_b:
             await trader.place_order(
-                side=TradeSide.BUY, ticker=ticker_b,
-                limit_price=self._price_b, quantity=self.trade_size,
+                side=TradeSide.BUY,
+                ticker=ticker_b,
+                limit_price=self._price_b,
+                quantity=self.trade_size,
             )
 
         self._position_state = 'short_spread'
@@ -255,8 +267,10 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
                 best_bid = trader.market_data.get_best_bid(pos.ticker)
                 if best_bid:
                     await trader.place_order(
-                        side=TradeSide.SELL, ticker=pos.ticker,
-                        limit_price=best_bid.price, quantity=pos.quantity,
+                        side=TradeSide.SELL,
+                        ticker=pos.ticker,
+                        limit_price=best_bid.price,
+                        quantity=pos.quantity,
                     )
 
         prev = self._position_state

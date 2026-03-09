@@ -134,23 +134,31 @@ def _has_liquidity(m: dict) -> bool:
 def _compute_current_arb(rel: MarketRelation) -> float:
     """Compute current constraint violation from snapshot bid/ask prices.
 
-    Returns 0.0 if no violation, prices unavailable, either leg has no
+    Returns 0.0 if no violation, prices unavailable, any leg has no
     liquidity, or non-structural type.
     """
-    if not _has_liquidity(rel.market_a) or not _has_liquidity(rel.market_b):
-        return 0.0
-
-    mid_a = _compute_mid_price(rel.market_a)
-    mid_b = _compute_mid_price(rel.market_b)
-    if mid_a is None or mid_b is None:
-        return 0.0
-
     if rel.spread_type == 'implication':
-        # A ≤ B: violation when mid_a > mid_b
+        if len(rel.markets) < 2:
+            return 0.0
+        if not _has_liquidity(rel.markets[0]) or not _has_liquidity(rel.markets[1]):
+            return 0.0
+        mid_a = _compute_mid_price(rel.markets[0])
+        mid_b = _compute_mid_price(rel.markets[1])
+        if mid_a is None or mid_b is None:
+            return 0.0
         return max(mid_a - mid_b, 0.0)
+
     if rel.spread_type in ('exclusivity', 'complementary'):
-        # A + B ≤ 1: violation when sum > 1
-        return max(mid_a + mid_b - 1.0, 0.0)
+        mids = []
+        for m in rel.markets:
+            if not _has_liquidity(m):
+                return 0.0
+            mid = _compute_mid_price(m)
+            if mid is None:
+                return 0.0
+            mids.append(mid)
+        return max(sum(mids) - 1.0, 0.0)
+
     return 0.0
 
 
@@ -189,8 +197,7 @@ def detect_date_nesting(
             relations.append(
                 MarketRelation(
                     relation_id=f'{mid_a}-{mid_b}',
-                    market_a=_enrich(m_a, platform),
-                    market_b=_enrich(m_b, platform),
+                    markets=[_enrich(m_a, platform), _enrich(m_b, platform)],
                     spread_type='implication',
                     confidence=0.95,
                     reasoning=f'Date nesting: {d_a} <= {d_b} within "{event_title}"',
@@ -212,13 +219,12 @@ def detect_exclusivity(
     markets: list[dict],
     event_title: str,
     platform: str,
-    max_event_size: int = 20,
+    max_event_size: int = 50,
 ) -> list[MarketRelation]:
-    """Create exclusivity pairs for small winner-take-all events."""
+    """Create a single group relation for winner-take-all events."""
     if len(markets) > max_event_size:
         return []
 
-    # Only markets with non-zero bids
     active = []
     for m in markets:
         bid = m.get('best_bid') or m.get('yes_bid')
@@ -230,28 +236,24 @@ def detect_exclusivity(
     if len(active) < 2:
         return []
 
-    # Check winner-take-all pattern
     winner_count = sum(1 for m in active if _RE_WINNER.search(m.get('question', '')))
     if winner_count < len(active) * 0.8:
         return []
 
-    relations: list[MarketRelation] = []
-    for i in range(len(active)):
-        for j in range(i + 1, len(active)):
-            m_a, m_b = active[i], active[j]
-            mid_a, mid_b = _mid(m_a), _mid(m_b)
-            relations.append(
-                MarketRelation(
-                    relation_id=f'{mid_a}-{mid_b}',
-                    market_a=_enrich(m_a, platform),
-                    market_b=_enrich(m_b, platform),
-                    spread_type='exclusivity',
-                    confidence=0.99,
-                    reasoning=f'Mutually exclusive outcomes within "{event_title}"',
-                    hypothesis='A + B <= 1',
-                )
-            )
-    return relations
+    market_ids = sorted(_mid(m) for m in active if _mid(m))
+    relation_id = '-'.join(market_ids[:3]) + (
+        f'-+{len(market_ids)-3}' if len(market_ids) > 3 else ''
+    )
+    return [
+        MarketRelation(
+            relation_id=relation_id,
+            markets=[_enrich(m, platform) for m in active],
+            spread_type='exclusivity',
+            confidence=0.99,
+            reasoning=f'Mutually exclusive outcomes within "{event_title}" ({len(active)} markets)',
+            hypothesis='sum(prices) <= 1',
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -263,20 +265,13 @@ def detect_complementary(
     markets: list[dict],
     event_title: str,
     platform: str,
-    max_event_size: int = 30,
+    max_event_size: int = 50,
     sum_tolerance: float = 0.30,
 ) -> list[MarketRelation]:
-    """Detect complementary outcomes whose probabilities sum to ~1.
-
-    Unlike exclusivity (which pairs any two mutually exclusive outcomes),
-    complementary marks the full partition: all outcomes in the event are
-    expected to sum to 1.0.  We only emit pairs when the actual sum of
-    mid-prices is within *sum_tolerance* of 1.0.
-    """
+    """Detect complementary group whose probabilities sum to ~1."""
     if len(markets) < 2 or len(markets) > max_event_size:
         return []
 
-    # Compute mid-prices
     priced: list[tuple[float, dict]] = []
     for m in markets:
         bid = m.get('best_bid') or m.get('yes_bid')
@@ -297,30 +292,24 @@ def detect_complementary(
     if abs(total - 1.0) > sum_tolerance:
         return []
 
-    relations: list[MarketRelation] = []
-    for i in range(len(priced)):
-        for j in range(i + 1, len(priced)):
-            _, m_a = priced[i]
-            _, m_b = priced[j]
-            mid_a, mid_b = _mid(m_a), _mid(m_b)
-            if not mid_a or not mid_b:
-                continue
-            relations.append(
-                MarketRelation(
-                    relation_id=f'{mid_a}-{mid_b}',
-                    market_a=_enrich(m_a, platform),
-                    market_b=_enrich(m_b, platform),
-                    spread_type='complementary',
-                    confidence=0.95,
-                    reasoning=(
-                        f'Complementary outcomes (sum={total:.2f}) '
-                        f'within "{event_title}" ({len(priced)} markets)'
-                    ),
-                    hypothesis='A + B <= 1',
-                )
-            )
-
-    return relations
+    enriched = [_enrich(m, platform) for _, m in priced]
+    market_ids = sorted(_mid(m) for _, m in priced if _mid(m))
+    relation_id = '-'.join(market_ids[:3]) + (
+        f'-+{len(market_ids)-3}' if len(market_ids) > 3 else ''
+    )
+    return [
+        MarketRelation(
+            relation_id=relation_id,
+            markets=enriched,
+            spread_type='complementary',
+            confidence=0.95,
+            reasoning=(
+                f'Complementary outcomes (sum={total:.2f}) '
+                f'within "{event_title}" ({len(priced)} markets)'
+            ),
+            hypothesis='sum(prices) = 1',
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -329,8 +318,8 @@ def detect_complementary(
 
 
 @dataclass
-class AutoPairResult:
-    """Summary of auto-pair detection run."""
+class DiscoveryResult:
+    """Summary of relation discovery run."""
 
     candidates: list[MarketRelation] = field(default_factory=list)
     total_detected: int = 0
@@ -338,11 +327,11 @@ class AutoPairResult:
     by_layer: dict[str, int] = field(default_factory=dict)
 
 
-def auto_pair_markets(
+def discover_relations(
     poly_markets: list[dict],
     kalshi_markets: list[dict],
     skip_exclusivity: bool = False,
-) -> AutoPairResult:
+) -> DiscoveryResult:
     """Detect candidate market relations from discovered markets.
 
     Only performs reliable intra-event structural detection (date nesting,
@@ -350,7 +339,7 @@ def auto_pair_markets(
     discovery is left to the agent, which has semantic understanding.
 
     Returns candidates for the agent to review. Does NOT persist anything —
-    the agent should run ``market relations add`` for pairs with actual
+    the agent should run ``market relations add`` for relations with actual
     opportunities.
     """
     all_rels: list[MarketRelation] = []
@@ -363,7 +352,7 @@ def auto_pair_markets(
         if eid:
             poly_by_event.setdefault(eid, []).append(m)
 
-    # Layer 1: Intra-event date nesting
+    # Layer 1: Intra-event date nesting (Polymarket)
     for eid, mkts in poly_by_event.items():
         if len(mkts) < 2:
             continue
@@ -371,7 +360,7 @@ def auto_pair_markets(
         by_layer['date_nesting'] = by_layer.get('date_nesting', 0) + len(rels)
         all_rels.extend(rels)
 
-    # Layer 2: Intra-event exclusivity
+    # Layer 2: Intra-event exclusivity (Polymarket)
     if not skip_exclusivity:
         for eid, mkts in poly_by_event.items():
             rels = detect_exclusivity(
@@ -380,7 +369,7 @@ def auto_pair_markets(
             by_layer['exclusivity'] = by_layer.get('exclusivity', 0) + len(rels)
             all_rels.extend(rels)
 
-    # Layer 3: Intra-event complementary outcomes
+    # Layer 3: Intra-event complementary outcomes (Polymarket)
     for eid, mkts in poly_by_event.items():
         if len(mkts) < 2:
             continue
@@ -388,39 +377,61 @@ def auto_pair_markets(
         by_layer['complementary'] = by_layer.get('complementary', 0) + len(rels)
         all_rels.extend(rels)
 
+    # --- Group Kalshi markets by event ---
+    kalshi_by_event: dict[str, list[dict]] = {}
+    for m in kalshi_markets:
+        eid = str(m.get('event_ticker', ''))
+        if eid:
+            kalshi_by_event.setdefault(eid, []).append(m)
+
+    for eid, mkts in kalshi_by_event.items():
+        if len(mkts) < 2:
+            continue
+        rels = detect_date_nesting(mkts, mkts[0].get('title', ''), 'kalshi')
+        by_layer['date_nesting'] = by_layer.get('date_nesting', 0) + len(rels)
+        all_rels.extend(rels)
+
+    if not skip_exclusivity:
+        for eid, mkts in kalshi_by_event.items():
+            rels = detect_exclusivity(mkts, mkts[0].get('title', ''), 'kalshi')
+            by_layer['exclusivity'] = by_layer.get('exclusivity', 0) + len(rels)
+            all_rels.extend(rels)
+
+    for eid, mkts in kalshi_by_event.items():
+        if len(mkts) < 2:
+            continue
+        rels = detect_complementary(mkts, mkts[0].get('title', ''), 'kalshi')
+        by_layer['complementary'] = by_layer.get('complementary', 0) + len(rels)
+        all_rels.extend(rels)
+
     # --- Deduplicate within this run ---
     deduped: list[MarketRelation] = []
-    seen: set[frozenset[str]] = set()
+    seen: set[tuple[str, ...]] = set()
 
     for rel in all_rels:
-        a_id = rel.market_a.get('id', '')
-        b_id = rel.market_b.get('id', '')
-        pair_key = frozenset([a_id, b_id])
-        if pair_key in seen:
+        market_ids = tuple(sorted(m.get('id', '') for m in rel.markets))
+        if market_ids in seen:
             continue
-        seen.add(pair_key)
+        seen.add(market_ids)
         deduped.append(rel)
 
     total_detected = len(deduped)
 
-    # --- Filter by type:
-    # - implication: save all (pairwise, small set, constraint may be violated later)
-    # - exclusivity/complementary: O(n²) pairs per event — only save if currently violated
-    #   (actual arb opportunity exists now; backtest handles future monitoring)
+    # --- Keep ALL structural relations (no arb > 0 gate) ---
     candidates: list[MarketRelation] = []
     for rel in deduped:
         arb = _compute_current_arb(rel)
-        rel.market_a['current_mid'] = _compute_mid_price(rel.market_a)
-        rel.market_b['current_mid'] = _compute_mid_price(rel.market_b)
-        rel.market_a['current_arb'] = round(arb, 4)
-        if rel.spread_type == 'implication' or arb > 0:
-            candidates.append(rel)
+        for m in rel.markets:
+            m['current_mid'] = _compute_mid_price(m)
+        if rel.markets:
+            rel.markets[0]['current_arb'] = round(arb, 4)
+        candidates.append(rel)
 
     by_type: dict[str, int] = {}
     for r in candidates:
         by_type[r.spread_type] = by_type.get(r.spread_type, 0) + 1
 
-    return AutoPairResult(
+    return DiscoveryResult(
         candidates=candidates,
         total_detected=total_detected,
         by_type=by_type,
