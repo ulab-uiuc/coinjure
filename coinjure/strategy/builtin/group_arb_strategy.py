@@ -89,10 +89,12 @@ class GroupArbStrategy(Strategy):
         # Pre-built tickers with correct market_id and side for data source registration
         self._yes_tickers: dict[str, PolyMarketTicker] = {}  # yes_token_id → ticker
         self._no_tickers: dict[str, PolyMarketTicker] = {}  # no_token_id → ticker
+        self._spread_type: str = ''  # 'exclusivity' or 'complementary'
         if relation_id:
             store = RelationStore()
             rel = store.get(relation_id)
             if rel:
+                self._spread_type = rel.spread_type
                 for m in rel.markets:
                     eid = m.get('event_id', '') or m.get('event_ticker', '')
                     if eid and not self._event_id:
@@ -227,6 +229,13 @@ class GroupArbStrategy(Strategy):
 
         edge_buy_yes = Decimal('1') - sum_yes - _FEE_PER_SIDE * n
         edge_buy_no = sum_yes - Decimal('1') - _FEE_PER_SIDE * n
+
+        # For exclusivity relations (at most one outcome wins), BUY_YES is
+        # NOT safe because if no outcome wins, all YES positions lose.
+        # Only BUY_NO is guaranteed profitable when sum > 1.
+        if self._spread_type == 'exclusivity':
+            edge_buy_yes = Decimal('-1')  # disable BUY_YES for exclusivity
+
         best_edge = max(edge_buy_yes, edge_buy_no)
         action = 'BUY_YES' if edge_buy_yes >= edge_buy_no else 'BUY_NO'
 
