@@ -42,16 +42,12 @@ def _ticker_display_name(ticker: object) -> str:
 
     if isinstance(ticker, PolyMarketTicker):
         prefix = '[P]'
-        # Polymarket name is often empty; use market_id as fallback
-        if not name:
-            name = getattr(ticker, 'market_id', '') or symbol
     elif isinstance(ticker, KalshiTicker):
         prefix = '[K]'
-        if not name:
-            name = getattr(ticker, 'market_ticker', '') or symbol
     else:
         prefix = ''
-        name = name or symbol
+    if not name:
+        name = ticker.identifier or symbol
 
     return f'{prefix} {name}'[:30]
 

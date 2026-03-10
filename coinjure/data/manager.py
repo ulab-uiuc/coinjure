@@ -7,7 +7,7 @@ from typing import Any
 
 from coinjure.data.order_book import Level, OrderBook
 from coinjure.events import OrderBookEvent, PriceChangeEvent
-from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
+from coinjure.ticker import Ticker
 
 
 @dataclass(frozen=True)
@@ -243,30 +243,18 @@ class DataManager:
         self._market_history[ticker] = fresh
         return fresh
 
-    def find_complement(self, ticker: Ticker) -> Ticker | None:
-        """Find the opposite-side ticker (YES↔NO) for a given ticker.
-
-        Matches on market_id (Polymarket) or market_ticker (Kalshi)
-        with the opposite side value.
-        """
-        target_side = 'no' if getattr(ticker, 'side', 'yes') == 'yes' else 'yes'
-
-        if isinstance(ticker, PolyMarketTicker):
-            mid = ticker.market_id
-            for t in self.order_books:
-                if (
-                    isinstance(t, PolyMarketTicker)
-                    and t.market_id == mid
-                    and t.side == target_side
-                ):
-                    return t
-        elif isinstance(ticker, KalshiTicker):
-            mt = ticker.market_ticker
-            for t in self.order_books:
-                if (
-                    isinstance(t, KalshiTicker)
-                    and t.market_ticker == mt
-                    and t.side == target_side
-                ):
-                    return t
+    def find_ticker_by_market(
+        self,
+        market_id: str,
+        side: str = 'yes',
+    ) -> Ticker | None:
+        """Find a ticker in the order book by market identifier and side."""
+        for t in self.order_books:
+            if t.identifier == market_id and t.side == side:
+                return t
         return None
+
+    def find_complement(self, ticker: Ticker) -> Ticker | None:
+        """Find the opposite-side ticker (YES↔NO) for a given ticker."""
+        target_side = 'no' if ticker.side == 'yes' else 'yes'
+        return self.find_ticker_by_market(ticker.identifier, target_side)

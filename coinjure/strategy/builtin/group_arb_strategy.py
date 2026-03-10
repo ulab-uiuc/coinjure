@@ -165,9 +165,9 @@ class GroupArbStrategy(Strategy):
                 tokens.append(tid)
         return tokens
 
-    def _should_track(self, ticker: PolyMarketTicker | KalshiTicker) -> bool:
-        eid = getattr(ticker, 'event_id', '') or getattr(ticker, 'event_ticker', '')
-        mid = getattr(ticker, 'market_id', '') or getattr(ticker, 'market_ticker', '')
+    def _should_track(self, ticker: Ticker) -> bool:
+        eid = ticker.event_id if hasattr(ticker, 'event_id') else ''
+        mid = ticker.identifier
         if self._event_id and eid == self._event_id:
             return True
         if self._relation_market_ids and mid in self._relation_market_ids:
@@ -188,12 +188,12 @@ class GroupArbStrategy(Strategy):
         # Only track YES-side prices for sum calculation; NO-side events
         # still flow through the engine (registered in DataManager for
         # find_complement) but must not corrupt self._asks.
-        if getattr(ticker, 'side', 'yes') != 'yes':
+        if ticker.side != 'yes':
             return
         if not self._should_track(ticker):
             return
 
-        mid = getattr(ticker, 'market_id', '') or getattr(ticker, 'market_ticker', '')
+        mid = ticker.identifier
         if not mid:
             # Resolve via token_id mapping (for tickers from watch_token)
             tid = getattr(ticker, 'token_id', '')
