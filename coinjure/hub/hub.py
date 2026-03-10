@@ -38,6 +38,7 @@ class MarketDataHub:
         self._source = source
         # Per-subscriber queues: id → queue of encoded bytes
         self._subscribers: dict[int, asyncio.Queue[bytes]] = {}
+        self._sub_filters: dict[int, set[str]] = {}
         self._sub_tasks: set[asyncio.Task] = set()
         self._next_id = 0
         self._server: asyncio.AbstractServer | None = None
@@ -111,8 +112,41 @@ class MarketDataHub:
     # Fan-out loop
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _extract_ticker_key(event: Event) -> str | None:
+        ticker = getattr(event, 'ticker', None)
+        if ticker is None:
+            return None
+        return ticker.symbol
+
+    def _fan_one(self, event: Event) -> None:
+        """Broadcast a single event to subscribers whose filter matches."""
+        line = self._serialize_event(event)
+        if line is None:
+            return
+        self._events_total += 1
+        ticker_key = self._extract_ticker_key(event)
+        encoded = (line + '\n').encode()
+        dead: list[int] = []
+        for sub_id, q in list(self._subscribers.items()):
+            sub_filter = self._sub_filters.get(sub_id)
+            if sub_filter is not None and ticker_key not in sub_filter:
+                continue
+            if q.full():
+                try:
+                    q.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                q.put_nowait(encoded)
+            except Exception:
+                dead.append(sub_id)
+        for sub_id in dead:
+            self._subscribers.pop(sub_id, None)
+            self._sub_filters.pop(sub_id, None)
+
     async def _fan_loop(self) -> None:
-        """Pull events from source and broadcast to all subscriber queues."""
+        """Pull events from source and broadcast to filtered subscriber queues."""
         while self._running:
             try:
                 event = await self._source.get_next_event()
@@ -120,24 +154,7 @@ class MarketDataHub:
                     continue
                 if not isinstance(event, (OrderBookEvent, PriceChangeEvent)):
                     continue
-                line = self._serialize_event(event)
-                if line is None:
-                    continue
-                self._events_total += 1
-                encoded = (line + '\n').encode()
-                dead: list[int] = []
-                for sub_id, q in list(self._subscribers.items()):
-                    if q.full():
-                        try:
-                            q.get_nowait()  # drop oldest to make room
-                        except asyncio.QueueEmpty:
-                            pass
-                    try:
-                        q.put_nowait(encoded)
-                    except Exception:
-                        dead.append(sub_id)
-                for sub_id in dead:
-                    self._subscribers.pop(sub_id, None)
+                self._fan_one(event)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -200,15 +217,24 @@ class MarketDataHub:
         if task:
             self._sub_tasks.add(task)
         try:
-            # Detect connection type: control client vs. subscriber
             try:
                 raw = await asyncio.wait_for(reader.readline(), timeout=0.1)
             except asyncio.TimeoutError:
                 raw = b''
 
             if raw.strip():
-                await self._handle_control(raw, writer)
+                # Try to parse as JSON to check for subscribe command
+                try:
+                    msg = json.loads(raw.decode())
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    msg = None
+
+                if isinstance(msg, dict) and msg.get('cmd') == 'subscribe':
+                    await self._handle_subscribe(msg, reader, writer)
+                else:
+                    await self._handle_control(raw, writer)
             else:
+                # Legacy subscriber — no filter (receives everything)
                 await self._handle_subscriber(reader, writer)
         except asyncio.CancelledError:
             pass
@@ -242,6 +268,57 @@ class MarketDataHub:
             pass
         finally:
             self._subscribers.pop(sub_id, None)
+            self._sub_filters.pop(sub_id, None)
+            logger.debug(
+                'Hub: subscriber %d disconnected (total=%d)',
+                sub_id,
+                len(self._subscribers),
+            )
+
+    async def _handle_subscribe(
+        self,
+        msg: dict[str, Any],
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Handle subscribe command: register filter, send ack, then stream."""
+        tickers = msg.get('tickers', [])
+        ticker_filter = set(tickers)
+
+        sub_id = self._next_id
+        self._next_id += 1
+
+        # Send ack with sub_id
+        resp = json.dumps({'ok': True, 'sub_id': sub_id}) + '\n'
+        writer.write(resp.encode())
+        await writer.drain()
+
+        # Tell the data source to watch these tokens so it actually polls them
+        watch = getattr(self._source, 'watch_token', None)
+        if watch:
+            for t in tickers:
+                watch(t)
+
+        # Register and stream
+        q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=500)
+        self._subscribers[sub_id] = q
+        self._sub_filters[sub_id] = ticker_filter
+        logger.debug(
+            'Hub: subscriber %d connected with %d ticker filter(s) (total=%d)',
+            sub_id,
+            len(ticker_filter),
+            len(self._subscribers),
+        )
+        try:
+            while self._running:
+                data = await q.get()
+                writer.write(data)
+                await writer.drain()
+        except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
+            pass
+        finally:
+            self._subscribers.pop(sub_id, None)
+            self._sub_filters.pop(sub_id, None)
             logger.debug(
                 'Hub: subscriber %d disconnected (total=%d)',
                 sub_id,
@@ -280,6 +357,9 @@ class MarketDataHub:
                     watch = getattr(self._source, 'watch_token', None)
                     if watch:
                         watch(token_id)
+                    sub_id = req.get('sub_id')
+                    if sub_id is not None and sub_id in self._sub_filters:
+                        self._sub_filters[sub_id].add(token_id)
                     resp = {'ok': True}
                 else:
                     resp = {'ok': False, 'error': 'token_id required'}
@@ -289,6 +369,9 @@ class MarketDataHub:
                     unwatch = getattr(self._source, 'unwatch_token', None)
                     if unwatch:
                         unwatch(token_id)
+                    sub_id = req.get('sub_id')
+                    if sub_id is not None and sub_id in self._sub_filters:
+                        self._sub_filters[sub_id].discard(token_id)
                     resp = {'ok': True}
                 else:
                     resp = {'ok': False, 'error': 'token_id required'}

@@ -20,6 +20,24 @@ from ..source import DataSource
 logger = logging.getLogger(__name__)
 
 
+class _Level:
+    """Duck-typed order book level matching py_clob_client's interface."""
+
+    __slots__ = ('price', 'size')
+
+    def __init__(self, price: str, size: str) -> None:
+        self.price = price
+        self.size = size
+
+
+class _OrderBookResult:
+    """Duck-typed order book matching py_clob_client's interface."""
+
+    def __init__(self, data: dict) -> None:
+        self.bids = [_Level(b['price'], b['size']) for b in data.get('bids', [])]
+        self.asks = [_Level(a['price'], a['size']) for a in data.get('asks', [])]
+
+
 CLOB_PRICES_HISTORY_URL = 'https://clob.polymarket.com/prices-history'
 
 
@@ -45,7 +63,9 @@ async def fetch_price_history(
     if start_ts is not None:
         params['startTs'] = start_ts
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(), timeout=30.0
+    ) as client:
         resp = await client.get(CLOB_PRICES_HISTORY_URL, params=params)
     if resp.status_code != 200:
         raise ValueError(
@@ -99,6 +119,8 @@ class LivePolyMarketDataSource(DataSource):
         self._refresh_offset: int = 0
         # Semaphore to limit concurrent order book fetches
         self._fetch_semaphore = asyncio.Semaphore(5)
+        # Persistent async HTTP client for order book fetches (created in start())
+        self._http_client: httpx.AsyncClient | None = None
 
         # Load and deduplicate cache file on startup (Fix 5)
         self._cached_event_ids: set[str] = set()
@@ -161,7 +183,9 @@ class LivePolyMarketDataSource(DataSource):
         all_events: list[dict[str, Any]] = []
         offset = 0
         limit = 100
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.AsyncHTTPTransport(), timeout=30.0
+        ) as client:
             while True:
                 response = await client.get(
                     'https://gamma-api.polymarket.com/events',
@@ -199,8 +223,21 @@ class LivePolyMarketDataSource(DataSource):
             return None
 
     async def _fetch_order_book(self, token_id: str) -> Any:
-        """Non-blocking order book fetch via thread pool."""
-        return await asyncio.to_thread(self._fetch_order_book_sync, token_id)
+        """Non-blocking order book fetch via persistent httpx client."""
+        client = self._http_client
+        if client is None:
+            return None
+        try:
+            resp = await client.get(
+                'https://clob.polymarket.com/book',
+                params={'token_id': token_id},
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            return _OrderBookResult(data)
+        except Exception:
+            return None
 
     def _process_order_book_to_events(
         self,
@@ -540,16 +577,26 @@ class LivePolyMarketDataSource(DataSource):
             self._evict_stale_tickers()
 
             # --- Priority tokens: fetch first, separately ---
-            priority_ids: list[tuple[str, PolyMarketTicker]] = []
+            # Sort by least-recently-refreshed so all tokens get attention
+            # over multiple cycles.  Cap batch size to avoid API rate limits.
+            _PRIORITY_BATCH_SIZE = 20
+            all_priority: list[tuple[str, PolyMarketTicker]] = []
             for tid in list(self._priority_tokens):
                 ticker = self._known_tickers.get(tid)
                 if ticker is None:
                     ticker = PolyMarketTicker(symbol=tid, name='', token_id=tid)
-                priority_ids.append((tid, ticker))
+                all_priority.append((tid, ticker))
+            all_priority.sort(key=lambda x: self._last_refresh_time.get(x[0], 0.0))
+            priority_ids = all_priority[:_PRIORITY_BATCH_SIZE]
 
             async def _fetch_one(token_id: str, ticker: PolyMarketTicker):
                 async with self._fetch_semaphore:
-                    order_book = await self._fetch_order_book(token_id)
+                    try:
+                        order_book = await asyncio.wait_for(
+                            self._fetch_order_book(token_id), timeout=10.0
+                        )
+                    except asyncio.TimeoutError:
+                        return (token_id, ticker, None)
                     return (token_id, ticker, order_book)
 
             if priority_ids:
@@ -579,7 +626,7 @@ class LivePolyMarketDataSource(DataSource):
                 if tid not in self._priority_tokens
             ]
             if non_priority:
-                batch_size = 20
+                batch_size = 10
                 start = self._refresh_offset % len(non_priority)
                 batch = non_priority[start : start + batch_size]
                 if len(batch) < batch_size:
@@ -626,6 +673,11 @@ class LivePolyMarketDataSource(DataSource):
                 del self.last_order_book_state[k]
 
     async def start(self) -> None:
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(
+                transport=httpx.AsyncHTTPTransport(),
+                timeout=8.0,
+            )
         if self._poll_task is None or self._poll_task.done():
             self._poll_task = asyncio.create_task(self._poll_data())
         if self._refresh_task is None or self._refresh_task.done():
@@ -641,6 +693,9 @@ class LivePolyMarketDataSource(DataSource):
                     pass
         self._poll_task = None
         self._refresh_task = None
+        if self._http_client:
+            await self._http_client.aclose()
+            self._http_client = None
 
     async def get_next_event(self) -> Event | None:
         try:
@@ -709,7 +764,9 @@ class LiveNewsDataSource(DataSource):
             if self.categories:
                 params['categories'] = ','.join(self.categories)
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(
+                transport=httpx.AsyncHTTPTransport(), timeout=30.0
+            ) as client:
                 response = await client.get(self.base_url, params=params)
 
                 if response.status_code == 200:
@@ -996,8 +1053,8 @@ class LiveRSSNewsDataSource(DataSource):
     def __init__(
         self,
         cache_file: str = 'rss_news_cache.jsonl',
-        polling_interval: float = 300.0,
-        max_articles_per_poll: int = 10,
+        polling_interval: float = 60.0,
+        max_articles_per_poll: int = 50,
         categories: list[str] = None,
     ):
         self.cache_file = cache_file
@@ -1007,21 +1064,29 @@ class LiveRSSNewsDataSource(DataSource):
         self.categories = categories or []
         feedparser.CACHE_DIRECTORY = None
         feedparser._check_cache = lambda *args, **kwargs: None
-        self.processed_article_ids = set()
+        self.processed_article_ids: set[str] = set()
         self.event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._poll_task: asyncio.Task | None = None
-        self._load_processed_articles()
+        self._trim_cache()
 
-    def _load_processed_articles(self) -> None:
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, encoding='utf-8') as f:
-                    for line in f:
-                        article = json.loads(line.strip())
-                        if 'uuid' in article:
-                            self.processed_article_ids.add(article['uuid'])
-            except Exception as e:
-                logger.error('Error loading article cache: %s', e)
+    def _trim_cache(self) -> None:
+        """Keep only the last 500 cached articles to avoid stale dedup."""
+        if not os.path.exists(self.cache_file):
+            return
+        try:
+            with open(self.cache_file, encoding='utf-8') as f:
+                lines = f.readlines()
+            recent = lines[-500:] if len(lines) > 500 else lines
+            for line in recent:
+                article = json.loads(line.strip())
+                if 'uuid' in article:
+                    self.processed_article_ids.add(article['uuid'])
+            # Rewrite with only recent entries
+            if len(lines) > 500:
+                with open(self.cache_file, 'w', encoding='utf-8') as f:
+                    f.writelines(recent)
+        except Exception as e:
+            logger.error('Error trimming article cache: %s', e)
 
     def _save_article(self, article: dict[str, Any]) -> None:
         try:
@@ -1099,15 +1164,12 @@ class LiveRSSNewsDataSource(DataSource):
 
     async def _fetch_rss_feeds(self) -> list[dict[str, Any]]:  # noqa: C901
         results = []
-        processed_count = 0
+        max_per_feed = max(self.max_articles_per_poll // len(self.RSS_FEEDS), 1)
 
         for feed_url, tags in self.RSS_FEEDS.items():
-            if processed_count >= self.max_articles_per_poll:
-                break
-
             try:
                 logger.debug('Fetching %s', feed_url)
-                feed = feedparser.parse(feed_url)
+                feed = await asyncio.to_thread(feedparser.parse, feed_url)
 
                 if not feed or not hasattr(feed, 'entries'):
                     logger.info('Feed from %s is invalid', feed_url)
@@ -1120,8 +1182,9 @@ class LiveRSSNewsDataSource(DataSource):
                 if self.categories and not any(cat in tags for cat in self.categories):
                     continue
 
+                feed_count = 0
                 for entry in feed.entries:
-                    if processed_count >= self.max_articles_per_poll:
+                    if feed_count >= max_per_feed:
                         break
 
                     guid = entry.get('guid', '')
@@ -1133,11 +1196,10 @@ class LiveRSSNewsDataSource(DataSource):
                         guid = str(uuid.uuid4())
 
                     if guid in self.processed_article_ids:
-                        logger.debug('Skipping processed article: %s', guid)
                         continue
 
                     results.append((entry, feed_title, tags))
-                    processed_count += 1
+                    feed_count += 1
 
             except Exception as e:
                 logger.error('Error fetching feed %s: %s', feed_url, e, exc_info=True)

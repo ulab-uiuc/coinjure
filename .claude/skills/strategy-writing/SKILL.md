@@ -23,13 +23,12 @@ Use this skill when the user asks to write spread/arb strategy code.
 - Place trades via `trader.place_order(...)`
 - Log signals via `self.record_decision(...)`
 
-2. Register in the strategy registry
+2. Run it (registration happens automatically on launch)
 
 ```bash
-coinjure engine add \
-  --strategy-id <id> \
+coinjure engine paper-run \
   --strategy-ref strategies/<name>.py:<ClassName> \
-  --kwargs-json '<json>' --json
+  --strategy-kwargs-json '<json>' --json
 ```
 
 ## Hard Rules
