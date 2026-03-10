@@ -74,6 +74,7 @@ class DirectArbStrategy(Strategy):
         poly_token_id: str = '',
         kalshi_ticker: str = '',
         min_edge: float = 0.02,
+        close_edge: float = 0.005,
         trade_size: float = 10.0,
         cooldown_seconds: int = 60,
         backtest_mode: bool = False,
@@ -83,6 +84,7 @@ class DirectArbStrategy(Strategy):
         self.poly_token_id = poly_token_id
         self.kalshi_ticker_str = kalshi_ticker
         self.min_edge = Decimal(str(min_edge))
+        self.close_edge = Decimal(str(close_edge))  # close when edge drops below this
         self.trade_size = Decimal(str(trade_size))
         self.cooldown_seconds = cooldown_seconds
         self.backtest_mode = backtest_mode
@@ -104,6 +106,8 @@ class DirectArbStrategy(Strategy):
         self._last_arb_time: float = 0.0
         self._poll_task: asyncio.Task | None = None
         self._initialized: bool = False
+        # Position tracking: 'poly_cheap' or 'kalshi_cheap' or None
+        self._held_direction: str | None = None
 
     def watch_tokens(self) -> list[str]:
         """Return CLOB token IDs so the data source prioritizes these markets."""
@@ -333,32 +337,46 @@ class DirectArbStrategy(Strategy):
         kalshi_yes = self._kalshi_yes_price  # type: ignore[assignment]
 
         # Direction 1: Poly cheaper → buy Poly YES + buy Kalshi NO
-        # profit = kalshi_yes - poly_yes (before fees)
         edge_poly_cheap = kalshi_yes - poly_yes
-
         # Direction 2: Kalshi cheaper → buy Kalshi YES + buy Poly NO
-        # profit = poly_yes - kalshi_yes (before fees)
         edge_kalshi_cheap = poly_yes - kalshi_yes
 
         gross_edge = max(edge_poly_cheap, edge_kalshi_cheap)
         net_edge = gross_edge - _FEE_PER_SIDE * 2
 
-        if net_edge < self.min_edge:
-            self.record_decision(
-                ticker_name=f'poly:{self.poly_market_id[:16]}',
-                action='HOLD',
-                executed=False,
-                reasoning=(
-                    f'net_edge={float(net_edge):.4f} < min_edge={float(self.min_edge):.4f} '
-                    f'(poly={float(poly_yes):.4f} kalshi={float(kalshi_yes):.4f})'
-                ),
-                signal_values={
-                    'poly_yes': float(poly_yes),
-                    'kalshi_yes': float(kalshi_yes),
-                    'gross_edge': float(gross_edge),
-                    'net_edge': float(net_edge),
-                },
+        label = f'poly:{self.poly_market_id[:16]}'
+        signal = {
+            'poly_yes': float(poly_yes),
+            'kalshi_yes': float(kalshi_yes),
+            'gross_edge': float(gross_edge),
+            'net_edge': float(net_edge),
+        }
+
+        # ── Close logic: check if we should exit existing positions ──
+        if self._held_direction is not None:
+            # Edge in our held direction
+            held_edge = (
+                edge_poly_cheap
+                if self._held_direction == 'poly_cheap'
+                else edge_kalshi_cheap
             )
+            held_net = held_edge - _FEE_PER_SIDE * 2
+
+            if held_net < self.close_edge:
+                # Edge gone or reversed — close positions
+                await self._close_positions(
+                    trader,
+                    label,
+                    signal,
+                    f'edge_gone held_net={float(held_net):.4f}',
+                )
+                return
+
+            # Still holding, don't add more
+            return
+
+        # ── Open logic: enter new position if edge is sufficient ──
+        if net_edge < self.min_edge:
             return
 
         # Cooldown guard
@@ -368,9 +386,61 @@ class DirectArbStrategy(Strategy):
         self._last_arb_time = now
 
         if edge_poly_cheap >= edge_kalshi_cheap:
-            await self._trade_poly_cheap(trader, poly_yes, kalshi_yes, gross_edge)
+            executed = await self._trade_poly_cheap(
+                trader, poly_yes, kalshi_yes, gross_edge
+            )
+            if executed:
+                self._held_direction = 'poly_cheap'
         else:
-            await self._trade_kalshi_cheap(trader, poly_yes, kalshi_yes, gross_edge)
+            executed = await self._trade_kalshi_cheap(
+                trader, poly_yes, kalshi_yes, gross_edge
+            )
+            if executed:
+                self._held_direction = 'kalshi_cheap'
+
+    async def _close_positions(
+        self,
+        trader: Trader,
+        label: str,
+        signal: dict,
+        reason: str,
+    ) -> None:
+        """Sell all held positions to close the arb."""
+        closed = 0
+        direction = self._held_direction
+
+        logger.info('DirectArb: CLOSE %s %s reason=%s', direction, label, reason)
+
+        for pos in trader.position_manager.get_non_cash_positions():
+            if pos.quantity <= 0:
+                continue
+            best_bid = trader.market_data.get_best_bid(pos.ticker)
+            if best_bid is None or best_bid.price <= 0:
+                continue
+            try:
+                result = await trader.place_order(
+                    side=TradeSide.SELL,
+                    ticker=pos.ticker,
+                    limit_price=best_bid.price,
+                    quantity=pos.quantity,
+                )
+                if not result.failure_reason:
+                    closed += 1
+            except Exception:
+                logger.exception(
+                    'DirectArb: close failed for %s', pos.ticker.symbol[:20]
+                )
+
+        self.record_decision(
+            ticker_name=label,
+            action=f'CLOSE_{direction}',
+            executed=closed > 0,
+            reasoning=f'{reason} closed={closed}',
+            signal_values=signal,
+        )
+        if closed > 0:
+            self._held_direction = None
+            self._last_arb_time = time.monotonic()
 
     async def _trade_poly_cheap(
         self,
@@ -378,17 +448,17 @@ class DirectArbStrategy(Strategy):
         poly_yes: Decimal,
         kalshi_yes: Decimal,
         edge: Decimal,
-    ) -> None:
-        """Buy Poly YES + Buy Kalshi NO."""
+    ) -> bool:
+        """Buy Poly YES + Buy Kalshi NO. Returns True if leg1 executed."""
         poly_ticker = self._poly_ticker
         kalshi_ticker = self._kalshi_ticker_obj
         if poly_ticker is None or kalshi_ticker is None:
-            return
+            return False
 
         label = f'poly:{self.poly_market_id[:16]}'
         executed = False
 
-        # Leg 1: Buy Poly YES — use actual ask price so paper fill succeeds
+        # Leg 1: Buy Poly YES
         poly_limit = (
             self._poly_ask_price if self._poly_ask_price is not None else poly_yes
         )
@@ -405,10 +475,9 @@ class DirectArbStrategy(Strategy):
         except Exception:
             logger.exception('ARB leg1 failed (buy Poly YES)')
 
-        # Leg 2: Buy Kalshi NO — no_ask = 1 - kalshi_bid
+        # Leg 2: Buy Kalshi NO
         kalshi_no = trader.market_data.find_complement(kalshi_ticker)
         if kalshi_no is not None and executed:
-            # Buying NO = paying (1 - bid), use bid price to derive realistic NO ask
             kalshi_bid = (
                 self._kalshi_bid_price
                 if self._kalshi_bid_price is not None
@@ -432,7 +501,7 @@ class DirectArbStrategy(Strategy):
             action='ARB_BUY_POLY',
             executed=executed,
             reasoning=(
-                f'Poly cheap: poly={float(poly_yes):.4f} kalshi={float(kalshi_yes):.4f} '
+                f'OPEN poly_cheap: poly={float(poly_yes):.4f} kalshi={float(kalshi_yes):.4f} '
                 f'edge={float(edge):.4f}'
             ),
             signal_values={
@@ -442,6 +511,7 @@ class DirectArbStrategy(Strategy):
                 'direction': -1.0,
             },
         )
+        return executed
 
     async def _trade_kalshi_cheap(
         self,
@@ -449,17 +519,17 @@ class DirectArbStrategy(Strategy):
         poly_yes: Decimal,
         kalshi_yes: Decimal,
         edge: Decimal,
-    ) -> None:
-        """Buy Kalshi YES + Buy Poly NO."""
+    ) -> bool:
+        """Buy Kalshi YES + Buy Poly NO. Returns True if leg1 executed."""
         poly_ticker = self._poly_ticker
         kalshi_ticker = self._kalshi_ticker_obj
         if poly_ticker is None or kalshi_ticker is None:
-            return
+            return False
 
         label = f'poly:{self.poly_market_id[:16]}'
         executed = False
 
-        # Leg 1: Buy Kalshi YES — use actual ask price so paper fill succeeds
+        # Leg 1: Buy Kalshi YES
         kalshi_limit = (
             self._kalshi_ask_price if self._kalshi_ask_price is not None else kalshi_yes
         )
@@ -476,10 +546,9 @@ class DirectArbStrategy(Strategy):
         except Exception:
             logger.exception('ARB leg1 failed (buy Kalshi YES)')
 
-        # Leg 2: Buy Poly NO — no_ask = 1 - poly_bid
+        # Leg 2: Buy Poly NO
         poly_no = trader.market_data.find_complement(poly_ticker)
         if poly_no is not None and executed:
-            # Buying NO = paying (1 - bid), use bid price to derive realistic NO ask
             poly_bid = (
                 self._poly_bid_price if self._poly_bid_price is not None else poly_yes
             )
@@ -501,7 +570,7 @@ class DirectArbStrategy(Strategy):
             action='ARB_BUY_KALSHI',
             executed=executed,
             reasoning=(
-                f'Kalshi cheap: kalshi={float(kalshi_yes):.4f} poly={float(poly_yes):.4f} '
+                f'OPEN kalshi_cheap: kalshi={float(kalshi_yes):.4f} poly={float(poly_yes):.4f} '
                 f'edge={float(edge):.4f}'
             ),
             signal_values={
@@ -511,3 +580,4 @@ class DirectArbStrategy(Strategy):
                 'direction': 1.0,
             },
         )
+        return executed

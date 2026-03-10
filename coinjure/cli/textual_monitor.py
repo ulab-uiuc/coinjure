@@ -47,7 +47,7 @@ def _fmt_pnl(v: Decimal) -> str:
 class ControlBar(Horizontal):
     """Bottom control bar: status indicator + Pause / Resume / Stop buttons.
 
-    Human operators click buttons; the agent uses ``coinjure trade`` CLI.
+    Human operators click buttons; the agent uses ``coinjure engine`` CLI.
     Both paths talk to the same Unix socket — identical effect.
     """
 
@@ -119,21 +119,27 @@ class PortfolioPanel(Static):
     def on_mount(self) -> None:
         self.border_title = 'Portfolio'
 
+    @staticmethod
+    def _cash_line(cash_positions: list) -> str:
+        """Format cash positions into a single compact line."""
+        parts = []
+        for cp in cash_positions:
+            sym = cp['symbol'].replace('USDC_', '').replace('USD_', '')
+            parts.append(f'{sym} ${cp["qty"]:.0f}')
+        return '  '.join(parts) if parts else '—'
+
     def refresh_from_state(self, state: dict) -> None:
         p = state.get('portfolio', {})
         total = p.get('total', 0.0)
-        realized = p.get('realized_pnl', 0.0)
-        unrealized = p.get('unrealized_pnl', 0.0)
+        realized = Decimal(str(p.get('realized_pnl', 0.0)))
+        unrealized = Decimal(str(p.get('unrealized_pnl', 0.0)))
+        cash = self._cash_line(p.get('cash_positions', []))
         lines = [
-            '[bold blue]Portfolio Summary[/bold blue]',
-            f'Total:          [bold]${total:>10.2f}[/bold]',
-        ]
-        for cp in p.get('cash_positions', []):
-            lines.append(f"  {cp['symbol']:<18} ${cp['qty']:>8.2f}")
-        lines += [
-            f'Realized P&L:   {_fmt_pnl(Decimal(str(realized)))}',
-            f'Unrealized P&L: {_fmt_pnl(Decimal(str(unrealized)))}',
-            f'Total P&L:      {_fmt_pnl(Decimal(str(realized + unrealized)))}',
+            '[bold blue]Portfolio[/bold blue]',
+            f'Total:  [bold]${total:>10.2f}[/bold]',
+            f'Cash:   {cash}',
+            f'R P&L:  {_fmt_pnl(realized)}  U: {_fmt_pnl(unrealized)}',
+            f'Total:  {_fmt_pnl(realized + unrealized)}',
         ]
         self.update('\n'.join(lines))
 
@@ -145,16 +151,18 @@ class PortfolioPanel(Static):
             realized = position_manager.get_total_realized_pnl()
             unrealized = position_manager.get_total_unrealized_pnl(md)
 
-            lines = [
-                '[bold blue]Portfolio Summary[/bold blue]',
-                f'Total:          [bold]${total:>10.2f}[/bold]',
-            ]
+            cash_parts = []
             for p in position_manager.get_cash_positions():
-                lines.append(f'  {p.ticker.symbol:<18} ${p.quantity:>8.2f}')
-            lines += [
-                f'Realized P&L:   {_fmt_pnl(realized)}',
-                f'Unrealized P&L: {_fmt_pnl(unrealized)}',
-                f'Total P&L:      {_fmt_pnl(realized + unrealized)}',
+                sym = p.ticker.symbol.replace('USDC_', '').replace('USD_', '')
+                cash_parts.append(f'{sym} ${p.quantity:.0f}')
+            cash = '  '.join(cash_parts) if cash_parts else '—'
+
+            lines = [
+                '[bold blue]Portfolio[/bold blue]',
+                f'Total:  [bold]${total:>10.2f}[/bold]',
+                f'Cash:   {cash}',
+                f'R P&L:  {_fmt_pnl(realized)}  U: {_fmt_pnl(unrealized)}',
+                f'Total:  {_fmt_pnl(realized + unrealized)}',
             ]
             self.update('\n'.join(lines))
         except Exception:
@@ -180,20 +188,25 @@ class StatsPanel(Static):
     def on_mount(self) -> None:
         self.border_title = 'Statistics'
 
+    @staticmethod
+    def _fmt_decision_stats(ds: dict) -> str:
+        """Format decision stats into a compact single line."""
+        d = ds.get('decisions', 0)
+        x = ds.get('executed', 0)
+        by = ds.get('buy_yes', 0)
+        bn = ds.get('buy_no', 0)
+        cl = ds.get('closes', 0) + ds.get('sells', 0)
+        return f'{d}d {x}x {by}↑ {bn}↓ {cl}✕'
+
     def refresh_from_state(self, state: dict) -> None:
         s = state.get('stats', {})
-        decision_stats = s.get('decision_stats', {})
+        ds = s.get('decision_stats', {})
         lines = [
-            '[bold cyan]Statistics[/bold cyan]',
-            f"Runtime:        {state.get('runtime', '—')}",
-            f"Events:         {s.get('event_count', 0)}",
-            f"Order Books:    {s.get('order_books', 0)}",
-            f"News Buffered:  {s.get('news_buffered', 0)}",
-            f"Orders:         {s.get('orders_total', 0)} ({s.get('orders_filled', 0)} filled)",
+            '[bold cyan]Stats[/bold cyan]',
+            f"Run:  {state.get('runtime', '—')}  Ev: {s.get('event_count', 0)}",
+            f"OB: {s.get('order_books', 0)}  News: {s.get('news_buffered', 0)}  Ord: {s.get('orders_total', 0)}({s.get('orders_filled', 0)}f)",
+            f'Sig:  {self._fmt_decision_stats(ds)}',
         ]
-        for key, value in decision_stats.items():
-            label = key.replace('_', ' ').title()
-            lines.append(f'Strategy {label}:  {value}')
         self.update('\n'.join(lines))
 
     def refresh_data(self, trader, position_manager, strategy, engine) -> None:
@@ -201,7 +214,7 @@ class StatsPanel(Static):
             runtime = str(datetime.now() - self.start_time).split('.')[0]
             orders = list(getattr(trader, 'orders', []))
             filled = sum(1 for o in orders if o.status.value == 'filled')
-            decision_stats = strategy.get_decision_stats()
+            ds = strategy.get_decision_stats()
             event_count = getattr(engine, '_event_count', 0)
             ob_count = len(trader.market_data.order_books)
             news_buf = max(
@@ -210,16 +223,11 @@ class StatsPanel(Static):
             )
 
             lines = [
-                '[bold cyan]Statistics[/bold cyan]',
-                f'Runtime:        {runtime}',
-                f'Events:         {event_count}',
-                f'Order Books:    {ob_count}',
-                f'News Buffered:  {news_buf}',
-                f'Orders:         {len(orders)} ({filled} filled)',
+                '[bold cyan]Stats[/bold cyan]',
+                f'Run:  {runtime}  Ev: {event_count}',
+                f'OB: {ob_count}  News: {news_buf}  Ord: {len(orders)}({filled}f)',
+                f'Sig:  {self._fmt_decision_stats(ds)}',
             ]
-            for key, value in decision_stats.items():
-                label = key.replace('_', ' ').title()
-                lines.append(f'Strategy {label}:  {value}')
             self.update('\n'.join(lines))
         except Exception:
             pass
@@ -250,7 +258,13 @@ class DecisionsTable(DataTable):
         self.clear(columns=True)
         mid_col = 'Relation' if multi else 'Market'
         self.add_columns(
-            'Time', 'Type', 'Action', *[k[:6] for k in signal_keys], mid_col, 'Reasoning', '✓'
+            'Time',
+            'Type',
+            'Action',
+            *[k[:6] for k in signal_keys],
+            mid_col,
+            'Reasoning',
+            '✓',
         )
         self._current_signal_keys = list(signal_keys)
         self._multi_engine = multi
@@ -377,7 +391,7 @@ class PositionsPanel(DataTable):
         self.border_title = 'Current Positions'
         self.cursor_type = 'row'
         self.zebra_stripes = True
-        self.add_columns('Market', 'Qty', 'Avg', 'Mark', 'uPnL')
+        self.add_columns('Market', 'Qty', 'Avg', 'Bid', 'uPnL')
 
     @staticmethod
     def _fmt_qty(value: object) -> str:
@@ -543,8 +557,18 @@ class ActivityLog(RichLog):
         self.border_title = 'Activity Log'
 
     def refresh_from_state(self, log: list) -> None:
-        new_entries = log[self._last_len :]
-        for ts, msg in new_entries:
+        # Build set of already-seen entries to handle reordered/merged lists
+        if not hasattr(self, '_seen_keys'):
+            self._seen_keys: set[tuple[str, str]] = set()
+        for entry in log:
+            ts = entry[0] if isinstance(entry, (list, tuple)) and entry else ''
+            msg = (
+                entry[1] if isinstance(entry, (list, tuple)) and len(entry) > 1 else ''
+            )
+            key = (str(ts), str(msg))
+            if key in self._seen_keys:
+                continue
+            self._seen_keys.add(key)
             style = (
                 'green'
                 if 'BUY' in msg
@@ -557,7 +581,6 @@ class ActivityLog(RichLog):
                 else 'white'
             )
             self.write(Text.from_markup(f'[dim]{ts}[/dim] [{style}]{msg}[/{style}]'))
-        self._last_len = len(log)
 
     def refresh_data(self, engine) -> None:
         try:
@@ -717,10 +740,15 @@ class NewsLog(RichLog):
         return source.strip().lower() not in self._excluded_sources
 
     def refresh_from_state(self, news: list) -> None:
-        for item in news[self._last_len :]:
+        if not hasattr(self, '_seen_titles'):
+            self._seen_titles: set[str] = set()
+        for item in news:
+            _, title, _, _ = self._normalize_news_item(item)
+            if title in self._seen_titles:
+                continue
+            self._seen_titles.add(title)
             if self._should_render_news_item(item):
                 self._render_news_item(item)
-        self._last_len = len(news)
 
     def refresh_data(self, engine) -> None:
         try:
@@ -762,7 +790,7 @@ class TradingMonitorApp(App[None]):
     }
     """
 
-    # Monitor is read-only for keyboard — buttons and coinjure trade CLI control engine.
+    # Monitor is read-only for keyboard — buttons and coinjure engine CLI control engine.
     BINDINGS = [
         Binding('q', 'quit', 'Close Monitor', show=True),
         Binding('s', 'estop', 'E-Stop', show=True),
@@ -834,9 +862,9 @@ class TradingMonitorApp(App[None]):
         activity_log = list(getattr(self.engine, '_activity_log', []))
         last_activity = activity_log[-1][1] if activity_log else 'No activity yet'
         self.sub_title = (
-            '⏸  PAUSED — click ▶ Resume or: coinjure trade resume'
+            '⏸  PAUSED — click ▶ Resume or: coinjure engine resume'
             if paused
-            else '▶  Running — click ⏸ Pause or: coinjure trade pause'
+            else '▶  Running — click ⏸ Pause or: coinjure engine pause'
         )
         self.sub_title = (
             f'{self.sub_title}  |  Last: {last_activity[:60]}  |  E-Stop: s'
@@ -847,7 +875,7 @@ class TradingMonitorApp(App[None]):
             pass
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle control-bar button clicks (same effect as coinjure trade CLI)."""
+        """Handle control-bar button clicks (same effect as coinjure engine CLI)."""
         btn_id = event.button.id
 
         if btn_id == 'btn-pause' and self.control_server:
@@ -1051,9 +1079,13 @@ class SocketTradingMonitorApp(App[None]):
         connected_count = len(states)
         if connected_count == 0:
             self._connected = False
-            self.sub_title = '⚠  No engines reachable — start one with: coinjure engine paper-run'
+            self.sub_title = (
+                '⚠  No engines reachable — start one with: coinjure engine paper-run'
+            )
             try:
-                self.query_one('#ctrl-bar', ControlBar).update_state(False, connected=False)
+                self.query_one('#ctrl-bar', ControlBar).update_state(
+                    False, connected=False
+                )
             except Exception:
                 pass
             return
@@ -1064,6 +1096,7 @@ class SocketTradingMonitorApp(App[None]):
 
         # --- Merge decisions (label each with strategy id + type) ---
         import re as _re
+
         merged_decisions: list[dict] = []
         multi = len(states) > 1
         for sock, state in states:
@@ -1087,11 +1120,19 @@ class SocketTradingMonitorApp(App[None]):
         unrealized_sum = sum(
             s.get('portfolio', {}).get('unrealized_pnl', 0.0) for _, s in states
         )
+        # Merge cash positions across engines (sum by symbol)
+        cash_by_symbol: dict[str, float] = {}
+        for _, s in states:
+            for cp in s.get('portfolio', {}).get('cash_positions', []):
+                sym = cp.get('symbol', '')
+                cash_by_symbol[sym] = cash_by_symbol.get(sym, 0.0) + cp.get('qty', 0.0)
         merged_portfolio = {
             'total': total_sum,
             'realized_pnl': realized_sum,
             'unrealized_pnl': unrealized_sum,
-            'cash_positions': [],
+            'cash_positions': [
+                {'symbol': k, 'qty': v} for k, v in cash_by_symbol.items()
+            ],
         }
 
         # --- Merge positions, orders, orderbooks, news, activity ---
@@ -1103,6 +1144,10 @@ class SocketTradingMonitorApp(App[None]):
         total_events = 0
         total_decisions_count = 0
         total_executed = 0
+        total_ob = 0
+        total_news_buf = 0
+        total_orders = 0
+        total_filled = 0
 
         for _, state in states:
             merged_positions.extend(state.get('positions', []))
@@ -1110,8 +1155,13 @@ class SocketTradingMonitorApp(App[None]):
             merged_orderbooks.extend(state.get('order_books', []))
             merged_news.extend(state.get('news', []))
             merged_activity.extend(state.get('activity_log', []))
-            total_events += state.get('event_count', 0) or 0
-            ds = state.get('decision_stats', {}) or {}
+            s = state.get('stats', {}) or {}
+            total_events += s.get('event_count', 0) or 0
+            total_ob += s.get('order_books', 0) or 0
+            total_news_buf += s.get('news_buffered', 0) or 0
+            total_orders += s.get('orders_total', 0) or 0
+            total_filled += s.get('orders_filled', 0) or 0
+            ds = s.get('decision_stats', {}) or {}
             total_decisions_count += ds.get('decisions', 0) or 0
             total_executed += ds.get('executed', 0) or 0
 
@@ -1134,9 +1184,16 @@ class SocketTradingMonitorApp(App[None]):
             'orders': merged_orders,
             'order_books': unique_orderbooks,
             'news': merged_news[-40:],
-            'activity_log': sorted(merged_activity, key=lambda x: x[0] if isinstance(x, list) and x else '')[-40:],
+            'activity_log': sorted(
+                merged_activity,
+                key=lambda x: x[0] if isinstance(x, (list, tuple)) and x else '',
+            )[-40:],
             'stats': {
                 'event_count': total_events,
+                'order_books': total_ob,
+                'news_buffered': total_news_buf,
+                'orders_total': total_orders,
+                'orders_filled': total_filled,
                 'decision_stats': {
                     'decisions': total_decisions_count,
                     'executed': total_executed,
@@ -1153,17 +1210,23 @@ class SocketTradingMonitorApp(App[None]):
         )
 
         try:
-            self.query_one('#ctrl-bar', ControlBar).update_state(any_paused, connected=True)
+            self.query_one('#ctrl-bar', ControlBar).update_state(
+                any_paused, connected=True
+            )
         except Exception:
             pass
 
         try:
-            self.query_one('#portfolio', PortfolioPanel).refresh_from_state(merged_state)
+            self.query_one('#portfolio', PortfolioPanel).refresh_from_state(
+                merged_state
+            )
             self.query_one('#stats', StatsPanel).refresh_from_state(merged_state)
             self.query_one('#decisions', DecisionsTable).refresh_from_state(
                 merged_decisions, multi=multi
             )
-            self.query_one('#positions', PositionsPanel).refresh_from_state(merged_state)
+            self.query_one('#positions', PositionsPanel).refresh_from_state(
+                merged_state
+            )
             self.query_one('#orders', OrdersPanel).refresh_from_state(merged_state)
             self.query_one('#activity', ActivityLog).refresh_from_state(
                 merged_state['activity_log']
@@ -1177,8 +1240,9 @@ class SocketTradingMonitorApp(App[None]):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle control-bar button clicks — broadcasts to all engines."""
-        from coinjure.engine.control import send_command
         import asyncio
+
+        from coinjure.engine.control import send_command
 
         btn_id = event.button.id
 
@@ -1195,7 +1259,10 @@ class SocketTradingMonitorApp(App[None]):
         elif btn_id == 'btn-resume':
             try:
                 await asyncio.gather(
-                    *[send_command('resume', socket_path=s) for s in self._socket_paths],
+                    *[
+                        send_command('resume', socket_path=s)
+                        for s in self._socket_paths
+                    ],
                     return_exceptions=True,
                 )
                 self.notify('▶  All engines resumed', timeout=2)
@@ -1215,10 +1282,17 @@ class SocketTradingMonitorApp(App[None]):
                 self._stop_armed = False
                 try:
                     await asyncio.gather(
-                        *[send_command('stop', socket_path=s) for s in self._socket_paths],
+                        *[
+                            send_command('stop', socket_path=s)
+                            for s in self._socket_paths
+                        ],
                         return_exceptions=True,
                     )
-                    self.notify('⏹  Stop signal sent to all engines', severity='error', timeout=4)
+                    self.notify(
+                        '⏹  Stop signal sent to all engines',
+                        severity='error',
+                        timeout=4,
+                    )
                 except Exception as exc:
                     self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)
 
@@ -1237,8 +1311,9 @@ class SocketTradingMonitorApp(App[None]):
 
     async def action_e_stop(self) -> None:
         """s — keyboard emergency stop broadcast to all engines."""
-        from coinjure.engine.control import send_command
         import asyncio
+
+        from coinjure.engine.control import send_command
 
         if not self._stop_armed:
             self._stop_armed = True
@@ -1256,6 +1331,8 @@ class SocketTradingMonitorApp(App[None]):
                 *[send_command('stop', socket_path=s) for s in self._socket_paths],
                 return_exceptions=True,
             )
-            self.notify('⏹  Stop signal sent to all engines', severity='error', timeout=4)
+            self.notify(
+                '⏹  Stop signal sent to all engines', severity='error', timeout=4
+            )
         except Exception as exc:
             self.notify(f'⚠  Error: {exc}', severity='error', timeout=5)

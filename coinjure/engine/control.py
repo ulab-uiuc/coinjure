@@ -33,6 +33,29 @@ SOCKET_DIR = Path.home() / '.coinjure'
 SOCKET_PATH = SOCKET_DIR / 'engine.sock'
 
 
+def _ticker_display_name(ticker: object) -> str:
+    """Build a display name with exchange prefix for positions/orders."""
+    from coinjure.ticker import KalshiTicker, PolyMarketTicker
+
+    name = getattr(ticker, 'name', '') or ''
+    symbol = getattr(ticker, 'symbol', '') or ''
+
+    if isinstance(ticker, PolyMarketTicker):
+        prefix = '[P]'
+        # Polymarket name is often empty; use market_id as fallback
+        if not name:
+            name = getattr(ticker, 'market_id', '') or symbol
+    elif isinstance(ticker, KalshiTicker):
+        prefix = '[K]'
+        if not name:
+            name = getattr(ticker, 'market_ticker', '') or symbol
+    else:
+        prefix = ''
+        name = name or symbol
+
+    return f'{prefix} {name}'[:30]
+
+
 def default_engine_socket_path() -> Path:
     """Return a PID-based socket path so multiple engines can run in parallel."""
     return SOCKET_DIR / f'engine-{os.getpid()}.sock'
@@ -107,6 +130,7 @@ class ControlServer:
         writer: asyncio.StreamWriter,
     ) -> None:
         """Handle one client connection (one request → one response)."""
+        response: dict[str, Any] = {'ok': False, 'error': 'no request'}
         try:
             raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
             if not raw:
@@ -313,7 +337,7 @@ class ControlServer:
             for p in pm.get_non_cash_positions():
                 if p.quantity <= 0:
                     continue
-                bid = md.get_best_bid(p.ticker)  # type: ignore[union-attr]
+                bid = md.get_best_bid(p.ticker) if md else None  # type: ignore[union-attr]
                 cur = float(bid.price) if bid else 0.0
                 pnl = (
                     (cur - float(p.average_cost)) * float(p.quantity)
@@ -322,7 +346,7 @@ class ControlServer:
                 )
                 pos_list.append(
                     {
-                        'name': (getattr(p.ticker, 'name', '') or p.ticker.symbol)[:30],
+                        'name': _ticker_display_name(p.ticker),
                         'qty': str(p.quantity),
                         'avg_cost': str(p.average_cost),
                         'bid': f'{cur:.4f}',
@@ -338,7 +362,7 @@ class ControlServer:
             state['orders'] = [
                 {
                     'side': o.side.value,
-                    'name': (getattr(o.ticker, 'name', '') or o.ticker.symbol)[:28],
+                    'name': _ticker_display_name(o.ticker),
                     'limit_price': str(o.limit_price),
                     'status': o.status.value,
                 }
@@ -366,7 +390,7 @@ class ControlServer:
                 spread = float(ask_lvl.price - bid_lvl.price)
                 books.append(
                     {
-                        'name': (getattr(ticker, 'name', '') or ticker.symbol)[:32],
+                        'name': _ticker_display_name(ticker),
                         'bid': f'{float(bid_lvl.price):.4f}',
                         'ask': f'{float(ask_lvl.price):.4f}',
                         'spread': f'{spread:.4f}',
@@ -382,12 +406,34 @@ class ControlServer:
         return state
 
     def _cmd_status(self) -> dict:
+        from decimal import Decimal as D
+
         strategy = getattr(self.engine, 'strategy', None)
         trader = getattr(self.engine, 'trader', None)
+        md = getattr(trader, 'market_data', None)
         decision_stats = strategy.get_decision_stats() if strategy is not None else {}
         runtime = str(datetime.now() - self._start_time).split('.')[0]
         activity_log = list(getattr(self.engine, '_activity_log', []))
         last_activity = activity_log[-1][1] if activity_log else ''
+
+        # Portfolio summary
+        try:
+            pm = trader.position_manager  # type: ignore[union-attr]
+            pv = pm.get_portfolio_value(md)
+            total = float(sum(pv.values(), D('0')))
+            realized = float(pm.get_total_realized_pnl())
+            unrealized = float(pm.get_total_unrealized_pnl(md))
+            portfolio = {
+                'total': total,
+                'realized_pnl': realized,
+                'unrealized_pnl': unrealized,
+            }
+        except Exception:
+            portfolio = {
+                'total': 0,
+                'realized_pnl': 0,
+                'unrealized_pnl': 0,
+            }
 
         return {
             'ok': True,
@@ -398,11 +444,10 @@ class ControlServer:
             'decision_stats': decision_stats,
             'decisions': int(decision_stats.get('decisions', 0)),
             'executed': int(decision_stats.get('executed', 0)),
-            'order_books': len(
-                getattr(getattr(self.engine, 'market_data', None), 'order_books', {})
-            ),
+            'order_books': len(getattr(md, 'order_books', {})) if md else 0,
             'orders': len(list(getattr(trader, 'orders', []))),
             'last_activity': last_activity,
+            'portfolio': portfolio,
         }
 
 

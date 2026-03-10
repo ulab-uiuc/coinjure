@@ -147,7 +147,9 @@ async def _polymarket_list_markets_sorted(
             return []
         return resp.json() or []
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(), timeout=30.0
+    ) as client:
         # Fetch first page to check if data exists, then fetch rest in parallel
         first_events = await fetch_page(client, 0)
         if not first_events:
@@ -201,7 +203,9 @@ async def polymarket_fetch_by_slug(
     slug: str, *, with_rules: bool = False
 ) -> list[dict]:
     """Fetch all markets in a Polymarket event by its URL slug."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(), timeout=30.0
+    ) as client:
         resp = await client.get(GAMMA_EVENTS_URL, params={'slug': slug})
     if resp.status_code != 200:
         return []
@@ -212,7 +216,9 @@ async def polymarket_fetch_by_slug(
 
 
 async def polymarket_market_info(market_id: str) -> dict | None:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(), timeout=30.0
+    ) as client:
         resp = await client.get(GAMMA_MARKETS_URL, params={'id': market_id})
     if resp.status_code != 200:
         return None
@@ -302,7 +308,9 @@ async def kalshi_search_markets(
     pages = 0
     max_pages = 20  # up to 4 000 events
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(), timeout=30.0
+    ) as client:
         while pages < max_pages:
             params: dict[str, Any] = {
                 'status': 'open',
