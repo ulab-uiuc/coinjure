@@ -11,6 +11,13 @@ class Ticker(ABC):
     symbol: str = field(metadata={'abstract': True})
     # The name of the ticker
     name: str = field(metadata={'abstract': True})
+    # YES or NO side of the market
+    side: str = 'yes'
+
+    @property
+    def identifier(self) -> str:
+        """Canonical market-level identifier for matching across strategies."""
+        return self.symbol
 
     @property
     @abstractmethod
@@ -26,11 +33,14 @@ class PolyMarketTicker(Ticker):
     token_id: str = ''
     market_id: str = ''
     event_id: str = ''
-    side: str = 'yes'  # 'yes' or 'no'
+    side: str = 'yes'
+
+    @property
+    def identifier(self) -> str:
+        return self.market_id or self.token_id or self.symbol
 
     @property
     def collateral(self) -> Ticker:
-        """The ticker of the collateral currency"""
         return CashTicker.POLYMARKET_USDC
 
     @classmethod
@@ -49,7 +59,6 @@ class CashTicker(Ticker):
 
     @property
     def collateral(self) -> Ticker:
-        """The ticker of the collateral currency"""
         raise NotImplementedError('Cash tickers do not have a collateral ticker')
 
 
@@ -65,7 +74,21 @@ class KalshiTicker(Ticker):
     market_ticker: str = ''
     event_ticker: str = ''
     series_ticker: str = ''
-    side: str = 'yes'  # 'yes' or 'no'
+    side: str = 'yes'
+
+    @property
+    def identifier(self) -> str:
+        return self.market_ticker or self.symbol
+
+    @property
+    def market_id(self) -> str:
+        """Alias for market_ticker, unified interface with PolyMarketTicker."""
+        return self.market_ticker
+
+    @property
+    def event_id(self) -> str:
+        """Alias for event_ticker, unified interface with PolyMarketTicker."""
+        return self.event_ticker
 
     @property
     def collateral(self) -> Ticker:

@@ -69,20 +69,12 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             return
 
         ticker = event.ticker
-        if getattr(ticker, 'side', 'yes') == 'no':
+        if ticker.side == 'no':
             return
 
-        tid = (
-            getattr(ticker, 'market_id', '')
-            or getattr(ticker, 'token_id', '')
-            or ticker.symbol
-        )
-
-        if self._matches(tid, self._ids[0], self._tokens[0] if self._tokens else ''):
+        if self._slot_matches(ticker, 0):
             self._price_a = event.price
-        elif self._matches(
-            tid, self._ids[1], self._tokens[1] if len(self._tokens) > 1 else ''
-        ):
+        elif self._slot_matches(ticker, 1):
             self._price_b = event.price
         else:
             return
@@ -117,8 +109,8 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
 
     async def _enter(self, trader: Trader, violation: Decimal) -> None:
         """Sell A (buy NO), buy B (buy YES)."""
-        ticker_a_no = self._find_ticker(trader, self._ids[0], yes=False)
-        ticker_b = self._find_ticker(trader, self._ids[1], yes=True)
+        ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
+        ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
         if ticker_a_no and self._price_a:
             no_price = Decimal('1') - self._price_a
@@ -187,19 +179,3 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             },
         )
         logger.info('EXIT implication arb: constraint restored')
-
-    def _find_ticker(self, trader: Trader, market_id: str, yes: bool = True):
-        for ticker in trader.market_data.order_books:
-            is_no = getattr(ticker, 'side', 'yes') == 'no'
-            if yes and is_no:
-                continue
-            if not yes and not is_no:
-                continue
-            tid = (
-                getattr(ticker, 'market_id', '')
-                or getattr(ticker, 'token_id', '')
-                or ticker.symbol
-            )
-            if self._matches(tid, market_id):
-                return ticker
-        return None

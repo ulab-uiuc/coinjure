@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from coinjure.data.manager import DataManager
+from coinjure.ticker import KalshiTicker, Ticker
 from coinjure.trading.position import PositionManager
 from coinjure.trading.risk import RiskManager
 from coinjure.trading.trader import Trader
@@ -19,7 +20,6 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
-from coinjure.ticker import KalshiTicker, Ticker
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter
@@ -71,8 +71,6 @@ class KalshiTrader(Trader):
         count: int,
     ) -> dict[str, Any]:
         """Submit an order to Kalshi API."""
-        from kalshi_python import CreateOrderRequest
-
         kwargs: dict[str, Any] = {
             'ticker': ticker.market_ticker,
             'action': action,
@@ -86,10 +84,8 @@ class KalshiTrader(Trader):
         else:
             kwargs['yes_price'] = price_cents
 
-        request = CreateOrderRequest(**kwargs)
-
         response = await asyncio.to_thread(
-            lambda: self._portfolio_api.create_order(create_order_request=request)
+            lambda: self._portfolio_api.create_order(**kwargs)
         )
 
         if hasattr(response, 'to_dict'):
@@ -114,10 +110,9 @@ class KalshiTrader(Trader):
         quantity: Decimal,
     ) -> Order:
         """Process Kalshi order response into internal Order object."""
-        logger.info('Kalshi order response: %s', response)
-
         order_data = response.get('order', response)
         order_id = order_data.get('order_id', '')
+        logger.info('Kalshi order data: %s', order_data)
 
         if not order_id:
             return Order(
@@ -132,16 +127,31 @@ class KalshiTrader(Trader):
                 commission=Decimal('0'),
             )
 
-        # Get updated order status
-        order_details = await self._get_order_status(order_id)
-        order_detail = order_details.get('order', order_details)
-        logger.info('Kalshi order details: %s', order_detail)
-
-        total_count = int(order_detail.get('count', 0))
+        # Use data from create_order response directly; fall back to
+        # get_order only when needed fields are missing.
+        order_detail = order_data
         remaining_count = int(order_detail.get('remaining_count', 0))
+        total_count = int(order_detail.get('count', int(quantity)))
+        api_status = order_detail.get('status', '')
+
+        # For resting/pending orders, try to get fill info from API
+        if api_status in ('resting', 'pending') and remaining_count > 0:
+            try:
+                order_details = await self._get_order_status(order_id)
+                order_detail = order_details.get('order', order_details)
+                remaining_count = int(
+                    order_detail.get('remaining_count', remaining_count)
+                )
+                total_count = int(order_detail.get('count', total_count))
+            except Exception:
+                logger.debug(
+                    'Could not fetch order status for %s, using create response',
+                    order_id,
+                )
+
         filled_count = total_count - remaining_count
 
-        if filled_count == 0:
+        if filled_count == 0 and api_status not in ('resting', 'pending'):
             return Order(
                 status=OrderStatus.REJECTED,
                 side=side,
@@ -159,17 +169,25 @@ class KalshiTrader(Trader):
         remaining = Decimal(str(remaining_count))
         commission = filled_quantity * filled_price * self.commission_rate
 
-        trade = Trade(
-            side=side,
-            ticker=ticker,
-            price=filled_price,
-            quantity=filled_quantity,
-            commission=commission,
-        )
+        trades = []
+        if filled_count > 0:
+            trades.append(
+                Trade(
+                    side=side,
+                    ticker=ticker,
+                    price=filled_price,
+                    quantity=filled_quantity,
+                    commission=commission,
+                )
+            )
 
-        order_status = (
-            OrderStatus.FILLED if remaining_count == 0 else OrderStatus.PARTIALLY_FILLED
-        )
+        if remaining_count == 0:
+            order_status = OrderStatus.FILLED
+        elif filled_count > 0:
+            order_status = OrderStatus.PARTIALLY_FILLED
+        else:
+            # Resting/pending — accepted but not yet filled
+            order_status = OrderStatus.PLACED
 
         return Order(
             status=order_status,
@@ -178,7 +196,7 @@ class KalshiTrader(Trader):
             limit_price=limit_price,
             filled_quantity=filled_quantity,
             average_price=filled_price,
-            trades=[trade],
+            trades=trades,
             remaining=remaining,
             commission=commission,
         )
