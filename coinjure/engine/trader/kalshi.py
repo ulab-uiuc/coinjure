@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from coinjure.data.manager import DataManager
+from coinjure.ticker import KalshiTicker, Ticker
 from coinjure.trading.position import PositionManager
 from coinjure.trading.risk import RiskManager
 from coinjure.trading.trader import Trader
@@ -19,7 +20,6 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
-from coinjure.ticker import KalshiTicker, Ticker
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter
@@ -139,10 +139,15 @@ class KalshiTrader(Trader):
             try:
                 order_details = await self._get_order_status(order_id)
                 order_detail = order_details.get('order', order_details)
-                remaining_count = int(order_detail.get('remaining_count', remaining_count))
+                remaining_count = int(
+                    order_detail.get('remaining_count', remaining_count)
+                )
                 total_count = int(order_detail.get('count', total_count))
             except Exception:
-                logger.debug('Could not fetch order status for %s, using create response', order_id)
+                logger.debug(
+                    'Could not fetch order status for %s, using create response',
+                    order_id,
+                )
 
         filled_count = total_count - remaining_count
 
@@ -166,13 +171,15 @@ class KalshiTrader(Trader):
 
         trades = []
         if filled_count > 0:
-            trades.append(Trade(
-                side=side,
-                ticker=ticker,
-                price=filled_price,
-                quantity=filled_quantity,
-                commission=commission,
-            ))
+            trades.append(
+                Trade(
+                    side=side,
+                    ticker=ticker,
+                    price=filled_price,
+                    quantity=filled_quantity,
+                    commission=commission,
+                )
+            )
 
         if remaining_count == 0:
             order_status = OrderStatus.FILLED
@@ -180,7 +187,7 @@ class KalshiTrader(Trader):
             order_status = OrderStatus.PARTIALLY_FILLED
         else:
             # Resting/pending — accepted but not yet filled
-            order_status = OrderStatus.PARTIALLY_FILLED
+            order_status = OrderStatus.PLACED
 
         return Order(
             status=order_status,

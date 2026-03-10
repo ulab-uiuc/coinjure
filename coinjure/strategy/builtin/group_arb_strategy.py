@@ -31,7 +31,7 @@ from decimal import Decimal
 from coinjure.events import Event
 from coinjure.market.relations import RelationStore
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker import KalshiTicker, PolyMarketTicker
+from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -103,7 +103,11 @@ class GroupArbStrategy(Strategy):
                     eid = m.get('event_id', '') or m.get('event_ticker', '')
                     if eid and not self._event_id:
                         self._event_id = eid
-                    mid = m.get('id', '') or m.get('market_ticker', '') or m.get('ticker', '')
+                    mid = (
+                        m.get('id', '')
+                        or m.get('market_ticker', '')
+                        or m.get('ticker', '')
+                    )
                     if mid:
                         self._relation_market_ids.add(mid)
                     token_ids = m.get('token_ids', [])
@@ -141,7 +145,7 @@ class GroupArbStrategy(Strategy):
             if no_t.market_id:
                 self._market_no_ticker[no_t.market_id] = no_t
 
-        self._tickers: dict[str, PolyMarketTicker] = {}
+        self._tickers: dict[str, Ticker] = {}
         self._last_arb_time: float = 0.0
         # Position tracking: 'BUY_YES', 'BUY_NO', or None
         self._held_direction: str | None = None
