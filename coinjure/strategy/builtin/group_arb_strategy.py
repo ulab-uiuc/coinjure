@@ -212,6 +212,12 @@ class GroupArbStrategy(Strategy):
         sum_yes = sum(prices.values())
         n = len(prices)
 
+        if logger.isEnabledFor(logging.DEBUG):
+            for mid, p in prices.items():
+                logger.debug(
+                    '  _check_arb price: market=%s ask=%.4f', mid[:16], float(p)
+                )
+
         edge_buy_yes = Decimal('1') - sum_yes - _FEE_PER_SIDE * n
         edge_buy_no = sum_yes - Decimal('1') - _FEE_PER_SIDE * n
         best_edge = max(edge_buy_yes, edge_buy_no)

@@ -13,6 +13,7 @@ from coinjure.data.source import DataSource
 from coinjure.engine.performance import PerformanceAnalyzer
 from coinjure.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
+from coinjure.ticker import CashTicker
 from coinjure.trading.risk import StandardRiskManager
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import OrderStatus
