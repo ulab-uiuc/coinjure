@@ -31,7 +31,7 @@ from decimal import Decimal
 from coinjure.events import Event
 from coinjure.market.relations import RelationStore
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker import PolyMarketTicker
+from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -81,7 +81,7 @@ class GroupArbStrategy(Strategy):
         self.max_loss = Decimal(str(max_loss))  # close when edge reverses beyond this
         self.trade_size = Decimal(str(trade_size))
         self.cooldown_seconds = cooldown_seconds
-        self.min_markets = min_markets
+        self._min_markets_override = min_markets
 
         self._event_id = event_id
         self._relation_market_ids: set[str] = set()
@@ -93,15 +93,21 @@ class GroupArbStrategy(Strategy):
         # Pre-built tickers with correct market_id and side for data source registration
         self._yes_tickers: dict[str, PolyMarketTicker] = {}  # yes_token_id → ticker
         self._no_tickers: dict[str, PolyMarketTicker] = {}  # no_token_id → ticker
+        self._spread_type: str = ''  # 'exclusivity' or 'complementary'
         if relation_id:
             store = RelationStore()
             rel = store.get(relation_id)
             if rel:
+                self._spread_type = rel.spread_type
                 for m in rel.markets:
-                    eid = m.get('event_id', '')
+                    eid = m.get('event_id', '') or m.get('event_ticker', '')
                     if eid and not self._event_id:
                         self._event_id = eid
-                    mid = m.get('id', '')
+                    mid = (
+                        m.get('id', '')
+                        or m.get('market_ticker', '')
+                        or m.get('ticker', '')
+                    )
                     if mid:
                         self._relation_market_ids.add(mid)
                     token_ids = m.get('token_ids', [])
@@ -139,10 +145,17 @@ class GroupArbStrategy(Strategy):
             if no_t.market_id:
                 self._market_no_ticker[no_t.market_id] = no_t
 
-        self._tickers: dict[str, PolyMarketTicker] = {}
+        self._tickers: dict[str, Ticker] = {}
         self._last_arb_time: float = 0.0
         # Position tracking: 'BUY_YES', 'BUY_NO', or None
         self._held_direction: str | None = None
+
+        # Require ALL markets in the relation to have prices before arbing.
+        # With partial data, sum_yes is artificially low → false BUY_YES signals.
+        if self._relation_market_ids:
+            self.min_markets = len(self._relation_market_ids)
+        else:
+            self.min_markets = self._min_markets_override
 
     def watch_tokens(self) -> list[str]:
         tokens = list(self._relation_token_ids) + list(self._no_token_ids)
@@ -152,10 +165,12 @@ class GroupArbStrategy(Strategy):
                 tokens.append(tid)
         return tokens
 
-    def _should_track(self, ticker: PolyMarketTicker) -> bool:
-        if self._event_id and ticker.event_id == self._event_id:
+    def _should_track(self, ticker: Ticker) -> bool:
+        eid = ticker.event_id if hasattr(ticker, 'event_id') else ''
+        mid = ticker.identifier
+        if self._event_id and eid == self._event_id:
             return True
-        if self._relation_market_ids and ticker.market_id in self._relation_market_ids:
+        if self._relation_market_ids and mid in self._relation_market_ids:
             return True
         # Match by token_id for tickers from watch_token (may lack market_id/event_id)
         tid = getattr(ticker, 'token_id', '')
@@ -168,17 +183,17 @@ class GroupArbStrategy(Strategy):
             return
 
         ticker = getattr(event, 'ticker', None)
-        if not isinstance(ticker, PolyMarketTicker):
+        if not isinstance(ticker, (PolyMarketTicker, KalshiTicker)):
             return
         # Only track YES-side prices for sum calculation; NO-side events
         # still flow through the engine (registered in DataManager for
         # find_complement) but must not corrupt self._asks.
-        if getattr(ticker, 'side', 'yes') != 'yes':
+        if ticker.side != 'yes':
             return
         if not self._should_track(ticker):
             return
 
-        mid = ticker.market_id
+        mid = ticker.identifier
         if not mid:
             # Resolve via token_id mapping (for tickers from watch_token)
             tid = getattr(ticker, 'token_id', '')
@@ -200,9 +215,13 @@ class GroupArbStrategy(Strategy):
         if len(self._tickers) < self.min_markets:
             return
 
-        # Query actual best asks from DataManager order book
+        # Query actual best asks from DataManager order book.
+        # Only consider markets that belong to the relation to avoid
+        # partial-data arbs when event_id matching adds extra markets.
         prices: dict[str, Decimal] = {}
         for mid, ticker in self._tickers.items():
+            if self._relation_market_ids and mid not in self._relation_market_ids:
+                continue
             best_ask = trader.market_data.get_best_ask(ticker)
             if best_ask is not None and best_ask.price > 0:
                 prices[mid] = best_ask.price
@@ -220,6 +239,13 @@ class GroupArbStrategy(Strategy):
 
         edge_buy_yes = Decimal('1') - sum_yes - _FEE_PER_SIDE * n
         edge_buy_no = sum_yes - Decimal('1') - _FEE_PER_SIDE * n
+
+        # For exclusivity relations (at most one outcome wins), BUY_YES is
+        # NOT safe because if no outcome wins, all YES positions lose.
+        # Only BUY_NO is guaranteed profitable when sum > 1.
+        if self._spread_type == 'exclusivity':
+            edge_buy_yes = Decimal('-1')  # disable BUY_YES for exclusivity
+
         best_edge = max(edge_buy_yes, edge_buy_no)
         preferred_action = 'BUY_YES' if edge_buy_yes >= edge_buy_no else 'BUY_NO'
 

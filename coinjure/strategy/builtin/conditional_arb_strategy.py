@@ -85,10 +85,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
 
     def _compute_bounds(self, price_b: float) -> tuple[float, float]:
         """Compute the valid range for p(A) given p(B) and conditional bounds."""
-        # p(A) = p(A|B)*p(B) + p(A|¬B)*(1-p(B))
-        # Lower bound: p(A|B) = cond_lower, p(A|¬B) = 0
         lower = self.cond_lower * price_b
-        # Upper bound: p(A|B) = cond_upper, p(A|¬B) = 1
         upper = self.cond_upper * price_b + (1 - price_b)
         return lower, upper
 
@@ -97,20 +94,12 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             return
 
         ticker = event.ticker
-        if getattr(ticker, 'side', 'yes') == 'no':
+        if ticker.side == 'no':
             return
 
-        tid = (
-            getattr(ticker, 'market_id', '')
-            or getattr(ticker, 'token_id', '')
-            or ticker.symbol
-        )
-
-        if self._matches(tid, self._ids[0], self._tokens[0] if self._tokens else ''):
+        if self._slot_matches(ticker, 0):
             self._price_a = event.price
-        elif self._matches(
-            tid, self._ids[1], self._tokens[1] if len(self._tokens) > 1 else ''
-        ):
+        elif self._slot_matches(ticker, 1):
             self._price_b = event.price
         else:
             return
@@ -124,10 +113,8 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
 
         if self._position_state == 'flat':
             if pa > upper + float(self.min_edge):
-                # A too high → sell A, buy B
                 await self._enter_short_a(trader, pa, lower, upper)
             elif pa < lower - float(self.min_edge):
-                # A too low → buy A, sell B
                 await self._enter_long_a(trader, pa, lower, upper)
             else:
                 self.record_decision(
@@ -146,7 +133,6 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
                     },
                 )
         else:
-            # Exit when A is back inside the band
             if lower <= pa <= upper:
                 await self._exit(trader, pa, lower, upper)
 
@@ -158,8 +144,8 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         upper: float,
     ) -> None:
         """A too expensive → sell A (buy NO), buy B (buy YES)."""
-        ticker_a_no = self._find_ticker(trader, self._ids[0], yes=False)
-        ticker_b = self._find_ticker(trader, self._ids[1], yes=True)
+        ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
+        ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
         if ticker_a_no and self._price_a:
             await trader.place_order(
@@ -199,8 +185,8 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         upper: float,
     ) -> None:
         """A too cheap → buy A (buy YES), sell B (buy NO)."""
-        ticker_a = self._find_ticker(trader, self._ids[0], yes=True)
-        ticker_b_no = self._find_ticker(trader, self._ids[1], yes=False)
+        ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
+        ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')
 
         if ticker_a and self._price_a:
             await trader.place_order(
@@ -265,19 +251,3 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             },
         )
         logger.info('EXIT conditional arb: A back in band')
-
-    def _find_ticker(self, trader: Trader, market_id: str, yes: bool = True):
-        for ticker in trader.market_data.order_books:
-            is_no = getattr(ticker, 'side', 'yes') == 'no'
-            if yes and is_no:
-                continue
-            if not yes and not is_no:
-                continue
-            tid = (
-                getattr(ticker, 'market_id', '')
-                or getattr(ticker, 'token_id', '')
-                or ticker.symbol
-            )
-            if self._matches(tid, market_id):
-                return ticker
-        return None

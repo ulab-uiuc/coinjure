@@ -74,30 +74,25 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         self._init_from_relation(relation_id)
 
         # Determine which is leader and which is follower.
-        # lead_lag > 0: A leads B. lead_lag < 0: B leads A.
         id_a = self._ids[0] if self._ids else ''
         id_b = self._ids[1] if len(self._ids) > 1 else ''
-        token_a = self._tokens[0] if self._tokens else ''
-        token_b = self._tokens[1] if len(self._tokens) > 1 else ''
         if self._relation:
             lag = self._relation.lead_lag or 0
             if lag >= 0:
-                # A leads B (or no lag)
+                self._leader_slot = 0
+                self._follower_slot = 1
                 self._leader_id = id_a
                 self._follower_id = id_b
-                self._leader_token = token_a
-                self._follower_token = token_b
             else:
-                # B leads A — swap roles
+                self._leader_slot = 1
+                self._follower_slot = 0
                 self._leader_id = id_b
                 self._follower_id = id_a
-                self._leader_token = token_b
-                self._follower_token = token_a
         else:
+            self._leader_slot = 0
+            self._follower_slot = 1
             self._leader_id = id_a
             self._follower_id = id_b
-            self._leader_token = token_a
-            self._follower_token = token_b
 
         # Price tracking
         self._leader_prices: deque[float] = deque(maxlen=warmup)
@@ -106,9 +101,9 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
         # Position state
         self._position_state = 'flat'  # flat | long_follower | short_follower
-        self._entry_leader_price: float = 0.0  # leader price at entry
-        self._entry_follower_price: float = 0.0  # follower price at entry
-        self._hold_count = 0  # count of follower updates since entry
+        self._entry_leader_price: float = 0.0
+        self._entry_follower_price: float = 0.0
+        self._hold_count = 0
 
     def reset_live_state(self) -> None:
         self._leader_price = None
@@ -123,17 +118,11 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             return
 
         ticker = event.ticker
-        if getattr(ticker, 'side', 'yes') == 'no':
+        if ticker.side == 'no':
             return
 
-        tid = (
-            getattr(ticker, 'market_id', '')
-            or getattr(ticker, 'token_id', '')
-            or ticker.symbol
-        )
-
-        is_leader = self._matches(tid, self._leader_id, self._leader_token)
-        is_follower = self._matches(tid, self._follower_id, self._follower_token)
+        is_leader = self._slot_matches(ticker, self._leader_slot)
+        is_follower = self._slot_matches(ticker, self._follower_slot)
 
         if is_leader:
             self._leader_price = event.price
@@ -177,13 +166,12 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
                     },
                 )
         else:
-            # Check exit conditions on follower updates
             if is_follower:
                 await self._check_exit(trader, leader_move)
 
     async def _enter_long(self, trader: Trader, leader_move: float) -> None:
         """Leader moved up → buy follower YES."""
-        ticker_b = self._find_ticker(trader, self._follower_id, yes=True)
+        ticker_b = self._find_ticker(trader, self._follower_id, side='yes')
         if ticker_b and self._follower_price:
             await trader.place_order(
                 side=TradeSide.BUY,
@@ -212,7 +200,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
     async def _enter_short(self, trader: Trader, leader_move: float) -> None:
         """Leader moved down → sell follower (buy NO)."""
-        ticker_b_no = self._find_ticker(trader, self._follower_id, yes=False)
+        ticker_b_no = self._find_ticker(trader, self._follower_id, side='no')
         if ticker_b_no and self._follower_price:
             no_price = Decimal('1') - self._follower_price
             await trader.place_order(
@@ -247,7 +235,6 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             sum(self._leader_prices) / len(self._leader_prices)
         )
 
-        # Follower caught up = follower moved in same direction by enough
         if abs(leader_at_entry_move) > 1e-6:
             catchup_ratio = follower_move / leader_at_entry_move
         else:
@@ -288,19 +275,3 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
                 'EXIT %s: %s catchup=%.2f', self._position_state, reason, catchup_ratio
             )
             self._position_state = 'flat'
-
-    def _find_ticker(self, trader: Trader, market_id: str, yes: bool = True):
-        for ticker in trader.market_data.order_books:
-            is_no = getattr(ticker, 'side', 'yes') == 'no'
-            if yes and is_no:
-                continue
-            if not yes and not is_no:
-                continue
-            tid = (
-                getattr(ticker, 'market_id', '')
-                or getattr(ticker, 'token_id', '')
-                or ticker.symbol
-            )
-            if self._matches(tid, market_id):
-                return ticker
-        return None
