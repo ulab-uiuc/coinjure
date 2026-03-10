@@ -68,6 +68,8 @@ class GroupArbStrategy(Strategy):
         relation_id: str = '',
         event_id: str = '',
         min_edge: float = 0.02,
+        close_edge: float = 0.005,
+        max_loss: float = 0.05,
         trade_size: float = 10.0,
         cooldown_seconds: int = 120,
         min_markets: int = 2,
@@ -75,6 +77,8 @@ class GroupArbStrategy(Strategy):
         super().__init__()
         self.relation_id = relation_id
         self.min_edge = Decimal(str(min_edge))
+        self.close_edge = Decimal(str(close_edge))  # close when edge drops below this
+        self.max_loss = Decimal(str(max_loss))  # close when edge reverses beyond this
         self.trade_size = Decimal(str(trade_size))
         self.cooldown_seconds = cooldown_seconds
         self._min_markets_override = min_markets
@@ -139,6 +143,8 @@ class GroupArbStrategy(Strategy):
 
         self._tickers: dict[str, PolyMarketTicker] = {}
         self._last_arb_time: float = 0.0
+        # Position tracking: 'BUY_YES', 'BUY_NO', or None
+        self._held_direction: str | None = None
 
         # Require ALL markets in the relation to have prices before arbing.
         # With partial data, sum_yes is artificially low → false BUY_YES signals.
@@ -237,7 +243,7 @@ class GroupArbStrategy(Strategy):
             edge_buy_yes = Decimal('-1')  # disable BUY_YES for exclusivity
 
         best_edge = max(edge_buy_yes, edge_buy_no)
-        action = 'BUY_YES' if edge_buy_yes >= edge_buy_no else 'BUY_NO'
+        preferred_action = 'BUY_YES' if edge_buy_yes >= edge_buy_no else 'BUY_NO'
 
         signal = {
             'sum_yes': float(sum_yes),
@@ -249,17 +255,33 @@ class GroupArbStrategy(Strategy):
 
         label = f'group({self.relation_id[:16] or self._event_id[:16]})'
 
-        if best_edge < self.min_edge:
-            self.record_decision(
-                ticker_name=label,
-                action='HOLD',
-                executed=False,
-                reasoning=(
-                    f'sum_yes={float(sum_yes):.4f} n={n} '
-                    f'best_edge={float(best_edge):.4f} < min={float(self.min_edge):.4f}'
-                ),
-                signal_values=signal,
+        # ── Close logic: check if we should exit existing positions ──
+        if self._held_direction is not None:
+            # Edge in our held direction (positive = still favorable)
+            held_edge = (
+                edge_buy_yes if self._held_direction == 'BUY_YES' else edge_buy_no
             )
+            should_close = False
+            close_reason = ''
+
+            if held_edge < self.close_edge:
+                # Edge gone — take profit or cut loss
+                should_close = True
+                close_reason = f'edge_gone held_edge={float(held_edge):.4f}'
+            elif -held_edge > self.max_loss:
+                # Edge reversed beyond max_loss — stop loss
+                should_close = True
+                close_reason = f'stop_loss held_edge={float(held_edge):.4f}'
+
+            if should_close:
+                await self._close_positions(trader, prices, label, signal, close_reason)
+                return
+
+            # Already positioned in this direction — don't add more
+            return
+
+        # ── Open logic: enter new position if edge is sufficient ──
+        if best_edge < self.min_edge:
             return
 
         now = time.monotonic()
@@ -267,17 +289,37 @@ class GroupArbStrategy(Strategy):
             return
         self._last_arb_time = now
 
-        logger.info(
-            'GroupArb: %s %s sum_yes=%.4f n=%d edge=%.4f',
-            action,
+        executed_legs = await self._open_positions(
+            trader,
+            prices,
+            preferred_action,
             label,
-            float(sum_yes),
-            n,
-            float(best_edge),
+            signal,
         )
+        if executed_legs > 0:
+            self._held_direction = preferred_action
 
+    async def _open_positions(
+        self,
+        trader: Trader,
+        prices: dict[str, Decimal],
+        action: str,
+        label: str,
+        signal: dict,
+    ) -> int:
+        """Place BUY orders on all legs. Returns number of executed legs."""
+        n = len(prices)
         executed_legs = 0
         failed_legs = 0
+
+        logger.info(
+            'GroupArb: OPEN %s %s sum_yes=%.4f n=%d edge=%.4f',
+            action,
+            label,
+            signal['sum_yes'],
+            n,
+            signal['best_edge'],
+        )
 
         for mid, ask_price in prices.items():
             ticker = self._tickers[mid]
@@ -296,7 +338,6 @@ class GroupArbStrategy(Strategy):
                     )
                     continue
                 trade_ticker = no_ticker
-                # Use actual NO ask from order book (not theoretical 1 - YES_ask)
                 no_best_ask = trader.market_data.get_best_ask(no_ticker)
                 if no_best_ask is not None:
                     leg_price = no_best_ask.price
@@ -326,12 +367,76 @@ class GroupArbStrategy(Strategy):
             action=action,
             executed=executed_legs > 0,
             reasoning=(
-                f'sum_yes={float(sum_yes):.4f} n={n} edge={float(best_edge):.4f} '
-                f'legs={executed_legs}/{n} failed={failed_legs}'
+                f'OPEN sum_yes={signal["sum_yes"]:.4f} n={n} '
+                f'edge={signal["best_edge"]:.4f} legs={executed_legs}/{n}'
             ),
-            signal_values={
-                **signal,
-                'executed_legs': executed_legs,
-                'failed_legs': failed_legs,
-            },
+            signal_values={**signal, 'executed_legs': executed_legs},
         )
+        return executed_legs
+
+    async def _close_positions(
+        self,
+        trader: Trader,
+        prices: dict[str, Decimal],
+        label: str,
+        signal: dict,
+        reason: str,
+    ) -> None:
+        """Sell all held positions to close."""
+        closed_legs = 0
+        failed_legs = 0
+        direction = self._held_direction
+
+        logger.info('GroupArb: CLOSE %s %s reason=%s', direction, label, reason)
+
+        for mid in prices:
+            ticker = self._tickers[mid]
+
+            if direction == 'BUY_YES':
+                # We hold YES — sell YES at bid
+                sell_ticker = ticker
+            else:
+                # We hold NO — sell NO at bid
+                no_ticker = self._market_no_ticker.get(mid)
+                if no_ticker is None:
+                    no_ticker = trader.market_data.find_complement(ticker)
+                if no_ticker is None:
+                    continue
+                sell_ticker = no_ticker
+
+            # Check we actually have a position to sell
+            pos = trader.position_manager.get_position(sell_ticker)
+            if pos is None or pos.quantity <= 0:
+                continue
+
+            best_bid = trader.market_data.get_best_bid(sell_ticker)
+            if best_bid is None or best_bid.price <= 0:
+                continue
+
+            try:
+                result = await trader.place_order(
+                    side=TradeSide.SELL,
+                    ticker=sell_ticker,
+                    limit_price=best_bid.price,
+                    quantity=pos.quantity,
+                )
+                if result.failure_reason:
+                    failed_legs += 1
+                else:
+                    closed_legs += 1
+            except Exception:
+                logger.exception('GroupArb: close leg failed for %s', mid[:16])
+                failed_legs += 1
+
+        close_action = f'CLOSE_{direction}' if direction else 'CLOSE'
+        self.record_decision(
+            ticker_name=label,
+            action=close_action,
+            executed=closed_legs > 0,
+            reasoning=f'{reason} closed={closed_legs} failed={failed_legs}',
+            signal_values=signal,
+        )
+
+        if closed_legs > 0:
+            self._held_direction = None
+            self._last_arb_time = time.monotonic()

@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 STRUCTURAL_TYPES = frozenset(
     {'same_event', 'complementary', 'implication', 'exclusivity'}
 )
-STATISTICAL_TYPES = frozenset({'correlated', 'structural', 'conditional', 'temporal'})
 
 # Synthetic half-spread for generating bid/ask from mid price.
 # Zero by default: backtest assumes no slippage. Set > 0 to simulate spread.
@@ -60,6 +59,9 @@ class BacktestResult:
 # PriceHistoryDataSource — converts price points to engine events
 # ---------------------------------------------------------------------------
 
+# Type alias for a single leg: (yes_ticker, prices, optional_no_ticker)
+Leg = tuple[Ticker, list[dict[str, Any]], Ticker | None]
+
 
 class PriceHistoryDataSource(DataSource):
     """DataSource that replays price history as PriceChange + OrderBook events.
@@ -71,40 +73,12 @@ class PriceHistoryDataSource(DataSource):
     events for each YES price point, enabling strategies that trade NO sides.
     """
 
-    def __init__(
-        self,
-        ticker_a: Ticker,
-        prices_a: list[dict[str, Any]],
-        ticker_b: Ticker,
-        prices_b: list[dict[str, Any]],
-        *,
-        no_ticker_a: Ticker | None = None,
-        no_ticker_b: Ticker | None = None,
-    ) -> None:
-        legs = [
-            (ticker_a, prices_a, no_ticker_a),
-            (ticker_b, prices_b, no_ticker_b),
-        ]
+    def __init__(self, legs: list[Leg]) -> None:
         self._events: list[Event] = []
         self._idx = 0
         self._build_events(legs)
 
-    @classmethod
-    def from_legs(
-        cls,
-        legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]],
-    ) -> PriceHistoryDataSource:
-        """Create from N legs, each (yes_ticker, prices, no_ticker)."""
-        instance = object.__new__(cls)
-        instance._events = []
-        instance._idx = 0
-        instance._build_events(legs)
-        return instance
-
-    def _build_events(
-        self,
-        legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]],
-    ) -> None:
+    def _build_events(self, legs: list[Leg]) -> None:
         """Convert raw {t, p} points into engine events, sorted by timestamp."""
         raw: list[tuple[int, Ticker, Decimal]] = []
         for yes_ticker, prices, no_ticker in legs:
@@ -260,18 +234,12 @@ def _build_engine(
     return TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
 
-def _engine_total_pnl(
-    engine: TradingEngine, initial_capital: Decimal = Decimal('10000')
-) -> tuple[Decimal, int]:
-    """Return (total_pnl, trade_count) as ending equity minus initial capital.
-
-    Computes actual equity: cash remaining + market value of all open positions.
-    This correctly handles buy-only strategies (structural arbs) where
-    PerformanceAnalyzer only sees negative cash flows from BUY trades.
-
-    initial_capital is the amount funded PER cash ticker (both Poly USDC
-    and Kalshi USD get this amount).  PnL = total_equity - total_funded.
-    """
+def _run_and_score(
+    engine: TradingEngine,
+    result_base: dict[str, str],
+    initial_capital: Decimal,
+) -> BacktestResult:
+    """Compute PnL from a completed engine run and return a BacktestResult."""
     pm = engine.trader.position_manager
     md = engine.trader.market_data
     total_equity = Decimal('0')
@@ -300,7 +268,12 @@ def _engine_total_pnl(
     total_funded = initial_capital * max(cash_tickers_count, 1)
     pnl = total_equity - total_funded
     trade_count = len(engine._perf.trades)
-    return pnl, trade_count
+    return BacktestResult(
+        **result_base,
+        total_pnl=pnl,
+        trade_count=trade_count,
+        passed=pnl > 0,
+    )
 
 
 async def _resolve_polymarket_token(
@@ -424,13 +397,7 @@ async def run_backtest_relation(
         strategy = strategy_cls(**kwargs)
         engine = _build_engine(data_source, strategy, initial_capital)
         await engine.start()
-        pnl, trades = _engine_total_pnl(engine, initial_capital)
-        return BacktestResult(
-            **result_base,
-            total_pnl=pnl,
-            trade_count=trades,
-            passed=pnl > 0,
-        )
+        return _run_and_score(engine, result_base, initial_capital)
 
     # --- Price history from API ---
     # Fetch prices for ALL legs sequentially to respect API rate limits
@@ -451,7 +418,7 @@ async def run_backtest_relation(
         return BacktestResult(**result_base, error=str(exc))
 
     # Build legs: (yes_ticker, prices, no_ticker) for each market with data
-    legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]] = []
+    legs: list[Leg] = []
     for i, prices in enumerate(all_prices):
         if len(prices) < 10:
             continue
@@ -469,21 +436,15 @@ async def run_backtest_relation(
 
     if spread_type in STRUCTURAL_TYPES:
         # Structural: run on full data
-        ds = PriceHistoryDataSource.from_legs(legs)
+        ds = PriceHistoryDataSource(legs)
         strategy = strategy_cls(**kwargs)
         engine = _build_engine(ds, strategy, initial_capital)
         await engine.start()
-        pnl, trades = _engine_total_pnl(engine, initial_capital)
-        return BacktestResult(
-            **result_base,
-            total_pnl=pnl,
-            trade_count=trades,
-            passed=pnl > 0,
-        )
+        return _run_and_score(engine, result_base, initial_capital)
 
     # Statistical: walk-forward 60/40
-    train_legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]] = []
-    test_legs: list[tuple[Ticker, list[dict[str, Any]], Ticker | None]] = []
+    train_legs: list[Leg] = []
+    test_legs: list[Leg] = []
     for yes_ticker, prices, no_ticker in legs:
         split = int(len(prices) * 0.6)
         train_legs.append((yes_ticker, prices[:split], no_ticker))
@@ -497,20 +458,14 @@ async def run_backtest_relation(
 
     # Train phase: warm up strategy
     strategy = strategy_cls(**kwargs)
-    train_ds = PriceHistoryDataSource.from_legs(train_legs)
+    train_ds = PriceHistoryDataSource(train_legs)
     train_engine = _build_engine(train_ds, strategy, initial_capital)
     await train_engine.start()
 
     # Test phase: reuse calibrated strategy, fresh engine
     strategy.reset_live_state()
-    test_ds = PriceHistoryDataSource.from_legs(test_legs)
+    test_ds = PriceHistoryDataSource(test_legs)
     test_engine = _build_engine(test_ds, strategy, initial_capital)
     await test_engine.start()
 
-    pnl, trades = _engine_total_pnl(test_engine, initial_capital)
-    return BacktestResult(
-        **result_base,
-        total_pnl=pnl,
-        trade_count=trades,
-        passed=pnl > 0,
-    )
+    return _run_and_score(test_engine, result_base, initial_capital)

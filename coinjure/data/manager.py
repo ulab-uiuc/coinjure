@@ -38,6 +38,7 @@ class DataManager:
         synthetic_book: bool = True,
     ) -> None:
         self.order_books: dict[Ticker, OrderBook] = {}
+        self._ob_by_symbol: dict[str, Ticker] = {}  # symbol → canonical Ticker
         self.spread = spread
         self.synthetic_size = synthetic_size
         self.synthetic_book = synthetic_book
@@ -47,8 +48,19 @@ class DataManager:
         self._market_timeline: deque[DataPoint] = deque(maxlen=max_timeline_events)
         self._next_market_sequence = 1
 
+    def _resolve_ob(self, ticker: Ticker) -> OrderBook | None:
+        """Look up order book by exact ticker, then fall back to symbol match."""
+        ob = self.order_books.get(ticker)
+        if ob is not None:
+            return ob
+        canonical = self._ob_by_symbol.get(ticker.symbol)
+        if canonical is not None:
+            return self.order_books.get(canonical)
+        return None
+
     def update_order_book(self, ticker: Ticker, order_book: OrderBook) -> None:
         self.order_books[ticker] = order_book
+        self._ob_by_symbol[ticker.symbol] = ticker
 
     def process_orderbook_event(self, event: OrderBookEvent) -> None:
         """Update order book from an incremental OrderBookEvent.
@@ -59,6 +71,7 @@ class DataManager:
 
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
+            self._ob_by_symbol[event.ticker.symbol] = event.ticker
 
         ob = self.order_books[event.ticker]
         level = Level(price=event.price, size=event.size)
@@ -101,6 +114,7 @@ class DataManager:
 
         if event.ticker not in self.order_books:
             self.order_books[event.ticker] = OrderBook()
+            self._ob_by_symbol[event.ticker.symbol] = event.ticker
 
         if self.synthetic_book:
             half_spread = self.spread / Decimal('2')
@@ -129,6 +143,7 @@ class DataManager:
     def remove_ticker(self, ticker: Ticker) -> None:
         """Remove all order book data for a ticker."""
         self.order_books.pop(ticker, None)
+        self._ob_by_symbol.pop(ticker.symbol, None)
 
     def prune_stale_tickers(self, active_symbols: set[str]) -> int:
         """Remove order books for tickers whose symbol is not in *active_symbols*.
@@ -138,22 +153,23 @@ class DataManager:
         stale = [t for t in self.order_books if t.symbol not in active_symbols]
         for t in stale:
             del self.order_books[t]
+            self._ob_by_symbol.pop(t.symbol, None)
         return len(stale)
 
     def get_bids(self, ticker: Ticker, depth: int | None = None) -> list[Level]:
-        ob = self.order_books.get(ticker)
+        ob = self._resolve_ob(ticker)
         return ob.get_bids(depth) if ob is not None else []
 
     def get_asks(self, ticker: Ticker, depth: int | None = None) -> list[Level]:
-        ob = self.order_books.get(ticker)
+        ob = self._resolve_ob(ticker)
         return ob.get_asks(depth) if ob is not None else []
 
     def get_best_bid(self, ticker: Ticker) -> Level | None:
-        ob = self.order_books.get(ticker)
+        ob = self._resolve_ob(ticker)
         return ob.best_bid if ob is not None else None
 
     def get_best_ask(self, ticker: Ticker) -> Level | None:
-        ob = self.order_books.get(ticker)
+        ob = self._resolve_ob(ticker)
         return ob.best_ask if ob is not None else None
 
     def get_market_history(

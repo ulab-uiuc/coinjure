@@ -49,7 +49,9 @@ async def fetch_kalshi_price_history(
     max_retries = 5
     base_delay = 3.0
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(), timeout=30.0
+    ) as client:
         for attempt in range(max_retries):
             resp = await client.get(url, params=params)
             if resp.status_code == 429:

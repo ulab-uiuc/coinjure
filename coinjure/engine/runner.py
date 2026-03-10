@@ -36,6 +36,22 @@ def _emit_stdout(message: str, *, emit_text: bool) -> None:
         print(message)
 
 
+def _fund_position(
+    pm: PositionManager,
+    ticker: CashTicker,
+    amount: Decimal,
+) -> None:
+    """Add initial cash position for a single currency."""
+    pm.update_position(
+        Position(
+            ticker=ticker,
+            quantity=amount,
+            average_cost=Decimal('0'),
+            realized_pnl=Decimal('0'),
+        )
+    )
+
+
 async def run_live_trading(
     data_source: DataSource,
     strategy: Strategy,
@@ -78,48 +94,25 @@ async def run_live_trading(
     # NOTE: data_source.start() is called by engine.start() internally
     # (guarded by _ds_started flag). Do NOT call it here to avoid double-starting.
 
-    if monitor:
-        from coinjure.cli.utils import add_monitoring_to_engine
+    from coinjure.cli.utils import add_monitoring_to_engine
 
-        monitored = add_monitoring_to_engine(
-            engine,
-            watch=True,
-            exchange_name=exchange_name,
-            socket_path=socket_path,
-        )
-        if duration:
-            try:
-                await asyncio.wait_for(monitored.start(), timeout=duration)
-            except asyncio.TimeoutError:
-                await monitored.stop()
-                _emit_stdout(
-                    f'Live trading stopped after {duration} seconds.',
-                    emit_text=emit_text,
-                )
-        else:
-            await monitored.start()
+    monitored = add_monitoring_to_engine(
+        engine,
+        watch=monitor,
+        exchange_name=exchange_name,
+        socket_path=socket_path,
+    )
+    if duration:
+        try:
+            await asyncio.wait_for(monitored.start(), timeout=duration)
+        except asyncio.TimeoutError:
+            await monitored.stop()
+            _emit_stdout(
+                f'Live trading stopped after {duration} seconds.',
+                emit_text=emit_text,
+            )
     else:
-        # In headless mode, still run the control socket server so
-        # `coinjure monitor` and `coinjure trade` can attach to this process.
-        from coinjure.cli.utils import add_monitoring_to_engine
-
-        monitored = add_monitoring_to_engine(
-            engine,
-            watch=False,
-            exchange_name=exchange_name,
-            socket_path=socket_path,
-        )
-        if duration:
-            try:
-                await asyncio.wait_for(monitored.start(), timeout=duration)
-            except asyncio.TimeoutError:
-                await monitored.stop()
-                _emit_stdout(
-                    f'Live trading stopped after {duration} seconds.',
-                    emit_text=emit_text,
-                )
-        else:
-            await monitored.start()
+        await monitored.start()
 
     _emit_stdout('Live trading session ended.', emit_text=emit_text)
 
@@ -142,10 +135,12 @@ async def run_live_paper_trading(
     """
     Run live paper trading (simulated) with the given configuration.
 
+    Funds both Polymarket USDC and Kalshi USD so cross-platform arbs work.
+
     Args:
         data_source: The live data source to use
         strategy: The trading strategy to execute
-        initial_capital: Starting capital in USDC
+        initial_capital: Starting capital per currency
         risk_manager: Optional risk manager (defaults to NoRiskManager)
         duration: Optional duration in seconds to run
         state_store: Optional state store for persistence and state recovery.
@@ -163,23 +158,8 @@ async def run_live_paper_trading(
         for pos in saved_positions:
             position_manager.update_position(pos)
     else:
-        position_manager.update_position(
-            Position(
-                ticker=CashTicker.POLYMARKET_USDC,
-                quantity=initial_capital,
-                average_cost=Decimal('0'),
-                realized_pnl=Decimal('0'),
-            )
-        )
-        # Fund Kalshi USD too so cross-platform arbs (same_event) can trade both legs
-        position_manager.update_position(
-            Position(
-                ticker=CashTicker.KALSHI_USD,
-                quantity=initial_capital,
-                average_cost=Decimal('0'),
-                realized_pnl=Decimal('0'),
-            )
-        )
+        _fund_position(position_manager, CashTicker.POLYMARKET_USDC, initial_capital)
+        _fund_position(position_manager, CashTicker.KALSHI_USD, initial_capital)
 
     if risk_manager is None:
         risk_manager = NoRiskManager()
@@ -190,7 +170,7 @@ async def run_live_paper_trading(
         position_manager=position_manager,
         min_fill_rate=Decimal('0.5'),
         max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
+        commission_rate=Decimal('0.005'),  # ~0.5% realistic Polymarket commission
         alerter=alerter,
     )
 
@@ -320,23 +300,9 @@ async def run_live_polymarket_trading(
                     )
                 )
         else:
-            position_manager.update_position(
-                Position(
-                    ticker=CashTicker.POLYMARKET_USDC,
-                    quantity=live_balance,
-                    average_cost=Decimal('0'),
-                    realized_pnl=Decimal('0'),
-                )
-            )
+            _fund_position(position_manager, CashTicker.POLYMARKET_USDC, live_balance)
     else:
-        position_manager.update_position(
-            Position(
-                ticker=CashTicker.POLYMARKET_USDC,
-                quantity=live_balance,
-                average_cost=Decimal('0'),
-                realized_pnl=Decimal('0'),
-            )
-        )
+        _fund_position(position_manager, CashTicker.POLYMARKET_USDC, live_balance)
 
     print(f'Starting live Polymarket trading with balance: {live_balance} USDC')
 
@@ -358,97 +324,6 @@ async def run_live_polymarket_trading(
     print(f'Cash positions: {position_manager.get_cash_positions()}')
     print(f'Non-cash positions: {position_manager.get_non_cash_positions()}')
     print(f'Total realized PnL: {position_manager.get_total_realized_pnl()}')
-
-
-async def run_live_kalshi_paper_trading(
-    data_source: DataSource,
-    strategy: Strategy,
-    initial_capital: Decimal,
-    risk_manager: RiskManager | None = None,
-    duration: float | None = None,
-    state_store: StateStore | None = None,
-    alerter: Alerter | None = None,
-    continuous: bool = True,
-    drawdown_alert_pct: Decimal | None = None,
-    monitor: bool = False,
-    exchange_name: str = '',
-    emit_text: bool = True,
-    socket_path: Path | None = None,
-) -> None:
-    """
-    Run live paper trading on Kalshi markets (simulated).
-
-    Args:
-        data_source: The Kalshi live data source
-        strategy: The trading strategy to execute
-        initial_capital: Starting capital in USD
-        risk_manager: Optional risk manager (defaults to NoRiskManager)
-        duration: Optional duration in seconds to run
-        state_store: Optional state store for persistence and state recovery.
-        alerter: Optional alerter for notifications.
-        continuous: Keep engine running when the data source is temporarily idle.
-        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
-        emit_text: Whether to emit text output to stdout.
-    """
-    market_data = DataManager()
-    position_manager = PositionManager()
-
-    saved_positions = state_store.load_positions() if state_store else []
-    if saved_positions:
-        logger.info('Restoring %d positions from state store', len(saved_positions))
-        for pos in saved_positions:
-            position_manager.update_position(pos)
-    else:
-        position_manager.update_position(
-            Position(
-                ticker=CashTicker.KALSHI_USD,
-                quantity=initial_capital,
-                average_cost=Decimal('0'),
-                realized_pnl=Decimal('0'),
-            )
-        )
-
-    if risk_manager is None:
-        risk_manager = NoRiskManager()
-
-    trader = PaperTrader(
-        market_data=market_data,
-        risk_manager=risk_manager,
-        position_manager=position_manager,
-        min_fill_rate=Decimal('0.5'),
-        max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
-        alerter=alerter,
-    )
-
-    await run_live_trading(
-        data_source,
-        strategy,
-        trader,
-        duration,
-        state_store,
-        alerter,
-        continuous,
-        drawdown_alert_pct,
-        monitor=monitor,
-        exchange_name=exchange_name,
-        emit_text=emit_text,
-        socket_path=socket_path,
-    )
-
-    _emit_stdout('\n--- Final Portfolio Status ---', emit_text=emit_text)
-    _emit_stdout(
-        f'Cash positions: {position_manager.get_cash_positions()}',
-        emit_text=emit_text,
-    )
-    _emit_stdout(
-        f'Non-cash positions: {position_manager.get_non_cash_positions()}',
-        emit_text=emit_text,
-    )
-    _emit_stdout(
-        f'Total realized PnL: {position_manager.get_total_realized_pnl()}',
-        emit_text=emit_text,
-    )
 
 
 async def run_live_kalshi_trading(
@@ -539,23 +414,9 @@ async def run_live_kalshi_trading(
                     )
                 )
         else:
-            position_manager.update_position(
-                Position(
-                    ticker=CashTicker.KALSHI_USD,
-                    quantity=initial_balance,
-                    average_cost=Decimal('0'),
-                    realized_pnl=Decimal('0'),
-                )
-            )
+            _fund_position(position_manager, CashTicker.KALSHI_USD, initial_balance)
     else:
-        position_manager.update_position(
-            Position(
-                ticker=CashTicker.KALSHI_USD,
-                quantity=initial_balance,
-                average_cost=Decimal('0'),
-                realized_pnl=Decimal('0'),
-            )
-        )
+        _fund_position(position_manager, CashTicker.KALSHI_USD, initial_balance)
 
     logger.info('Starting live Kalshi trading with balance: $%s', initial_balance)
 

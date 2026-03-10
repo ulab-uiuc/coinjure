@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from coinjure.data.source import DataSource
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
@@ -24,11 +25,18 @@ logger = logging.getLogger(__name__)
 class HubDataSource(DataSource):
     """DataSource that reads events from a running MarketDataHub via Unix socket."""
 
-    def __init__(self, socket_path: Path, queue_size: int = 1000) -> None:
+    def __init__(
+        self,
+        socket_path: Path,
+        queue_size: int = 1000,
+        tickers: list[str] | None = None,
+    ) -> None:
         self.socket_path = socket_path
         self._queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=queue_size)
         self._reader_task: asyncio.Task | None = None
         self._running: bool = False
+        self._tickers: set[str] = set(tickers) if tickers else set()
+        self._sub_id: int | None = None
 
     async def start(self) -> None:
         self._running = True
@@ -50,12 +58,20 @@ class HubDataSource(DataSource):
             return None
 
     def watch_token(self, token_id: str) -> None:
-        """Relay watch request to hub so the underlying source prioritizes this token."""
-        self._send_control({'cmd': 'watch_token', 'token_id': token_id})
+        """Add token to local filter and relay to hub."""
+        self._tickers.add(token_id)
+        payload: dict[str, Any] = {'cmd': 'watch_token', 'token_id': token_id}
+        if self._sub_id is not None:
+            payload['sub_id'] = self._sub_id
+        self._send_control(payload)
 
     def unwatch_token(self, token_id: str) -> None:
-        """Relay unwatch request to hub."""
-        self._send_control({'cmd': 'unwatch_token', 'token_id': token_id})
+        """Remove token from local filter and relay to hub."""
+        self._tickers.discard(token_id)
+        payload: dict[str, Any] = {'cmd': 'unwatch_token', 'token_id': token_id}
+        if self._sub_id is not None:
+            payload['sub_id'] = self._sub_id
+        self._send_control(payload)
 
     def _send_control(self, payload: dict) -> None:
         """Fire-and-forget: send a control command to the hub via a new connection."""
@@ -119,6 +135,29 @@ class HubDataSource(DataSource):
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         try:
+            # Send subscribe message with current ticker filter
+            subscribe_msg = (
+                json.dumps(
+                    {
+                        'cmd': 'subscribe',
+                        'tickers': list(self._tickers),
+                    }
+                )
+                + '\n'
+            )
+            writer.write(subscribe_msg.encode())
+            await writer.drain()
+
+            # Read ack
+            ack_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            if ack_line:
+                try:
+                    ack = json.loads(ack_line.decode())
+                    self._sub_id = ack.get('sub_id')
+                except json.JSONDecodeError:
+                    pass
+
+            # Stream events
             while self._running:
                 line = await reader.readline()
                 if not line:
@@ -126,7 +165,6 @@ class HubDataSource(DataSource):
                     break
                 event = self._deserialize(line.decode())
                 if event is not None:
-                    # If local queue is full, drop oldest
                     if self._queue.full():
                         try:
                             self._queue.get_nowait()
@@ -137,6 +175,7 @@ class HubDataSource(DataSource):
                     except asyncio.QueueFull:
                         pass
         finally:
+            self._sub_id = None
             try:
                 writer.close()
                 await writer.wait_closed()
