@@ -9,6 +9,7 @@ import pytest
 
 from coinjure.engine.backtester import (
     BacktestResult,
+    Leg,
     PriceHistoryDataSource,
     _build_same_event_kwargs,
     _make_ticker,
@@ -80,7 +81,9 @@ class TestPriceHistoryDataSource:
         prices_a = _price_series([0.5, 0.6])
         prices_b = _price_series([0.3, 0.4])
 
-        ds = PriceHistoryDataSource(ticker_a, prices_a, ticker_b, prices_b)
+        ds = PriceHistoryDataSource(
+            [(ticker_a, prices_a, None), (ticker_b, prices_b, None)]
+        )
 
         # Each price point produces: PriceChange + bid OrderBook + ask OrderBook = 3 events
         # 2 series × 2 points = 4 price points × 3 = 12 events
@@ -114,7 +117,9 @@ class TestPriceHistoryDataSource:
         prices_a = _price_series([0.5], start_ts=2000)
         prices_b = _price_series([0.3], start_ts=1000)
 
-        ds = PriceHistoryDataSource(ticker_a, prices_a, ticker_b, prices_b)
+        ds = PriceHistoryDataSource(
+            [(ticker_a, prices_a, None), (ticker_b, prices_b, None)]
+        )
         events = asyncio.run(self._drain(ds))
 
         # First event should be from B (earlier timestamp)
@@ -128,7 +133,7 @@ class TestPriceHistoryDataSource:
             market_id='MA',
             event_id='E1',
         )
-        ds = PriceHistoryDataSource(ticker_a, _price_series([0.5]), ticker_a, [])
+        ds = PriceHistoryDataSource([(ticker_a, _price_series([0.5]), None)])
         events = asyncio.run(self._drain(ds))
         # Should get exactly 3 events (1 price point × 3)
         assert len(events) == 3
@@ -146,7 +151,7 @@ class TestPriceHistoryDataSource:
             {'t': 'bad', 'p': 0.6},  # bad timestamp
             {'p': 0.7},  # missing timestamp
         ]
-        ds = PriceHistoryDataSource(ticker_a, prices_a, ticker_a, [])
+        ds = PriceHistoryDataSource([(ticker_a, prices_a, None)])
         events = asyncio.run(self._drain(ds))
         assert len(events) == 3  # only the valid point
 
@@ -166,7 +171,7 @@ class TestPriceHistoryDataSource:
         prices_a = _price_series([0.5])
         prices_b = _price_series([0.6])
 
-        ds = PriceHistoryDataSource(poly, prices_a, kalshi, prices_b)
+        ds = PriceHistoryDataSource([(poly, prices_a, None), (kalshi, prices_b, None)])
         events = asyncio.run(self._drain(ds))
         assert len(events) == 6  # 2 points × 3 events each
 

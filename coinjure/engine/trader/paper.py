@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import random
+import time
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from coinjure.data.manager import DataManager
+from coinjure.ticker import Ticker
 from coinjure.trading.position import PositionManager
 from coinjure.trading.risk import RiskManager
 from coinjure.trading.trader import Trader
@@ -16,10 +18,11 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
-from coinjure.ticker import Ticker
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter
+
+_RESTING_ORDER_TTL = 300.0  # Cancel unfilled resting orders after 5 minutes
 
 
 class PaperTrader(Trader):
@@ -35,68 +38,81 @@ class PaperTrader(Trader):
     ):
         super().__init__(market_data, risk_manager, position_manager, alerter=alerter)
         self.orders: list[Order] = []
+        self._resting_orders: list[Order] = []  # Only unfilled/partial orders
         self.min_fill_rate = min_fill_rate
         self.max_fill_rate = max_fill_rate
         self.commission_rate = commission_rate
 
-    def _simulate_execution(
-        self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
-    ) -> Order:
-        """Simulate order execution based on current market data"""
+    def _random_fill_rate(self) -> Decimal:
+        return Decimal(
+            str(random.uniform(float(self.min_fill_rate), float(self.max_fill_rate)))
+        )
+
+    def _available_liquidity(
+        self,
+        side: TradeSide,
+        ticker: Ticker,
+        limit_price: Decimal,
+        fill_rate: Decimal | None = None,
+    ) -> Decimal:
+        """Compute available liquidity within the price limit, scaled by fill rate."""
         levels = (
             self.market_data.get_asks(ticker)
             if side == TradeSide.BUY
             else self.market_data.get_bids(ticker)
         )
-
-        # Calculate available liquidity within our price limit
-        available_liquidity = Decimal('0.0')
-
+        raw = Decimal('0')
         for level in levels:
             if (side == TradeSide.BUY and level.price <= limit_price) or (
                 side == TradeSide.SELL and level.price >= limit_price
             ):
-                # Ensure addition is with Decimal
-                available_liquidity += Decimal(level.size)
+                raw += Decimal(level.size)
 
-        # Simulate that not all liquidity is actually available
-        fill_rate = Decimal(
-            str(random.uniform(float(self.min_fill_rate), float(self.max_fill_rate)))
-        )
-        available_liquidity *= fill_rate
+        if fill_rate is None:
+            fill_rate = self._random_fill_rate()
+        return raw * fill_rate
 
-        # Calculate how much we can fill
-        filled_qty = min(quantity, available_liquidity)
-        if filled_qty == Decimal('0.0'):
-            return Order(
+    def _simulate_execution(
+        self, side: TradeSide, ticker: Ticker, limit_price: Decimal, quantity: Decimal
+    ) -> Order:
+        """Simulate order execution based on current market data."""
+        # Generate fill rate once per order — reused for resting fill attempts
+        fill_rate = self._random_fill_rate()
+        available = self._available_liquidity(side, ticker, limit_price, fill_rate)
+        filled_qty = min(quantity, available)
+
+        if filled_qty == Decimal('0'):
+            order = Order(
                 status=OrderStatus.PLACED,
                 side=side,
                 ticker=ticker,
                 limit_price=limit_price,
-                filled_quantity=Decimal('0.0'),
-                average_price=Decimal('0.0'),
+                filled_quantity=Decimal('0'),
+                average_price=Decimal('0'),
                 trades=[],
                 remaining=quantity,
-                commission=Decimal('0.0'),
+                commission=Decimal('0'),
             )
+            order._fill_rate = fill_rate  # type: ignore[attr-defined]
+            order._created_at = time.monotonic()  # type: ignore[attr-defined]
+            return order
 
-        # Pessimistic fill it at the limit price
+        # Pessimistic fill at the limit price
+        commission = filled_qty * limit_price * self.commission_rate
         trades: list[Trade] = [
             Trade(
                 side=side,
                 ticker=ticker,
                 price=limit_price,
                 quantity=filled_qty,
-                commission=filled_qty * limit_price * self.commission_rate,
+                commission=commission,
             )
         ]
 
         remaining = quantity - filled_qty
-        commission = sum(trade.commission for trade in trades)
-
-        return Order(
+        order = Order(
             status=OrderStatus.FILLED
-            if remaining == Decimal('0.0')
+            if remaining == Decimal('0')
             else OrderStatus.PARTIALLY_FILLED,
             side=side,
             ticker=ticker,
@@ -107,34 +123,33 @@ class PaperTrader(Trader):
             remaining=remaining,
             commission=commission,
         )
+        order._fill_rate = fill_rate  # type: ignore[attr-defined]
+        order._created_at = time.monotonic()  # type: ignore[attr-defined]
+        return order
 
     def try_fill_resting_orders(self) -> None:
-        """Attempt to fill PLACED orders against current orderbook state."""
-        for order in self.orders:
-            if order.status != OrderStatus.PLACED:
+        """Attempt to fill resting (PLACED/PARTIALLY_FILLED) orders against current orderbook."""
+        if not self._resting_orders:
+            return
+        now = time.monotonic()
+        still_resting: list[Order] = []
+        for order in self._resting_orders:
+            # Expire stale resting orders
+            created = getattr(order, '_created_at', now)
+            if now - created > _RESTING_ORDER_TTL:
+                order.status = OrderStatus.CANCELLED
                 continue
-            levels = (
-                self.market_data.get_asks(order.ticker)
-                if order.side == TradeSide.BUY
-                else self.market_data.get_bids(order.ticker)
+            # Reuse the fill rate assigned at order creation for determinism
+            fill_rate = getattr(order, '_fill_rate', None)
+            available = self._available_liquidity(
+                order.side,
+                order.ticker,
+                order.limit_price,
+                fill_rate,
             )
-            available = Decimal('0')
-            for level in levels:
-                if (
-                    order.side == TradeSide.BUY and level.price <= order.limit_price
-                ) or (
-                    order.side == TradeSide.SELL and level.price >= order.limit_price
-                ):
-                    available += Decimal(level.size)
-
-            fill_rate = Decimal(
-                str(
-                    random.uniform(float(self.min_fill_rate), float(self.max_fill_rate))
-                )
-            )
-            available *= fill_rate
             filled_qty = min(order.remaining, available)
             if filled_qty <= 0:
+                still_resting.append(order)
                 continue
 
             trade = Trade(
@@ -150,11 +165,12 @@ class PaperTrader(Trader):
             order.remaining -= filled_qty
             order.average_price = order.limit_price
             order.commission += trade.commission
-            order.status = (
-                OrderStatus.FILLED
-                if order.remaining == Decimal('0')
-                else OrderStatus.PARTIALLY_FILLED
-            )
+            if order.remaining == Decimal('0'):
+                order.status = OrderStatus.FILLED
+            else:
+                order.status = OrderStatus.PARTIALLY_FILLED
+                still_resting.append(order)
+        self._resting_orders = still_resting
 
     async def _alert_rejected(self, reason: OrderFailureReason, ticker: Ticker) -> None:
         if self.alerter:
@@ -185,12 +201,11 @@ class PaperTrader(Trader):
 
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
-            result = PlaceOrderResult(
+            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
+            return PlaceOrderResult(
                 order=None,
                 failure_reason=OrderFailureReason.INVALID_ORDER,
             )
-            await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
-            return result
 
         # Don't allow short selling
         if side == TradeSide.SELL:
@@ -230,5 +245,7 @@ class PaperTrader(Trader):
 
         # Store order
         self.orders.append(order)
+        if order.status in (OrderStatus.PLACED, OrderStatus.PARTIALLY_FILLED):
+            self._resting_orders.append(order)
 
         return PlaceOrderResult(order=order)
