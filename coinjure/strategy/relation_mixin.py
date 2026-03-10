@@ -28,7 +28,8 @@ class RelationArbMixin:
         if self._relation:
             for m in self._relation.markets:
                 self._ids.append(
-                    m.get('condition_id', '') or m.get('market_ticker', '') or m.get('id', '')
+                    m.get('condition_id', '') or m.get('market_ticker', '')
+                    or m.get('ticker', '') or m.get('id', '')
                 )
                 # token_id (singular) for backward compat; token_ids[0] = YES token
                 tid = m.get('token_id', '')

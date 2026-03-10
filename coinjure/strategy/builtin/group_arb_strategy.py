@@ -77,7 +77,7 @@ class GroupArbStrategy(Strategy):
         self.min_edge = Decimal(str(min_edge))
         self.trade_size = Decimal(str(trade_size))
         self.cooldown_seconds = cooldown_seconds
-        self.min_markets = min_markets
+        self._min_markets_override = min_markets
 
         self._event_id = event_id
         self._relation_market_ids: set[str] = set()
@@ -97,7 +97,7 @@ class GroupArbStrategy(Strategy):
                     eid = m.get('event_id', '') or m.get('event_ticker', '')
                     if eid and not self._event_id:
                         self._event_id = eid
-                    mid = m.get('id', '') or m.get('market_ticker', '')
+                    mid = m.get('id', '') or m.get('market_ticker', '') or m.get('ticker', '')
                     if mid:
                         self._relation_market_ids.add(mid)
                     token_ids = m.get('token_ids', [])
@@ -137,6 +137,13 @@ class GroupArbStrategy(Strategy):
 
         self._tickers: dict[str, PolyMarketTicker] = {}
         self._last_arb_time: float = 0.0
+
+        # Require ALL markets in the relation to have prices before arbing.
+        # With partial data, sum_yes is artificially low → false BUY_YES signals.
+        if self._relation_market_ids:
+            self.min_markets = len(self._relation_market_ids)
+        else:
+            self.min_markets = self._min_markets_override
 
     def watch_tokens(self) -> list[str]:
         tokens = list(self._relation_token_ids) + list(self._no_token_ids)
@@ -196,9 +203,13 @@ class GroupArbStrategy(Strategy):
         if len(self._tickers) < self.min_markets:
             return
 
-        # Query actual best asks from DataManager order book
+        # Query actual best asks from DataManager order book.
+        # Only consider markets that belong to the relation to avoid
+        # partial-data arbs when event_id matching adds extra markets.
         prices: dict[str, Decimal] = {}
         for mid, ticker in self._tickers.items():
+            if self._relation_market_ids and mid not in self._relation_market_ids:
+                continue
             best_ask = trader.market_data.get_best_ask(ticker)
             if best_ask is not None and best_ask.price > 0:
                 prices[mid] = best_ask.price

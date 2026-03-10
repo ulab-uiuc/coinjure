@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 from decimal import Decimal
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -32,6 +33,7 @@ from coinjure.engine.trader.kalshi import KalshiTrader
 from coinjure.engine.trader.paper import PaperTrader
 from coinjure.strategy.builtin.implication_arb_strategy import ImplicationArbStrategy
 from coinjure.strategy.builtin.group_arb_strategy import GroupArbStrategy
+from coinjure.strategy.builtin.conditional_arb_strategy import ConditionalArbStrategy
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker
 from coinjure.trading.position import Position, PositionManager
@@ -39,11 +41,22 @@ from coinjure.trading.risk import StandardRiskManager, NoRiskManager
 
 # ── Kalshi series to watch ───────────────────────────────────────────────
 KALSHI_WATCH_SERIES = [
+    # Political — calendar arb
     'KXTRUMPOUT27', 'KXINSURRECTION', 'KXGREENTERRITORY',
-    'KXSTATE51', 'KXFEDCHAIRCONFIRM', 'KXFEDDECISION',
-    'KXPARDONSTRUMP', 'KXTRUTHSOCIAL', 'KXSCOTUSPOWER',
+    # Political — group arb
+    'KXSTATE51', 'KXNEXTPRESSEC', 'KXSCOTUSPOWER',
+    'KXPARDONSTRUMP', 'KXTRUTHSOCIAL', 'KXTRUMPFIRE',
+    'KXTRUMPAGCOUNT', 'KXEOTRUMPTERM', 'KXNEXTSTATE',
+    'KXNEXTDEF', 'KXNEXTDHSSEC', 'KXBILLSCOUNT',
+    'KXGOLDCARDS', 'KXAPRPOTUS', 'KXGREENLANDPRICE',
+    # Economic — group arb
+    'KXFEDDECISION', 'KXFEDCHAIRCONFIRM', 'KXFEDCHGCOUNT',
+    'KXFED', 'KXFOMCDISSENTCOUNT', 'KXFEDGOVNOM',
     'KXTARIFFRATECAN', 'KXTARIFFRATEEU', 'KXTARIFFRATEPRC',
-    'KXLAGODAYS', 'KXGDPNOM',
+    'KXTARIFFRATEINDIA', 'KXGDPYEAR', 'KXGDPNOM',
+    'KXGOVTCUTS', 'KXLAGODAYS',
+    # Implication — thresholds
+    'KXAGENCIES', 'KXBTCMAX100',
 ]
 
 # ── Kalshi implication strategies ────────────────────────────────────────
@@ -67,6 +80,51 @@ KALSHI_IMPL_RELATIONS = [
     'KXGREENTERRITORY-29-26APR-KXGREENTERRITORY-29-27',
     'KXGREENTERRITORY-29-26APR-KXGREENTERRITORY-29',
     'KXGREENTERRITORY-29-27-KXGREENTERRITORY-29',
+    # DOGE agency cuts: threshold nesting (>=10 implies >=5)
+    'KXAGENCI-KXAGENCI',
+]
+
+# ── Kalshi group arb (complementary/exclusivity) ──────────────────────
+KALSHI_GROUP_RELATIONS = [
+    # Tariff rates (high sums = strong BUY_NO edge)
+    'comp-KXTARIFFRATEPRC-26JUL01-14-KXTARIFFRATEPRC-26JUL01-24-KXTARIFFRATEPRC-26JUL01-30-+4',
+    'comp-KXTARIFFRATECAN-26JUL01-14-KXTARIFFRATECAN-26JUL01-24-KXTARIFFRATECAN-26JUL01-30-+3',
+    'comp-KXTARIFFRATEEU-26JUL01-14-KXTARIFFRATEEU-26JUL01-24-KXTARIFFRATEEU-26JUL01-30-+4',
+    'comp-KXTARIFFRATEINDIA-26JUL01-14-KXTARIFFRATEINDIA-26JUL01-24-KXTARIFFRATEINDIA-26JUL01-30-+4',
+    # Political
+    'comp-KXPARDONSTRUMP-26MAR-0-KXPARDONSTRUMP-26MAR-1-KXPARDONSTRUMP-26MAR-12-+5',
+    'comp-KXEOTRUMPTERM-29JAN20-300-KXEOTRUMPTERM-29JAN20-324-KXEOTRUMPTERM-29JAN20-374-+9',
+    'comp-KXTRUMPFIRE-27-0-KXTRUMPFIRE-27-1-KXTRUMPFIRE-27-2-+3',
+    'comp-KXSCOTUSPOWER-29-29JAN20-R0-0-KXSCOTUSPOWER-29-29JAN20-R6-3-KXSCOTUSPOWER-29-29JAN20-R7-2-+2',
+    'comp-KXTRUMPAGCOUNT-29-1-KXTRUMPAGCOUNT-29-2-KXTRUMPAGCOUNT-29-3-+2',
+    'comp-KXGOVTCUTS-28-1000-KXGOVTCUTS-28-2000-KXGOVTCUTS-28-250-+2',
+    'comp-KXGOLDCARDS-26-B0.0-KXGOLDCARDS-26-B3.0-KXGOLDCARDS-26-B52.5-+1',
+    'comp-KXNEXTSTATE-29-BHAG-KXNEXTSTATE-29-NONE-KXNEXTSTATE-29-RGRE-+1',
+    'comp-KXNEXTDEF-29-JERN-KXNEXTDEF-29-NONE-KXNEXTDEF-29-RDES-+3',
+    # Economic
+    'comp-KXGDPYEAR-26-B0.3-KXGDPYEAR-26-B0.8-KXGDPYEAR-26-B1.3-+7',
+    'comp-KXGDPNOM-IND26-4.0-KXGDPNOM-IND26-4.2-KXGDPNOM-IND26-4.4-+1',
+    'comp-KXBILLSCOUNT-26MAR-0.0-KXBILLSCOUNT-26MAR-1.0-KXBILLSCOUNT-26MAR-2.0-+5',
+    # Fed decisions (multiple meeting dates)
+    'comp-KXFEDDECISION-26MAR-C25-KXFEDDECISION-26MAR-H0',
+    'comp-KXFEDDECISION-26APR-C25-KXFEDDECISION-26APR-C26-KXFEDDECISION-26APR-H0-+1',
+    'comp-KXFEDDECISION-26JUN-C25-KXFEDDECISION-26JUN-C26-KXFEDDECISION-26JUN-H0-+1',
+    'comp-KXFEDDECISION-26SEP-C25-KXFEDDECISION-26SEP-H0-KXFEDDECISION-26SEP-H25',
+    'comp-KXFEDDECISION-26OCT-C25-KXFEDDECISION-26OCT-H0-KXFEDDECISION-26OCT-H25',
+    'comp-KXFEDDECISION-26DEC-C25-KXFEDDECISION-26DEC-H0-KXFEDDECISION-26DEC-H25',
+    'comp-KXFEDDECISION-27JAN-C25-KXFEDDECISION-27JAN-H0',
+    'comp-KXFEDDECISION-27MAR-C25-KXFEDDECISION-27MAR-H0-KXFEDDECISION-27MAR-H25',
+    'comp-KXFED-26DEC-T2.75-KXFED-26DEC-T3.00-KXFED-26DEC-T3.25-+1',
+    'comp-KXFEDCHAIRCONFIRM-JSHE-KXFEDCHAIRCONFIRM-KWAR',
+    'comp-KXFOMCDISSENTCOUNT-26MAR-1-KXFOMCDISSENTCOUNT-26MAR-2-KXFOMCDISSENTCOUNT-26MAR-3-+1',
+    # Exclusivity
+    'excl-KXNEXTPRESSEC-29JAN21-AHAB-KXNEXTPRESSEC-29JAN21-KLAK-KXNEXTPRESSEC-29JAN21-NNP-+2',
+    'excl-KXSTATE51-29-CA-KXSTATE51-29-GL-KXSTATE51-29-PR-+1',
+    # Misc
+    'comp-KXLAGODAYS-26MAR-1-KXLAGODAYS-26MAR-2-KXLAGODAYS-26MAR-3-+2',
+    'comp-KXPARDONSYEAR-26DEC-299-KXPARDONSYEAR-26DEC-37-KXPARDONSYEAR-26DEC-74-+2',
+    'comp-KXGREENLANDPRICE-29JAN21-1049B-KXGREENLANDPRICE-29JAN21-1200B-KXGREENLANDPRICE-29JAN21-199B-+5',
+    'comp-KXBTCMAX100-26-APR-KXBTCMAX100-26-DEC-KXBTCMAX100-26-JUNE-+3',
 ]
 
 # ── Polymarket strategies ────────────────────────────────────────────────
@@ -194,12 +252,27 @@ async def run_kalshi_engine():
     )
 
     # Build strategies
-    strategies = _build_strategies(
+    strategies: list[Strategy] = []
+
+    # Implication arb (calendar spreads)
+    impl_strats = _build_strategies(
         KALSHI_IMPL_RELATIONS,
         ImplicationArbStrategy,
         trade_size=1.0,
         min_edge=0.01,
     )
+    strategies.extend(impl_strats)
+
+    # Group arb (complementary/exclusivity — sums that deviate from 1.0)
+    for rid in KALSHI_GROUP_RELATIONS:
+        try:
+            s = GroupArbStrategy(relation_id=rid, trade_size=1.0, min_edge=0.02)
+            if s._relation_market_ids:
+                strategies.append(s)
+            else:
+                logger.warning('Skipping group %s: no market IDs', rid)
+        except Exception as e:
+            logger.warning('Skipping group %s: %s', rid, e)
 
     if not strategies:
         logger.error('No Kalshi strategies loaded')
@@ -207,12 +280,14 @@ async def run_kalshi_engine():
 
     multi = MultiStrategy(strategies)
 
+    n_impl = len(impl_strats)
+    n_group = len(strategies) - n_impl
     logger.info(
-        'KALSHI ENGINE: $%s balance, %d strategies, %d series watched',
-        balance, len(strategies), len(KALSHI_WATCH_SERIES),
+        'KALSHI ENGINE: $%s balance, %d strategies (%d impl + %d group), %d series',
+        balance, len(strategies), n_impl, n_group, len(KALSHI_WATCH_SERIES),
     )
-    for s in strategies:
-        logger.info('  Kalshi: %s → %s', s.relation_id, s._ids)
+    for s in impl_strats:
+        logger.info('  Kalshi impl: %s → %s', s.relation_id, s._ids)
 
     await run_live_trading(
         data_source=data_source,
@@ -221,6 +296,7 @@ async def run_kalshi_engine():
         continuous=True,
         monitor=False,
         exchange_name='Kalshi',
+        socket_path=Path.home() / '.coinjure' / f'engine-kalshi-{os.getpid()}.sock',
     )
 
 
@@ -246,6 +322,9 @@ async def run_polymarket_engine():
         market_data=market_data,
         risk_manager=NoRiskManager(),
         position_manager=position_manager,
+        min_fill_rate=Decimal('0.5'),
+        max_fill_rate=Decimal('1.0'),
+        commission_rate=Decimal('0.0'),
     )
 
     # Seed cash
@@ -299,24 +378,31 @@ async def run_polymarket_engine():
         continuous=True,
         monitor=False,
         exchange_name='Polymarket',
+        socket_path=Path.home() / '.coinjure' / f'engine-poly-{os.getpid()}.sock',
     )
 
 
 async def main():
+    n_kalshi = len(KALSHI_IMPL_RELATIONS) + len(KALSHI_GROUP_RELATIONS)
+    n_poly = len(POLY_GROUP_RELATIONS) + len(POLY_IMPL_RELATIONS)
     print('=' * 60)
     print('  FULL COVERAGE Multi-Exchange Live Trading')
     print('  Kalshi: real ($10) | Polymarket: paper ($100)')
-    print(f'  Kalshi strategies: {len(KALSHI_IMPL_RELATIONS)} implication arbs')
-    print(f'  Polymarket strategies: {len(POLY_GROUP_RELATIONS)} group + {len(POLY_IMPL_RELATIONS)} implication')
-    print(f'  Total: {len(KALSHI_IMPL_RELATIONS) + len(POLY_GROUP_RELATIONS) + len(POLY_IMPL_RELATIONS)} strategies')
+    print(f'  Kalshi: {len(KALSHI_IMPL_RELATIONS)} implication + {len(KALSHI_GROUP_RELATIONS)} group arbs')
+    print(f'  Polymarket: {len(POLY_GROUP_RELATIONS)} group + {len(POLY_IMPL_RELATIONS)} implication')
+    print(f'  Total: {n_kalshi + n_poly} relation strategies')
     print('=' * 60)
 
     # Run both engines concurrently
-    await asyncio.gather(
+    results = await asyncio.gather(
         run_kalshi_engine(),
         run_polymarket_engine(),
         return_exceptions=True,
     )
+    for i, result in enumerate(results):
+        name = ['Kalshi', 'Polymarket'][i]
+        if isinstance(result, Exception):
+            logger.error('%s engine failed: %s', name, result, exc_info=result)
 
 
 if __name__ == '__main__':
