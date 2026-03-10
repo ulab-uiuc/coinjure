@@ -131,8 +131,10 @@ class LiveKalshiDataSource(DataSource):
         event_cache_file: str = 'kalshi_events_cache.jsonl',
         polling_interval: float = 60.0,
         reprocess_on_start: bool = True,
+        watch_series: list[str] | None = None,
     ):
         self.polling_interval = polling_interval
+        self._watch_series = watch_series or []
         self.event_cache_file = event_cache_file
         self.processed_event_tickers: set[str] = set()
         self.event_queue: asyncio.Queue = asyncio.Queue()
@@ -180,6 +182,7 @@ class LiveKalshiDataSource(DataSource):
         """Fetch open markets from Kalshi API, filtering for liquid markets."""
         try:
             all_markets: list[dict[str, Any]] = []
+            seen_tickers: set[str] = set()
             cursor = None
 
             for _ in range(5):
@@ -194,16 +197,37 @@ class LiveKalshiDataSource(DataSource):
                     d: dict[str, Any] = (
                         m.to_dict() if hasattr(m, 'to_dict') else dict(m)
                     )
-                    # Only include markets with at least an ask price
                     yes_ask = d.get('yes_ask', 0) or 0
                     if yes_ask == 0:
                         continue
-                    all_markets.append(d)
+                    tkr = d.get('ticker', '')
+                    if tkr and tkr not in seen_tickers:
+                        seen_tickers.add(tkr)
+                        all_markets.append(d)
 
                 cursor = response.cursor if hasattr(response, 'cursor') else None
                 if not cursor:
                     break
                 await asyncio.sleep(0.3)
+
+            # Also fetch markets from explicitly watched series
+            for series in self._watch_series:
+                try:
+                    response = await asyncio.to_thread(
+                        lambda s=series: self._markets_api.get_markets(
+                            series_ticker=s, status='open', limit=50
+                        )
+                    )
+                    raw_markets = response.markets if hasattr(response, 'markets') else []
+                    for m in raw_markets or []:
+                        d = m.to_dict() if hasattr(m, 'to_dict') else dict(m)
+                        tkr = d.get('ticker', '')
+                        if tkr and tkr not in seen_tickers:
+                            seen_tickers.add(tkr)
+                            all_markets.append(d)
+                    await asyncio.sleep(0.3)
+                except Exception as e:
+                    logger.debug('Could not fetch series %s: %s', series, e)
 
             return all_markets
         except Exception as e:
@@ -346,8 +370,7 @@ class LiveKalshiDataSource(DataSource):
                 new_event_tickers: set[str] = set()
                 news_queue: list[tuple[str, str, KalshiTicker]] = []
 
-                # Process up to 100 markets per poll
-                for market in markets[:100]:
+                for market in markets:
                     market_ticker = market.get('ticker', '')
                     event_ticker = market.get('event_ticker', '')
                     market_title = market.get('title', '')

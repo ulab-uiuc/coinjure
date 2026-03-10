@@ -42,7 +42,10 @@ class RelationArbMixin:
         return [t for t in self._tokens if t]
 
     def _matches(self, ticker_id: str, market_id: str, token_id: str = '') -> bool:
-        if market_id and (market_id in ticker_id or ticker_id in market_id):
+        if market_id and market_id == ticker_id:
+            return True
+        # Also match NO-side tickers (e.g. "KXTICKER_NO" matches "KXTICKER")
+        if market_id and ticker_id == f'{market_id}_NO':
             return True
         if token_id and ticker_id == token_id:
             return True
