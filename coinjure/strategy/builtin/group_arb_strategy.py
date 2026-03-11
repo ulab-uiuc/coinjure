@@ -32,6 +32,7 @@ from coinjure.events import Event
 from coinjure.market.relations import RelationStore
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
+from coinjure.trading.sizing import compute_trade_size
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -70,16 +71,19 @@ class GroupArbStrategy(Strategy):
         min_edge: float = 0.02,
         close_edge: float = 0.005,
         max_loss: float = 0.05,
-        trade_size: float = 10.0,
+        trade_size: float = 100.0,
+        kelly_fraction: float = 0.1,
         cooldown_seconds: int = 120,
+        warmup_seconds: float = 5.0,
         min_markets: int = 2,
     ) -> None:
-        super().__init__()
+        super().__init__(warmup_seconds=warmup_seconds)
         self.relation_id = relation_id
         self.min_edge = Decimal(str(min_edge))
         self.close_edge = Decimal(str(close_edge))  # close when edge drops below this
         self.max_loss = Decimal(str(max_loss))  # close when edge reverses beyond this
-        self.trade_size = Decimal(str(trade_size))
+        self.max_trade_size = Decimal(str(trade_size))
+        self.kelly_fraction = Decimal(str(kelly_fraction))
         self.cooldown_seconds = cooldown_seconds
         self._min_markets_override = min_markets
 
@@ -146,7 +150,7 @@ class GroupArbStrategy(Strategy):
                 self._market_no_ticker[no_t.market_id] = no_t
 
         self._tickers: dict[str, Ticker] = {}
-        self._last_arb_time: float = 0.0
+        self._last_arb_time: float = time.monotonic()
         # Position tracking: 'BUY_YES', 'BUY_NO', or None
         self._held_direction: str | None = None
 
@@ -288,10 +292,20 @@ class GroupArbStrategy(Strategy):
         if best_edge < self.min_edge:
             return
 
+        # Warmup & cooldown guard
+        if self.is_warming_up():
+            return
         now = time.monotonic()
         if now - self._last_arb_time < self.cooldown_seconds:
             return
         self._last_arb_time = now
+
+        size = compute_trade_size(
+            trader.position_manager,
+            best_edge,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
 
         executed_legs = await self._open_positions(
             trader,
@@ -299,6 +313,7 @@ class GroupArbStrategy(Strategy):
             preferred_action,
             label,
             signal,
+            size,
         )
         if executed_legs > 0:
             self._held_direction = preferred_action
@@ -310,6 +325,7 @@ class GroupArbStrategy(Strategy):
         action: str,
         label: str,
         signal: dict,
+        size: Decimal,
     ) -> int:
         """Place BUY orders on all legs. Returns number of executed legs."""
         n = len(prices)
@@ -317,12 +333,13 @@ class GroupArbStrategy(Strategy):
         failed_legs = 0
 
         logger.info(
-            'GroupArb: OPEN %s %s sum_yes=%.4f n=%d edge=%.4f',
+            'GroupArb: OPEN %s %s sum_yes=%.4f n=%d edge=%.4f size=%s',
             action,
             label,
             signal['sum_yes'],
             n,
             signal['best_edge'],
+            size,
         )
 
         for mid, ask_price in prices.items():
@@ -353,7 +370,7 @@ class GroupArbStrategy(Strategy):
                     side=TradeSide.BUY,
                     ticker=trade_ticker,
                     limit_price=leg_price,
-                    quantity=self.trade_size,
+                    quantity=size,
                 )
                 if result.failure_reason:
                     logger.warning('GroupArb leg failed: %s', result.failure_reason)

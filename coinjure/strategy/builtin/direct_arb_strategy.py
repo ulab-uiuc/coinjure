@@ -31,6 +31,7 @@ from decimal import Decimal
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
+from coinjure.trading.sizing import compute_trade_size
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -75,17 +76,20 @@ class DirectArbStrategy(Strategy):
         kalshi_ticker: str = '',
         min_edge: float = 0.02,
         close_edge: float = 0.005,
-        trade_size: float = 10.0,
+        trade_size: float = 100.0,
+        kelly_fraction: float = 0.1,
         cooldown_seconds: int = 60,
+        warmup_seconds: float = 5.0,
         backtest_mode: bool = False,
     ) -> None:
-        super().__init__()
+        super().__init__(warmup_seconds=warmup_seconds)
         self.poly_market_id = poly_market_id
         self.poly_token_id = poly_token_id
         self.kalshi_ticker_str = kalshi_ticker
         self.min_edge = Decimal(str(min_edge))
         self.close_edge = Decimal(str(close_edge))  # close when edge drops below this
-        self.trade_size = Decimal(str(trade_size))
+        self.max_trade_size = Decimal(str(trade_size))
+        self.kelly_fraction = Decimal(str(kelly_fraction))
         self.cooldown_seconds = cooldown_seconds
         self.backtest_mode = backtest_mode
 
@@ -103,7 +107,7 @@ class DirectArbStrategy(Strategy):
         self._poly_ticker: PolyMarketTicker | None = None
         self._kalshi_ticker_obj: KalshiTicker | None = None
 
-        self._last_arb_time: float = 0.0
+        self._last_arb_time: float = time.monotonic()
         self._poll_task: asyncio.Task | None = None
         self._initialized: bool = False
         # Position tracking: 'poly_cheap' or 'kalshi_cheap' or None
@@ -379,21 +383,30 @@ class DirectArbStrategy(Strategy):
         if net_edge < self.min_edge:
             return
 
-        # Cooldown guard
+        # Warmup & cooldown guard
+        if self.is_warming_up():
+            return
         now = time.monotonic()
         if now - self._last_arb_time < self.cooldown_seconds:
             return
         self._last_arb_time = now
 
+        size = compute_trade_size(
+            trader.position_manager,
+            net_edge,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
+
         if edge_poly_cheap >= edge_kalshi_cheap:
             executed = await self._trade_poly_cheap(
-                trader, poly_yes, kalshi_yes, gross_edge
+                trader, poly_yes, kalshi_yes, gross_edge, size
             )
             if executed:
                 self._held_direction = 'poly_cheap'
         else:
             executed = await self._trade_kalshi_cheap(
-                trader, poly_yes, kalshi_yes, gross_edge
+                trader, poly_yes, kalshi_yes, gross_edge, size
             )
             if executed:
                 self._held_direction = 'kalshi_cheap'
@@ -448,6 +461,7 @@ class DirectArbStrategy(Strategy):
         poly_yes: Decimal,
         kalshi_yes: Decimal,
         edge: Decimal,
+        size: Decimal,
     ) -> bool:
         """Buy Poly YES + Buy Kalshi NO. Returns True if leg1 executed."""
         poly_ticker = self._poly_ticker
@@ -467,11 +481,11 @@ class DirectArbStrategy(Strategy):
                 side=TradeSide.BUY,
                 ticker=poly_ticker,
                 limit_price=poly_limit,
-                quantity=self.trade_size,
+                quantity=size,
             )
             if not result.failure_reason:
                 executed = True
-                logger.info('ARB leg1: buy Poly YES @ %s', poly_limit)
+                logger.info('ARB leg1: buy Poly YES @ %s qty=%s', poly_limit, size)
         except Exception:
             logger.exception('ARB leg1 failed (buy Poly YES)')
 
@@ -489,7 +503,7 @@ class DirectArbStrategy(Strategy):
                     side=TradeSide.BUY,
                     ticker=kalshi_no,
                     limit_price=no_price,
-                    quantity=self.trade_size,
+                    quantity=size,
                 )
                 if result2.failure_reason:
                     logger.warning('ARB leg2 failed: %s', result2.failure_reason)
@@ -519,6 +533,7 @@ class DirectArbStrategy(Strategy):
         poly_yes: Decimal,
         kalshi_yes: Decimal,
         edge: Decimal,
+        size: Decimal,
     ) -> bool:
         """Buy Kalshi YES + Buy Poly NO. Returns True if leg1 executed."""
         poly_ticker = self._poly_ticker
@@ -538,11 +553,11 @@ class DirectArbStrategy(Strategy):
                 side=TradeSide.BUY,
                 ticker=kalshi_ticker,
                 limit_price=kalshi_limit,
-                quantity=self.trade_size,
+                quantity=size,
             )
             if not result.failure_reason:
                 executed = True
-                logger.info('ARB leg1: buy Kalshi YES @ %s', kalshi_limit)
+                logger.info('ARB leg1: buy Kalshi YES @ %s qty=%s', kalshi_limit, size)
         except Exception:
             logger.exception('ARB leg1 failed (buy Kalshi YES)')
 
@@ -558,7 +573,7 @@ class DirectArbStrategy(Strategy):
                     side=TradeSide.BUY,
                     ticker=poly_no,
                     limit_price=no_price,
-                    quantity=self.trade_size,
+                    quantity=size,
                 )
                 if result2.failure_reason:
                     logger.warning('ARB leg2 failed: %s', result2.failure_reason)

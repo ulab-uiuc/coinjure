@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
@@ -197,8 +198,10 @@ class Strategy(ABC):
         """
         return False
 
-    def __init__(self) -> None:
+    def __init__(self, warmup_seconds: float = 0.0) -> None:
         self._paused: bool = False
+        self._warmup_seconds: float = warmup_seconds
+        self._engine_start_time: float = 0.0  # set by on_start()
         self._decisions: deque[StrategyDecision] = deque(maxlen=200)
         self._decision_stats_cache: dict[str, int] = {
             'decisions': 0,
@@ -220,6 +223,14 @@ class Strategy(ABC):
         """Return whether control-plane has paused decision-making."""
         return getattr(self, '_paused', False)
 
+    def is_warming_up(self) -> bool:
+        """Return True if still within the warmup window after engine start."""
+        start = getattr(self, '_engine_start_time', 0.0)
+        warmup = getattr(self, '_warmup_seconds', 0.0)
+        if start == 0.0 or warmup <= 0.0:
+            return False
+        return time.monotonic() - start < warmup
+
     # -- Abstract event handler ----------------------------------------------
 
     @abstractmethod
@@ -235,6 +246,7 @@ class Strategy(ABC):
 
     async def on_start(self) -> None:  # noqa: B027
         """Called once when the engine starts, before the first event."""
+        self._engine_start_time = time.monotonic()
 
     async def on_stop(self) -> None:  # noqa: B027
         """Called once when the engine shuts down, after the last event."""
