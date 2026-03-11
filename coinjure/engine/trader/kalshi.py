@@ -8,8 +8,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from coinjure.data.manager import DataManager
-from coinjure.ticker import KalshiTicker, Ticker
-from coinjure.trading.position import PositionManager
+from coinjure.ticker import CashTicker, KalshiTicker, Ticker
+from coinjure.trading.position import Position, PositionManager
 from coinjure.trading.risk import RiskManager
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import (
@@ -61,6 +61,23 @@ class KalshiTrader(Trader):
         self._api_client.set_kalshi_auth(key_id, pk_path)
         self._portfolio_api = PortfolioApi(self._api_client)
         self.orders: list[Order] = []
+
+    def _sync_usd_balance(self) -> None:
+        """Re-fetch USD balance from Kalshi and update position manager."""
+        try:
+            balance_response = self._portfolio_api.get_balance()
+            actual_balance = Decimal(str(balance_response.balance)) / Decimal('100')
+            existing = self.position_manager.get_position(CashTicker.KALSHI_USD)
+            self.position_manager.update_position(
+                Position(
+                    ticker=CashTicker.KALSHI_USD,
+                    quantity=actual_balance,
+                    average_cost=Decimal('1'),
+                    realized_pnl=existing.realized_pnl if existing else Decimal('0'),
+                )
+            )
+        except Exception:
+            pass  # Non-critical — local tracking continues as fallback
 
     async def _submit_order(
         self,
@@ -221,6 +238,13 @@ class KalshiTrader(Trader):
             await self._alert_rejected(guard_failure, ticker)
             return PlaceOrderResult(order=None, failure_reason=guard_failure)
 
+        if not self.is_ticker_tradable(ticker):
+            await self._alert_rejected(OrderFailureReason.MARKET_NOT_ALLOWED, ticker)
+            return PlaceOrderResult(
+                order=None,
+                failure_reason=OrderFailureReason.MARKET_NOT_ALLOWED,
+            )
+
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
             await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
@@ -298,6 +322,7 @@ class KalshiTrader(Trader):
             # Update positions
             for trade in order.trades:
                 self.position_manager.apply_trade(trade)
+            self._sync_usd_balance()
 
             self.orders.append(order)
             if order.status == OrderStatus.REJECTED:
