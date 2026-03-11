@@ -231,7 +231,10 @@ def _run_batch(
     no_hub: bool = False,
 ) -> None:
     """Spawn one detached engine process per matching relation."""
+    from decimal import Decimal
+
     from coinjure.strategy.builtin import build_strategy_ref_for_relation
+    from coinjure.trading.allocator import AllocationCandidate, allocate_capital
 
     relations = _load_relations_for_batch(relation_status)
     if not relations:
@@ -239,6 +242,19 @@ def _run_batch(
 
     if not no_hub:
         _ensure_hub_running(as_json=as_json)
+
+    # ── Allocate capital across relations ──────────────────────────────
+    candidates = [
+        AllocationCandidate(
+            strategy_id=rel.relation_id,
+            backtest_pnl=rel.backtest_pnl or 0.0,
+        )
+        for rel in relations
+    ]
+    budgets = allocate_capital(
+        Decimal(initial_capital),
+        candidates,
+    )
 
     reg = _load_registry()
     results = []
@@ -255,6 +271,8 @@ def _run_batch(
             )
             continue
 
+        budget = budgets.get(rel.relation_id, Decimal('10'))
+
         cmd = shlex.split(_coinjure_cmd()) + [
             'engine',
             engine_cmd,
@@ -267,7 +285,7 @@ def _run_batch(
             '--no-detach',
         ]
         if engine_cmd == 'paper-run':
-            cmd += ['--initial-capital', initial_capital]
+            cmd += ['--initial-capital', str(budget)]
         if duration is not None:
             cmd += ['--duration', str(duration)]
         if no_hub:
@@ -300,6 +318,7 @@ def _run_batch(
                 'pid': proc.pid,
                 'strategy_ref': ref,
                 'socket': socket,
+                'budget': str(budget),
             }
         )
 
@@ -309,7 +328,10 @@ def _run_batch(
         click.echo(f'\nLaunched {len(results)} {lifecycle} instances:\n')
         for r in results:
             if r.get('ok'):
-                click.echo(f'  {r["relation_id"]}  pid={r["pid"]}  {r["strategy_ref"]}')
+                click.echo(
+                    f'  {r["relation_id"]}  pid={r["pid"]}  '
+                    f'budget=${r["budget"]}  {r["strategy_ref"]}'
+                )
             else:
                 click.echo(f'  {r["relation_id"]}  SKIPPED: {r["error"]}')
 
@@ -373,6 +395,12 @@ def engine() -> None:
     default=False,
     help='Run as a detached background process.',
 )
+@click.option(
+    '--data-dir',
+    default=None,
+    type=click.Path(),
+    help='Directory for persisting positions/trades across sessions (enables resume).',
+)
 def engine_paper_run(
     exchange: str,
     duration: float | None,
@@ -385,6 +413,7 @@ def engine_paper_run(
     no_hub: bool,
     all_relations: bool,
     detach: bool,
+    data_dir: str | None,
 ) -> None:
     """Run a paper trading engine instance."""
     if all_relations and strategy_ref:
@@ -416,6 +445,8 @@ def engine_paper_run(
             cmd += ['--duration', str(duration)]
         if no_hub:
             cmd += ['--no-hub']
+        if data_dir:
+            cmd += ['--data-dir', data_dir]
         proc = subprocess.Popen(
             cmd,
             start_new_session=True,
@@ -502,12 +533,19 @@ def engine_paper_run(
     else:
         data_source = _build_market_source(exchange)
 
+    state_store = None
+    if data_dir:
+        from coinjure.storage.state_store import StateStore
+
+        state_store = StateStore(data_dir)
+
     asyncio.run(
         run_live_paper_trading(
             data_source=data_source,
             strategy=strategy_obj,
             initial_capital=capital,
             duration=duration,
+            state_store=state_store,
             continuous=True,
             monitor=monitor,
             exchange_name=exchange_label,

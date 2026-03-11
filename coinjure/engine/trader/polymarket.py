@@ -18,6 +18,7 @@ from py_clob_client.order_builder.constants import BUY, SELL
 from py_order_utils.model import EOA
 
 from coinjure.data.manager import DataManager
+from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
 from coinjure.trading.position import Position, PositionManager
 from coinjure.trading.risk import RiskManager
 from coinjure.trading.trader import Trader
@@ -29,7 +30,6 @@ from coinjure.trading.types import (
     Trade,
     TradeSide,
 )
-from coinjure.ticker import CashTicker, PolyMarketTicker, Ticker
 
 if TYPE_CHECKING:
     from coinjure.engine.trader.alerter import Alerter
@@ -222,6 +222,13 @@ class PolymarketTrader(Trader):
             await self._alert_rejected(guard_failure, ticker)
             return PlaceOrderResult(order=None, failure_reason=guard_failure)
 
+        if not self.is_ticker_tradable(ticker):
+            await self._alert_rejected(OrderFailureReason.MARKET_NOT_ALLOWED, ticker)
+            return PlaceOrderResult(
+                order=None,
+                failure_reason=OrderFailureReason.MARKET_NOT_ALLOWED,
+            )
+
         # Validate inputs
         if quantity <= 0 or limit_price <= 0:
             await self._alert_rejected(OrderFailureReason.INVALID_ORDER, ticker)
@@ -314,9 +321,9 @@ if __name__ == '__main__':
     from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
     from py_order_utils.model import POLY_GNOSIS_SAFE
 
+    from coinjure.ticker import CashTicker
     from coinjure.trading.position import Position
     from coinjure.trading.risk import NoRiskManager
-    from coinjure.ticker import CashTicker
 
     async def test_polymarket_trader():
         trader = PolymarketTrader(

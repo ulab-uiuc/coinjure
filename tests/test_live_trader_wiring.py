@@ -7,9 +7,9 @@ from decimal import Decimal
 import pytest
 
 from coinjure.engine import runner as live_trader
+from coinjure.ticker import CashTicker, PolyMarketTicker
 from coinjure.trading.position import Position
 from coinjure.trading.risk import NoRiskManager
-from coinjure.ticker import CashTicker, PolyMarketTicker
 
 
 @pytest.mark.asyncio
@@ -42,7 +42,8 @@ async def test_run_live_trading_passes_continuous_and_drawdown(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_live_polymarket_trading_restores_missing_cash(monkeypatch):
+async def test_run_live_polymarket_trading_fetches_positions_from_exchange(monkeypatch):
+    """Live runner should fetch cash + token positions directly from exchange."""
     captured: dict = {}
 
     class FakePolymarketTrader:
@@ -52,7 +53,10 @@ async def test_run_live_polymarket_trading_restores_missing_cash(monkeypatch):
             captured['trader'] = self
 
         def get_balance_allowance(self, params):
-            return {'balance': '2500000'}  # 2.5 USDC (6 decimals)
+            if params.asset_type == 'conditional':
+                # Return conditional token balance (6 decimals)
+                return {'balance': '3000000'}  # 3 tokens
+            return {'balance': '2500000'}  # 2.5 USDC
 
     async def fake_run_live_trading(*args, **kwargs):
         captured['run_called'] = True
@@ -63,10 +67,12 @@ async def test_run_live_polymarket_trading_restores_missing_cash(monkeypatch):
 
     class AssetType:
         COLLATERAL = 'collateral'
+        CONDITIONAL = 'conditional'
 
     class BalanceAllowanceParams:
-        def __init__(self, asset_type):
+        def __init__(self, asset_type, token_id=None):
             self.asset_type = asset_type
+            self.token_id = token_id
 
     sub.AssetType = AssetType
     sub.BalanceAllowanceParams = BalanceAllowanceParams
@@ -76,30 +82,28 @@ async def test_run_live_polymarket_trading_restores_missing_cash(monkeypatch):
     monkeypatch.setattr(live_trader, 'PolymarketTrader', FakePolymarketTrader)
     monkeypatch.setattr(live_trader, 'run_live_trading', fake_run_live_trading)
 
-    class FakeStore:
-        def load_positions(self):
-            # Deliberately no cash position.
-            return [
-                Position(
-                    ticker=PolyMarketTicker(
-                        symbol='T1', name='Market 1', token_id='tok1'
-                    ),
-                    quantity=Decimal('3'),
-                    average_cost=Decimal('0.5'),
-                    realized_pnl=Decimal('0'),
-                )
-            ]
+    class FakeStrategy:
+        def watch_tokens(self):
+            return ['tok1']
 
     await live_trader.run_live_polymarket_trading(
         data_source=object(),
-        strategy=object(),
+        strategy=FakeStrategy(),
         wallet_private_key='dummy',
         signature_type=0,
         risk_manager=NoRiskManager(),
-        state_store=FakeStore(),
     )
 
-    cash = captured['trader'].position_manager.get_position(CashTicker.POLYMARKET_USDC)
+    pm = captured['trader'].position_manager
+
+    # Cash fetched from exchange
+    cash = pm.get_position(CashTicker.POLYMARKET_USDC)
     assert cash is not None
     assert cash.quantity == Decimal('2.5')
+
+    # Token position fetched from exchange
+    token_pos = pm.get_position(PolyMarketTicker(symbol='tok1', token_id='tok1'))
+    assert token_pos is not None
+    assert token_pos.quantity == Decimal('3')
+
     assert captured['run_called'] is True

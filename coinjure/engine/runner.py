@@ -18,7 +18,6 @@ from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import CashTicker
 from coinjure.trading.position import Position, PositionManager
 from coinjure.trading.risk import (
-    NoRiskManager,
     RiskManager,
     StandardRiskManager,
 )
@@ -141,7 +140,7 @@ async def run_live_paper_trading(
         data_source: The live data source to use
         strategy: The trading strategy to execute
         initial_capital: Starting capital per currency
-        risk_manager: Optional risk manager (defaults to NoRiskManager)
+        risk_manager: Optional risk manager (defaults to StandardRiskManager)
         duration: Optional duration in seconds to run
         state_store: Optional state store for persistence and state recovery.
         alerter: Optional alerter for notifications.
@@ -162,7 +161,14 @@ async def run_live_paper_trading(
         _fund_position(position_manager, CashTicker.KALSHI_USD, initial_capital)
 
     if risk_manager is None:
-        risk_manager = NoRiskManager()
+        risk_manager = StandardRiskManager(
+            position_manager=position_manager,
+            market_data=market_data,
+            max_position_size=initial_capital,
+            max_total_exposure=initial_capital * Decimal('2'),
+            max_single_trade_size=initial_capital / Decimal('2'),
+            max_drawdown_pct=Decimal('0.2'),
+        )
 
     trader = PaperTrader(
         market_data=market_data,
@@ -170,7 +176,7 @@ async def run_live_paper_trading(
         position_manager=position_manager,
         min_fill_rate=Decimal('0.5'),
         max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.005'),  # ~0.5% realistic Polymarket commission
+        commission_rate=Decimal('0.0'),  # match live trader defaults
         alerter=alerter,
     )
 
@@ -215,7 +221,6 @@ async def run_live_polymarket_trading(
     duration: float | None = None,
     max_position_size: Decimal = Decimal('1000'),
     max_total_exposure: Decimal = Decimal('10000'),
-    state_store: StateStore | None = None,
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
@@ -226,21 +231,11 @@ async def run_live_polymarket_trading(
     """
     Run live trading on Polymarket with real orders.
 
-    Args:
-        data_source: The Polymarket live data source
-        strategy: The trading strategy to execute
-        wallet_private_key: Private key for the trading wallet
-        signature_type: Signature type for Polymarket API
-        funder: Optional funder address for safe wallets
-        risk_manager: Optional risk manager (defaults to StandardRiskManager)
-        duration: Optional duration in seconds to run
-        max_position_size: Maximum position size per trade
-        max_total_exposure: Maximum total portfolio exposure
-        state_store: Optional state store for persistence and state recovery.
-        alerter: Optional alerter for notifications.
-        continuous: Keep engine running when the data source is temporarily idle.
-        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
+    Positions are fetched directly from the exchange on startup — no local
+    state file is needed.
     """
+    from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
+
     market_data = DataManager()
     position_manager = PositionManager()
 
@@ -264,45 +259,50 @@ async def run_live_polymarket_trading(
         alerter=alerter,
     )
 
-    # Initialize USDC position: prefer live exchange balance for reconciliation.
-    from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
-
+    # ── Fetch USDC balance from exchange ────────────────────────────────
     balance_info = trader.clob_client.get_balance_allowance(
         params=BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
     )
     live_balance = Decimal(balance_info['balance']) / Decimal('1000000')
+    _fund_position(position_manager, CashTicker.POLYMARKET_USDC, live_balance)
 
-    # State recovery: load saved positions if available, then reconcile cash.
-    saved_positions = state_store.load_positions() if state_store else []
-    if saved_positions:
-        logger.info('Restoring %d positions from state store', len(saved_positions))
-        for pos in saved_positions:
-            position_manager.update_position(pos)
-        # Reconcile cash position against live exchange balance.
-        saved_cash = position_manager.get_position(CashTicker.POLYMARKET_USDC)
-        if saved_cash is not None:
-            diff_pct = abs(live_balance - saved_cash.quantity) / max(
-                live_balance, Decimal('1')
+    # ── Fetch conditional token positions from exchange ─────────────────
+    for token_id in strategy.watch_tokens():
+        try:
+            bal_info = trader.clob_client.get_balance_allowance(
+                params=BalanceAllowanceParams(
+                    asset_type=AssetType.CONDITIONAL,
+                    token_id=token_id,
+                )
             )
-            if diff_pct > Decimal('0.01'):
-                logger.warning(
-                    'Saved cash %.4f differs from live balance %.4f by %.1f%% — using live value',
-                    saved_cash.quantity,
-                    live_balance,
-                    float(diff_pct) * 100,
+            qty = Decimal(bal_info['balance']) / Decimal('1000000')
+            if qty > 0:
+                from coinjure.ticker import PolyMarketTicker
+
+                ticker = PolyMarketTicker(
+                    symbol=token_id,
+                    name='',
+                    token_id=token_id,
                 )
                 position_manager.update_position(
                     Position(
-                        ticker=CashTicker.POLYMARKET_USDC,
-                        quantity=live_balance,
+                        ticker=ticker,
+                        quantity=qty,
                         average_cost=Decimal('0'),
-                        realized_pnl=saved_cash.realized_pnl,
+                        realized_pnl=Decimal('0'),
                     )
                 )
-        else:
-            _fund_position(position_manager, CashTicker.POLYMARKET_USDC, live_balance)
-    else:
-        _fund_position(position_manager, CashTicker.POLYMARKET_USDC, live_balance)
+                logger.info(
+                    'Loaded position from exchange: %s qty=%s',
+                    token_id,
+                    qty,
+                )
+        except Exception:
+            logger.warning(
+                'Failed to fetch conditional balance for token %s',
+                token_id,
+                exc_info=True,
+            )
 
     print(f'Starting live Polymarket trading with balance: {live_balance} USDC')
 
@@ -311,7 +311,7 @@ async def run_live_polymarket_trading(
         strategy,
         trader,
         duration,
-        state_store,
+        None,  # no state_store for live trading
         alerter,
         continuous,
         drawdown_alert_pct,
@@ -335,7 +335,6 @@ async def run_live_kalshi_trading(
     duration: float | None = None,
     max_position_size: Decimal = Decimal('1000'),
     max_total_exposure: Decimal = Decimal('10000'),
-    state_store: StateStore | None = None,
     alerter: Alerter | None = None,
     continuous: bool = True,
     drawdown_alert_pct: Decimal | None = None,
@@ -345,19 +344,8 @@ async def run_live_kalshi_trading(
     """
     Run live trading on Kalshi with real orders.
 
-    Args:
-        data_source: The Kalshi live data source
-        strategy: The trading strategy to execute
-        api_key_id: Kalshi API key ID (or set KALSHI_API_KEY_ID env)
-        private_key_path: Path to RSA private key PEM file (or set KALSHI_PRIVATE_KEY_PATH env)
-        risk_manager: Optional risk manager (defaults to StandardRiskManager)
-        duration: Optional duration in seconds to run
-        max_position_size: Maximum position size per trade
-        max_total_exposure: Maximum total portfolio exposure
-        state_store: Optional state store for persistence and state recovery.
-        alerter: Optional alerter for notifications.
-        continuous: Keep engine running when the data source is temporarily idle.
-        drawdown_alert_pct: Optional drawdown alert threshold as a decimal (0.1 = 10%).
+    Positions are fetched directly from the exchange on startup — no local
+    state file is needed.
     """
     market_data = DataManager()
     position_manager = PositionManager()
@@ -381,42 +369,51 @@ async def run_live_kalshi_trading(
         alerter=alerter,
     )
 
-    # Fetch initial balance from Kalshi (via the trader's portfolio API)
+    # ── Fetch USD balance from exchange ─────────────────────────────────
     balance_response = await asyncio.to_thread(
         lambda: trader._portfolio_api.get_balance()
     )
-    # Balance is in cents
     initial_balance = Decimal(str(balance_response.balance)) / Decimal('100')
+    _fund_position(position_manager, CashTicker.KALSHI_USD, initial_balance)
 
-    saved_positions = state_store.load_positions() if state_store else []
-    if saved_positions:
-        logger.info('Restoring %d positions from state store', len(saved_positions))
-        for pos in saved_positions:
-            position_manager.update_position(pos)
-        saved_cash = position_manager.get_position(CashTicker.KALSHI_USD)
-        if saved_cash is not None:
-            diff_pct = abs(initial_balance - saved_cash.quantity) / max(
-                initial_balance, Decimal('1')
+    # ── Fetch contract positions from exchange ──────────────────────────
+    try:
+        positions_response = await asyncio.to_thread(
+            lambda: trader._portfolio_api.get_positions(limit=200)
+        )
+        for kpos in positions_response.positions or []:
+            count = kpos.position or 0
+            if count == 0 or not kpos.ticker:
+                continue
+            from coinjure.ticker import KalshiTicker
+
+            ticker = KalshiTicker(
+                symbol=kpos.ticker,
+                name='',
+                market_ticker=kpos.ticker,
+                event_ticker=kpos.event_ticker or '',
             )
-            if diff_pct > Decimal('0.01'):
-                logger.warning(
-                    'Saved cash %.2f differs from live balance %.2f by %.1f%% — using live value',
-                    saved_cash.quantity,
-                    initial_balance,
-                    float(diff_pct) * 100,
+            avg_cost = Decimal('0')
+            if kpos.total_cost is not None and count > 0:
+                # total_cost is in cents
+                avg_cost = (
+                    Decimal(str(kpos.total_cost)) / Decimal('100') / Decimal(str(count))
                 )
-                position_manager.update_position(
-                    Position(
-                        ticker=CashTicker.KALSHI_USD,
-                        quantity=initial_balance,
-                        average_cost=Decimal('0'),
-                        realized_pnl=saved_cash.realized_pnl,
-                    )
+            position_manager.update_position(
+                Position(
+                    ticker=ticker,
+                    quantity=Decimal(str(count)),
+                    average_cost=avg_cost,
+                    realized_pnl=Decimal(str(kpos.realized_pnl or 0)) / Decimal('100'),
                 )
-        else:
-            _fund_position(position_manager, CashTicker.KALSHI_USD, initial_balance)
-    else:
-        _fund_position(position_manager, CashTicker.KALSHI_USD, initial_balance)
+            )
+            logger.info(
+                'Loaded position from exchange: %s qty=%d',
+                kpos.ticker,
+                count,
+            )
+    except Exception:
+        logger.warning('Failed to fetch positions from Kalshi', exc_info=True)
 
     logger.info('Starting live Kalshi trading with balance: $%s', initial_balance)
 
@@ -425,7 +422,7 @@ async def run_live_kalshi_trading(
         strategy,
         trader,
         duration,
-        state_store,
+        None,  # no state_store for live trading
         alerter,
         continuous,
         drawdown_alert_pct,

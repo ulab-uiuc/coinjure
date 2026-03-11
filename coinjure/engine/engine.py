@@ -313,6 +313,11 @@ class TradingEngine:
             except Exception:
                 logger.debug('alerter.on_engine_start() failed', exc_info=True)
 
+        try:
+            await self.strategy.on_start()
+        except Exception:
+            logger.debug('strategy.on_start() failed', exc_info=True)
+
         logger.info('TradingEngine started (continuous=%s)', self._continuous)
 
         # [M1] Track consecutive None events so we can warn on prolonged
