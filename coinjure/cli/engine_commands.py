@@ -229,6 +229,8 @@ def _run_batch(
     duration: float | None,
     as_json: bool,
     no_hub: bool = False,
+    llm_portfolio_review: bool = False,
+    llm_trade_sizing: bool = False,
 ) -> None:
     """Spawn one detached engine process per matching relation."""
     from decimal import Decimal
@@ -251,10 +253,39 @@ def _run_batch(
         )
         for rel in relations
     ]
-    budgets = allocate_capital(
-        Decimal(initial_capital),
-        candidates,
-    )
+
+    if llm_portfolio_review:
+        from coinjure.trading.llm_allocator import allocate_capital_llm
+
+        budgets = asyncio.run(
+            allocate_capital_llm(Decimal(initial_capital), candidates)
+        )
+    else:
+        budgets = allocate_capital(
+            Decimal(initial_capital),
+            candidates,
+        )
+
+    # ── Optional LLM sizing overrides ─────────────────────────────────
+    sizing_overrides: dict[str, Any] = {}
+    if llm_trade_sizing:
+        from coinjure.trading.llm_sizing import SizingContext, compute_llm_sizing
+
+        sizing_contexts = [
+            SizingContext(
+                strategy_id=rel.relation_id,
+                strategy_type='spread',
+                relation_type=rel.spread_type,
+                backtest_pnl=Decimal(str(rel.backtest_pnl or 0)),
+                current_edge=Decimal('0'),  # not known at launch time
+                volatility=Decimal('0'),  # not known at launch time
+                total_capital=Decimal(initial_capital),
+                allocated_budget=budgets.get(rel.relation_id, Decimal('10')),
+                current_exposure=Decimal('0'),  # fresh launch
+            )
+            for rel in relations
+        ]
+        sizing_overrides = asyncio.run(compute_llm_sizing(sizing_contexts))
 
     reg = _load_registry()
     results = []
@@ -270,6 +301,12 @@ def _run_batch(
                 }
             )
             continue
+
+        override = sizing_overrides.get(rel.relation_id)
+        if override is not None:
+            kwargs['kelly_fraction'] = float(override.kelly_fraction)
+            kwargs['trade_size'] = float(override.max_size)
+            kwargs['llm_trade_sizing'] = True
 
         budget = budgets.get(rel.relation_id, Decimal('10'))
 
@@ -401,6 +438,18 @@ def engine() -> None:
     type=click.Path(),
     help='Directory for persisting positions/trades across sessions (enables resume).',
 )
+@click.option(
+    '--llm-portfolio-review',
+    is_flag=True,
+    default=False,
+    help='Use LLM to review and adjust capital allocation across strategies.',
+)
+@click.option(
+    '--llm-trade-sizing',
+    is_flag=True,
+    default=False,
+    help='Use LLM to set per-strategy sizing parameters at launch time.',
+)
 def engine_paper_run(
     exchange: str,
     duration: float | None,
@@ -414,6 +463,8 @@ def engine_paper_run(
     all_relations: bool,
     detach: bool,
     data_dir: str | None,
+    llm_portfolio_review: bool,
+    llm_trade_sizing: bool,
 ) -> None:
     """Run a paper trading engine instance."""
     if all_relations and strategy_ref:
@@ -431,6 +482,8 @@ def engine_paper_run(
             duration=duration,
             as_json=as_json,
             no_hub=no_hub,
+            llm_portfolio_review=llm_portfolio_review,
+            llm_trade_sizing=llm_trade_sizing,
         )
         return
 
@@ -609,6 +662,18 @@ def engine_paper_run(
     default=False,
     help='Run as a detached background process.',
 )
+@click.option(
+    '--llm-portfolio-review',
+    is_flag=True,
+    default=False,
+    help='Use LLM to review and adjust capital allocation across strategies.',
+)
+@click.option(
+    '--llm-trade-sizing',
+    is_flag=True,
+    default=False,
+    help='Use LLM to set per-strategy sizing parameters at launch time.',
+)
 def engine_live_run(
     exchange: str,
     duration: float | None,
@@ -624,6 +689,8 @@ def engine_live_run(
     kalshi_private_key_path: str | None,
     all_relations: bool,
     detach: bool,
+    llm_portfolio_review: bool,
+    llm_trade_sizing: bool,
 ) -> None:
     """Run a live trading engine instance (real orders, real funds)."""
     if all_relations and strategy_ref:
@@ -642,6 +709,8 @@ def engine_live_run(
             initial_capital=initial_capital,
             duration=duration,
             as_json=as_json,
+            llm_portfolio_review=llm_portfolio_review,
+            llm_trade_sizing=llm_trade_sizing,
         )
         return
 

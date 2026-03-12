@@ -1,0 +1,294 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from collections.abc import Sequence
+from decimal import Decimal, InvalidOperation
+from typing import Protocol, cast
+
+from coinjure.trading.allocator import AllocationCandidate, allocate_capital
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_MIN_BUDGET = Decimal('10')
+DEFAULT_MAX_BUDGET_PCT = Decimal('0.4')
+DEFAULT_RESERVE_PCT = Decimal('0.1')
+
+DEFAULT_ALLOCATION_PROMPT = """You are a portfolio capital allocation reviewer for Coinjure.
+You receive a baseline quantitative allocation and may adjust it.
+
+Return one JSON object with this schema:
+{
+  "budgets": {
+    "<strategy_id>": "<positive decimal budget>"
+  },
+  "reasoning": "brief explanation of the main adjustments"
+}
+
+Hard constraints:
+- Use only the provided strategy IDs.
+- Every budget must be strictly positive.
+- The total budget must stay within deployable capital.
+- No single strategy budget may exceed the per-strategy cap.
+- Preserve reserve capital.
+"""
+
+
+class _ChatCompletionMessage(Protocol):
+    content: str | None
+
+
+class _ChatCompletionChoice(Protocol):
+    message: _ChatCompletionMessage
+
+
+class _ChatCompletionResponse(Protocol):
+    choices: Sequence[_ChatCompletionChoice]
+
+
+class _ChatCompletionsAPI(Protocol):
+    async def create(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, str]],
+        response_format: dict[str, str],
+    ) -> _ChatCompletionResponse: ...
+
+
+class _ChatAPI(Protocol):
+    completions: _ChatCompletionsAPI
+
+
+class _OpenAIClient(Protocol):
+    chat: _ChatAPI
+
+
+def _get_openai_client() -> _OpenAIClient:
+    try:
+        import importlib
+
+        module = importlib.import_module('openai')
+    except ImportError as exc:
+        raise RuntimeError(
+            'openai is not installed. Install with `pip install openai`.'
+        ) from exc
+    factory = getattr(module, 'AsyncOpenAI', None)
+    if factory is None or not callable(factory):
+        raise RuntimeError('openai.AsyncOpenAI is not available in this environment.')
+    return cast(_OpenAIClient, factory())
+
+
+def _render_allocation_input(
+    total_capital: Decimal,
+    candidates: list[AllocationCandidate],
+    baseline: dict[str, Decimal],
+    min_budget: Decimal,
+    max_budget_pct: Decimal,
+    reserve_pct: Decimal,
+) -> str:
+    deployable_capital = total_capital * (Decimal('1') - reserve_pct)
+    per_strategy_cap = total_capital * max_budget_pct
+    candidate_rows = [
+        {'strategy_id': c.strategy_id, 'backtest_pnl': c.backtest_pnl}
+        for c in candidates
+    ]
+    baseline_rows = {strategy_id: str(amount) for strategy_id, amount in baseline.items()}
+
+    payload = {
+        'total_capital': str(total_capital),
+        'deployable_capital_limit': str(deployable_capital),
+        'reserve_pct': str(reserve_pct),
+        'min_budget': str(min_budget),
+        'max_budget_pct': str(max_budget_pct),
+        'per_strategy_cap': str(per_strategy_cap),
+        'candidates': candidate_rows,
+        'baseline_quant_allocation': baseline_rows,
+        'task': (
+            'Review the baseline allocation and return adjusted budgets plus '
+            'reasoning while honoring all hard constraints.'
+        ),
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def _extract_response_content(response: _ChatCompletionResponse) -> str:
+    if not response.choices:
+        raise ValueError('LLM response contained no choices.')
+
+    content = response.choices[0].message.content
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError('LLM response content is empty.')
+
+    return content
+
+
+def _parse_and_validate_budgets(
+    content: str,
+    *,
+    expected_strategy_ids: set[str],
+    deployable_capital: Decimal,
+    max_per_strategy: Decimal,
+) -> tuple[dict[str, Decimal], str]:
+    parsed_obj = cast(object, json.loads(content))
+    if not isinstance(parsed_obj, dict):
+        raise ValueError('LLM payload must be a JSON object.')
+
+    parsed_dict = cast(dict[object, object], parsed_obj)
+
+    parsed: dict[str, object] = {}
+    for key, value in parsed_dict.items():
+        if not isinstance(key, str):
+            raise ValueError('LLM payload keys must be strings.')
+        parsed[key] = value
+
+    raw_budgets_obj = parsed.get('budgets')
+    if not isinstance(raw_budgets_obj, dict):
+        raise ValueError('LLM payload missing `budgets` object.')
+
+    raw_budgets_obj_typed = cast(dict[object, object], raw_budgets_obj)
+
+    raw_budgets: dict[str, object] = {}
+    for strategy_id, value in raw_budgets_obj_typed.items():
+        if not isinstance(strategy_id, str):
+            raise ValueError('Budget strategy IDs must be strings.')
+        raw_budgets[strategy_id] = value
+
+    llm_strategy_ids = set(raw_budgets)
+    if llm_strategy_ids != expected_strategy_ids:
+        raise ValueError('LLM budgets strategy IDs do not match candidates.')
+
+    validated_budgets: dict[str, Decimal] = {}
+    for strategy_id, raw_budget in raw_budgets.items():
+        if isinstance(raw_budget, bool):
+            raise ValueError(f'Budget for {strategy_id} must be numeric, not bool.')
+
+        try:
+            budget = Decimal(str(raw_budget))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(
+                f'Budget for {strategy_id} is not a valid decimal: {raw_budget!r}'
+            ) from exc
+
+        if budget <= 0:
+            raise ValueError(f'Budget for {strategy_id} must be positive.')
+        if budget > max_per_strategy:
+            raise ValueError(
+                f'Budget for {strategy_id} exceeds per-strategy cap {max_per_strategy}.'
+            )
+
+        validated_budgets[strategy_id] = budget
+
+    total_allocated = sum(validated_budgets.values(), start=Decimal('0'))
+    if total_allocated > deployable_capital:
+        raise ValueError(
+            f'Total budget {total_allocated} exceeds deployable capital {deployable_capital}.'
+        )
+
+    reasoning = parsed.get('reasoning', '')
+    reasoning_text = reasoning.strip() if isinstance(reasoning, str) else ''
+    return validated_budgets, reasoning_text
+
+
+async def allocate_capital_llm(
+    total_capital: Decimal,
+    candidates: list[AllocationCandidate],
+    *,
+    model: str = 'gpt-4.1-mini',
+    timeout: float = 30.0,
+    min_budget: Decimal = DEFAULT_MIN_BUDGET,
+    max_budget_pct: Decimal = DEFAULT_MAX_BUDGET_PCT,
+    reserve_pct: Decimal = DEFAULT_RESERVE_PCT,
+) -> dict[str, Decimal]:
+    """Allocate strategy budgets with LLM review and strict fallback.
+
+    This wrapper always computes the baseline quantitative allocation first using
+    ``allocate_capital``. It then asks an LLM to review and optionally adjust the
+    budgets. LLM output is accepted only when it passes all hard constraints.
+
+    Args:
+        total_capital: Total available capital to distribute.
+        candidates: Strategy candidates with backtest results.
+        model: OpenAI chat-completions model for allocation review.
+        timeout: Timeout in seconds for the LLM API call.
+        min_budget: Minimum capital per strategy used by the baseline allocator.
+        max_budget_pct: Maximum share of total capital any strategy can receive.
+        reserve_pct: Fraction of total capital held in reserve (not allocated).
+
+    Returns:
+        Dict mapping strategy_id -> allocated capital (Decimal).
+
+    Notes:
+        This function is fail-safe: on any LLM/API/parsing/validation error,
+        it returns the baseline ``allocate_capital`` result and never raises.
+    """
+    baseline = allocate_capital(
+        total_capital,
+        candidates,
+        min_budget=min_budget,
+        max_budget_pct=max_budget_pct,
+        reserve_pct=reserve_pct,
+    )
+    if not candidates:
+        return baseline
+
+    deployable_capital = total_capital * (Decimal('1') - reserve_pct)
+    max_per_strategy = total_capital * max_budget_pct
+    expected_strategy_ids = {candidate.strategy_id for candidate in candidates}
+    baseline_for_log = {
+        strategy_id: str(amount) for strategy_id, amount in sorted(baseline.items())
+    }
+
+    try:
+        client = _get_openai_client()
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=model,
+                messages=[
+                    {'role': 'system', 'content': DEFAULT_ALLOCATION_PROMPT},
+                    {
+                        'role': 'user',
+                        'content': _render_allocation_input(
+                            total_capital,
+                            candidates,
+                            baseline,
+                            min_budget,
+                            max_budget_pct,
+                            reserve_pct,
+                        ),
+                    },
+                ],
+                response_format={"type": "json_object"},
+            ),
+            timeout=timeout,
+        )
+        content = _extract_response_content(response)
+        adjusted_budgets, reasoning = _parse_and_validate_budgets(
+            content,
+            expected_strategy_ids=expected_strategy_ids,
+            deployable_capital=deployable_capital,
+            max_per_strategy=max_per_strategy,
+        )
+    except Exception:
+        logger.warning(
+            'LLM allocation review failed; using baseline quant allocation. baseline=%s',
+            baseline_for_log,
+            exc_info=True,
+        )
+        return baseline
+
+    adjusted_for_log = {
+        strategy_id: str(amount)
+        for strategy_id, amount in sorted(adjusted_budgets.items())
+    }
+    logger.info(
+        'LLM allocation review accepted. baseline=%s adjusted=%s reasoning=%s',
+        baseline_for_log,
+        adjusted_for_log,
+        reasoning or 'n/a',
+    )
+    return adjusted_budgets
+
+
+__all__ = ['DEFAULT_ALLOCATION_PROMPT', 'allocate_capital_llm']
