@@ -69,6 +69,7 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
         warmup: int = 200,
         max_position: float = 100.0,
         kelly_fraction: float = 0.1,
+        llm_trade_sizing: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -78,6 +79,7 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
         self._entry_mult = entry_mult
         self._exit_mult = exit_mult
         self._warmup_size = warmup
+        self.llm_trade_sizing = llm_trade_sizing
 
         self._init_from_relation(relation_id)
 
@@ -197,6 +199,12 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
 
     async def _enter_long_spread(self, trader: Trader, deviation: Decimal) -> None:
         """Buy A, sell B — spread is below mean (B overpriced relative to A)."""
+        size = compute_trade_size(
+            trader.position_manager,
+            abs(deviation),
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
         ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')
 
@@ -230,6 +238,12 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
 
     async def _enter_short_spread(self, trader: Trader, deviation: Decimal) -> None:
         """Sell A, buy B — spread is above mean (A overpriced relative to B)."""
+        size = compute_trade_size(
+            trader.position_manager,
+            abs(deviation),
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 

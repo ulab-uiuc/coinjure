@@ -66,6 +66,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         exit_reversion: float = 0.5,
         max_hold: int = 100,
         kelly_fraction: float = 0.1,
+        llm_trade_sizing: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -75,6 +76,8 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         self._warmup_size = warmup
         self._exit_reversion = exit_reversion
         self._max_hold = max_hold
+        self.kelly_fraction = Decimal(str(kelly_fraction))
+        self.llm_trade_sizing = llm_trade_sizing
 
         self._init_from_relation(relation_id)
 
@@ -177,6 +180,12 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
     async def _enter_long(self, trader: Trader, leader_move: float) -> None:
         """Leader moved up → buy follower YES."""
+        size = compute_trade_size(
+            trader.position_manager,
+            Decimal(str(abs(leader_move))),
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_b = self._find_ticker(trader, self._follower_id, side='yes')
         if not ticker_b or not self._follower_price:
             return
@@ -216,6 +225,12 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
     async def _enter_short(self, trader: Trader, leader_move: float) -> None:
         """Leader moved down → sell follower (buy NO)."""
+        size = compute_trade_size(
+            trader.position_manager,
+            Decimal(str(abs(leader_move))),
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_b_no = self._find_ticker(trader, self._follower_id, side='no')
         if not ticker_b_no or not self._follower_price:
             return
