@@ -433,10 +433,16 @@ def _serialize_opportunity(req: OpportunitySizingRequest) -> dict[str, str]:
     }
 
 
+_OPPORTUNITY_MIN_INTERVAL_SECONDS = 0.0
+
+
 class _RateLimiter:
 
-    def __init__(self, min_interval_seconds: float = 5.0) -> None:
-        self._min_interval = min_interval_seconds
+    def __init__(
+        self,
+        min_interval_seconds: float = _OPPORTUNITY_MIN_INTERVAL_SECONDS,
+    ) -> None:
+        self._min_interval: float = min_interval_seconds
         self._last_call: float = 0.0
 
     def should_skip(self) -> bool:
@@ -450,7 +456,9 @@ class _RateLimiter:
         self._min_interval = max(0.0, seconds)
 
 
-_opportunity_rate_limiter = _RateLimiter(min_interval_seconds=5.0)
+_opportunity_rate_limiter = _RateLimiter(
+    min_interval_seconds=_OPPORTUNITY_MIN_INTERVAL_SECONDS,
+)
 
 
 def get_opportunity_rate_limiter() -> _RateLimiter:

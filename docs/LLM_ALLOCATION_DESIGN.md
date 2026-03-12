@@ -40,9 +40,9 @@ builtin strategy process_event()
             |
             +--> if llm_trade_sizing=False: return quant_size  [fast path]
             |
-            +--> if llm_trade_sizing=True:
-            |       +--> rate limiter check (5s min gap)
-            |       +--> build OpportunitySizingRequest with real portfolio state
+             +--> if llm_trade_sizing=True:
+             |       +--> rate limiter check (configurable, disabled by default)
+             |       +--> build OpportunitySizingRequest with real portfolio state
             |       +--> await compute_opportunity_sizing_llm(request)
             |       +--> validate, clamp, quantize response
             |       +--> return llm_size (or quant_size on failure/None)
@@ -68,14 +68,14 @@ builtin strategy process_event()
 - Router: `coinjure/trading/sizing.py` → `compute_trade_size_with_llm()`
 - Triggered inside the event loop when a strategy detects an arb opportunity
 - Receives real context: edge, available capital, current exposure, portfolio utilization, quant baseline size
-- Rate-limited (5s minimum gap between LLM calls, configurable)
+- Rate-limited (configurable interval, disabled by default; set `_OPPORTUNITY_MIN_INTERVAL_SECONDS` or use API to adjust)
 - Fallback: returns quant size on rate-limit skip, API failure, invalid response, or None
 
 Both features are **off by default**.
 
 ## Strategy Integration
 
-All 7 builtin strategies call `await compute_trade_size_with_llm()` at every trade decision point (12 call sites total):
+All 7 builtin strategies call `await compute_trade_size_with_llm()` at every trade decision point (11 call sites total):
 
 | Strategy | Call Sites | Relation Type |
 |---|---|---|
@@ -122,7 +122,7 @@ Each strategy accepts `llm_trade_sizing: bool` and `llm_model: str | None` as co
 - Size is clamped to `max_size` ceiling
 - Size is quantized to integer contracts (Kalshi requirement)
 - Minimum size is 1
-- Rate limiter enforces minimum 5s gap between LLM calls (free-tier safe)
+- Rate limiter interface is preserved but disabled by default (interval = 0.0); operators can re-enable via `set_interval()`
 
 ### Existing risk controls stay in place
 
@@ -144,7 +144,7 @@ coinjure engine paper-run --all-relations --llm-portfolio-review --llm-trade-siz
 coinjure engine paper-run --all-relations --llm-trade-sizing --llm-model gemini-3.1-flash-lite-preview
 
 # Backtest with LLM sizing
-coinjure strategy backtest --all-relations --llm-trade-sizing --llm-model gpt-4.1-mini
+coinjure engine backtest --all-relations --llm-trade-sizing --llm-model gpt-4.1-mini
 ```
 
 All three commands (`paper-run`, `live-run`, `backtest`) support `--llm-portfolio-review`, `--llm-trade-sizing`, and `--llm-model`.
@@ -164,6 +164,14 @@ All three commands (`paper-run`, `live-run`, `backtest`) support `--llm-portfoli
 |---|---|---|
 | `tests/test_llm_allocator.py` | 7 | Portfolio allocation validation and fallbacks |
 | `tests/test_llm_sizing.py` | 18 | Launch-time sizing (7) + per-opportunity sizing (8) + trade size router (3) |
+
+## Known Limitations
+
+- **Live budget enforcement**: `--llm-portfolio-review` computes adjusted budgets but live mode does not enforce them (each live runner loads full exchange balance independently). Portfolio review is effective in paper/backtest only until live budget plumbing is added.
+- **Per-leg semantics**: The LLM sizes "a trade" but the returned size is applied per-leg. Multi-leg strategies (group, conditional, structural) multiply actual exposure by leg count. The prompt does not currently include leg count or per-leg prices.
+- **Dead launch-time sizing path**: `compute_llm_sizing()` (SizingContext/SizingOverride) exists in `llm_sizing.py` but is not called from production code. Only the per-opportunity path (`compute_opportunity_sizing_llm`) is wired in.
+- **Client-per-call**: A new `AsyncOpenAI` client is created on every LLM invocation. No connection reuse.
+- **Per-process throttling**: Rate limiting is per-strategy-process, not portfolio-wide.
 
 ## Non-Goals
 
