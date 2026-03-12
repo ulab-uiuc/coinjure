@@ -270,30 +270,6 @@ def _run_batch(
             candidates,
         )
 
-    # ── Optional LLM sizing overrides ─────────────────────────────────
-    sizing_overrides: dict[str, Any] = {}
-    if llm_trade_sizing:
-        from coinjure.trading.llm_sizing import SizingContext, compute_llm_sizing
-
-        llm_sz_kwargs: dict[str, Any] = {}
-        if llm_model:
-            llm_sz_kwargs['model'] = llm_model
-        sizing_contexts = [
-            SizingContext(
-                strategy_id=rel.relation_id,
-                strategy_type='spread',
-                relation_type=rel.spread_type,
-                backtest_pnl=Decimal(str(rel.backtest_pnl or 0)),
-                current_edge=Decimal('0'),  # not known at launch time
-                volatility=Decimal('0'),  # not known at launch time
-                total_capital=Decimal(initial_capital),
-                allocated_budget=budgets.get(rel.relation_id, Decimal('10')),
-                current_exposure=Decimal('0'),  # fresh launch
-            )
-            for rel in relations
-        ]
-        sizing_overrides = asyncio.run(compute_llm_sizing(sizing_contexts, **llm_sz_kwargs))
-
     reg = _load_registry()
     results = []
 
@@ -309,11 +285,10 @@ def _run_batch(
             )
             continue
 
-        override = sizing_overrides.get(rel.relation_id)
-        if override is not None:
-            kwargs['kelly_fraction'] = float(override.kelly_fraction)
-            kwargs['trade_size'] = float(override.max_size)
+        if llm_trade_sizing:
             kwargs['llm_trade_sizing'] = True
+            if llm_model:
+                kwargs['llm_model'] = llm_model
 
         budget = budgets.get(rel.relation_id, Decimal('10'))
 
@@ -1471,44 +1446,17 @@ def engine_backtest(
             for sid, bgt in budgets.items():
                 click.echo(f'  LLM budget: {sid[:30]:30s}  ${bgt:.2f}')
 
-    # ── Optional LLM trade sizing ─────────────────────────────────────
-    sizing_overrides: dict[str, Any] = {}
-    if llm_trade_sizing:
-        from coinjure.trading.llm_sizing import SizingContext, compute_llm_sizing
-
-        sizing_contexts = [
-            SizingContext(
-                strategy_id=rel.relation_id,
-                strategy_type='spread',
-                relation_type=rel.spread_type,
-                backtest_pnl=Decimal(str(rel.backtest_pnl or 0)),
-                current_edge=Decimal('0'),  # not known pre-backtest
-                volatility=Decimal('0'),  # not known pre-backtest
-                total_capital=capital,
-                allocated_budget=budgets.get(rel.relation_id, Decimal('10')),
-                current_exposure=Decimal('0'),
-            )
-            for rel in relations
-        ]
-        if not as_json:
-            click.echo('Running LLM trade sizing...')
-        sizing_overrides = asyncio.run(compute_llm_sizing(sizing_contexts, **llm_kwargs))
-        if not as_json:
-            for sid, ovr in sizing_overrides.items():
-                click.echo(
-                    f'  LLM sizing: {sid[:30]:30s}  '
-                    f'kelly={ovr.kelly_fraction:.3f}  max_size={ovr.max_size}'
-                )
+    if llm_trade_sizing and not as_json:
+        click.echo('Using runtime LLM trade sizing during opportunity checks...')
 
     async def _run_all():
         results = []
         for rel in relations:
             merged_kwargs = dict(strategy_kwargs)
-            override = sizing_overrides.get(rel.relation_id)
-            if override is not None:
-                merged_kwargs['kelly_fraction'] = float(override.kelly_fraction)
-                merged_kwargs['trade_size'] = float(override.max_size)
+            if llm_trade_sizing:
                 merged_kwargs['llm_trade_sizing'] = True
+                if llm_model:
+                    merged_kwargs['llm_model'] = llm_model
 
             rel_capital = budgets.get(rel.relation_id, capital) if budgets else capital
 

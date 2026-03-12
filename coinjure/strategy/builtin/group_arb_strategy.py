@@ -32,7 +32,7 @@ from coinjure.events import Event
 from coinjure.market.relations import RelationStore
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
-from coinjure.trading.sizing import compute_trade_size
+from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -77,6 +77,7 @@ class GroupArbStrategy(Strategy):
         warmup_seconds: float = 5.0,
         min_markets: int = 2,
         llm_trade_sizing: bool = False,
+        llm_model: str | None = None,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.relation_id = relation_id
@@ -88,6 +89,7 @@ class GroupArbStrategy(Strategy):
         self.cooldown_seconds = cooldown_seconds
         self._min_markets_override = min_markets
         self.llm_trade_sizing = llm_trade_sizing
+        self.llm_model = llm_model
 
         self._event_id = event_id
         self._relation_market_ids: set[str] = set()
@@ -302,9 +304,14 @@ class GroupArbStrategy(Strategy):
             return
         self._last_arb_time = now
 
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             best_edge,
+            strategy_id=self.relation_id or self._event_id or self.name,
+            strategy_type=self.name,
+            relation_type=self._spread_type or 'group',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
         )

@@ -31,7 +31,7 @@ from decimal import Decimal
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
-from coinjure.trading.sizing import compute_trade_size
+from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -82,6 +82,7 @@ class DirectArbStrategy(Strategy):
         warmup_seconds: float = 5.0,
         backtest_mode: bool = False,
         llm_trade_sizing: bool = False,
+        llm_model: str | None = None,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.poly_market_id = poly_market_id
@@ -94,6 +95,7 @@ class DirectArbStrategy(Strategy):
         self.cooldown_seconds = cooldown_seconds
         self.backtest_mode = backtest_mode
         self.llm_trade_sizing = llm_trade_sizing
+        self.llm_model = llm_model
 
         # Latest mid prices (updated on every matching event)
         self._poly_yes_price: Decimal | None = None
@@ -393,9 +395,14 @@ class DirectArbStrategy(Strategy):
             return
         self._last_arb_time = now
 
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             net_edge,
+            strategy_id=self.poly_market_id or self.kalshi_ticker_str or self.name,
+            strategy_type=self.name,
+            relation_type='same_event',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
         )

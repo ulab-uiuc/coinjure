@@ -29,7 +29,7 @@ from decimal import Decimal
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
-from coinjure.trading.sizing import compute_trade_size
+from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         min_edge: float = 0.02,
         kelly_fraction: float = 0.1,
         llm_trade_sizing: bool = False,
+        llm_model: str | None = None,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -76,6 +77,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         self.min_edge = Decimal(str(min_edge))
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.llm_trade_sizing = llm_trade_sizing
+        self.llm_model = llm_model
 
         self._init_from_relation(relation_id)
 
@@ -152,9 +154,14 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
     ) -> None:
         """A too expensive → sell A (buy NO), buy B (buy YES)."""
         edge = Decimal(str(abs(pa - upper)))
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             edge,
+            strategy_id=self.relation_id or self.name,
+            strategy_type=self.name,
+            relation_type='conditional',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
         )
@@ -200,9 +207,14 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
     ) -> None:
         """A too cheap → buy A (buy YES), sell B (buy NO)."""
         edge = Decimal(str(abs(lower - pa)))
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             edge,
+            strategy_id=self.relation_id or self.name,
+            strategy_type=self.name,
+            relation_type='conditional',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
         )

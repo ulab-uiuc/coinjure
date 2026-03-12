@@ -25,7 +25,7 @@ from decimal import Decimal
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
-from coinjure.trading.sizing import compute_trade_size
+from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -67,6 +67,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         max_hold: int = 100,
         kelly_fraction: float = 0.1,
         llm_trade_sizing: bool = False,
+        llm_model: str | None = None,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -78,6 +79,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         self._max_hold = max_hold
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.llm_trade_sizing = llm_trade_sizing
+        self.llm_model = llm_model
 
         self._init_from_relation(relation_id)
 
@@ -180,9 +182,14 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
     async def _enter_long(self, trader: Trader, leader_move: float) -> None:
         """Leader moved up → buy follower YES."""
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             Decimal(str(abs(leader_move))),
+            strategy_id=self.relation_id or self.name,
+            strategy_type=self.name,
+            relation_type='temporal',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
         )
@@ -225,9 +232,14 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
 
     async def _enter_short(self, trader: Trader, leader_move: float) -> None:
         """Leader moved down → sell follower (buy NO)."""
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             Decimal(str(abs(leader_move))),
+            strategy_id=self.relation_id or self.name,
+            strategy_type=self.name,
+            relation_type='temporal',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
         )
