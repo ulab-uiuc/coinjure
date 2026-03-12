@@ -55,12 +55,14 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         trade_size: float = 10.0,
         min_edge: float = 0.01,
         kelly_fraction: float = 0.1,
+        llm_trade_sizing: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
         self.max_trade_size = Decimal(str(trade_size))
         self.min_edge = Decimal(str(min_edge))
         self.kelly_fraction = Decimal(str(kelly_fraction))
+        self.llm_trade_sizing = llm_trade_sizing
 
         self._init_from_relation(relation_id)
 
@@ -113,6 +115,12 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
 
     async def _enter(self, trader: Trader, violation: Decimal) -> None:
         """Sell A (buy NO), buy B (buy YES)."""
+        size = compute_trade_size(
+            trader.position_manager,
+            violation,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 

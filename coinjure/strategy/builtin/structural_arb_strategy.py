@@ -65,6 +65,7 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         intercept: float = 0.0,
         min_edge: float = 0.02,
         kelly_fraction: float = 0.1,
+        llm_trade_sizing: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -73,6 +74,7 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         self.intercept = intercept
         self.min_edge = Decimal(str(min_edge))
         self.kelly_fraction = Decimal(str(kelly_fraction))
+        self.llm_trade_sizing = llm_trade_sizing
 
         self._init_from_relation(relation_id)
 
@@ -147,6 +149,13 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         residual: float,
     ) -> None:
         """A overpriced → sell A (buy NO), buy B (buy YES)."""
+        edge = abs(Decimal(str(residual)))
+        size = compute_trade_size(
+            trader.position_manager,
+            edge,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
@@ -187,6 +196,13 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         residual: float,
     ) -> None:
         """A underpriced → buy A (buy YES), sell B (buy NO)."""
+        edge = abs(Decimal(str(residual)))
+        size = compute_trade_size(
+            trader.position_manager,
+            edge,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
         ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
         ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')
 
@@ -203,6 +219,7 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         )
         if not ok:
             return
+>>>>>>> 8be4678 (refactor(strategy): route relation arb sizing through shared calculator)
 
         self._position_state = 'long_a_short_b'
         self.record_decision(
