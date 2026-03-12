@@ -112,6 +112,7 @@ async def compute_trade_size_with_llm(
     llm_size = await compute_opportunity_sizing_llm(
         request,
         model=llm_model or 'gpt-4.1-mini',
+        timeout=60.0,
     )
     if llm_size is None:
         return quant_size
