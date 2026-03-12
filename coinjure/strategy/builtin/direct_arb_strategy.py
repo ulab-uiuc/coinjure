@@ -83,6 +83,7 @@ class DirectArbStrategy(Strategy):
         backtest_mode: bool = False,
         llm_trade_sizing: bool = False,
         llm_model: str | None = None,
+        llm_portfolio_review: bool = False,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.poly_market_id = poly_market_id
@@ -96,6 +97,7 @@ class DirectArbStrategy(Strategy):
         self.backtest_mode = backtest_mode
         self.llm_trade_sizing = llm_trade_sizing
         self.llm_model = llm_model
+        self.llm_portfolio_review = llm_portfolio_review
 
         # Latest mid prices (updated on every matching event)
         self._poly_yes_price: Decimal | None = None
@@ -405,6 +407,8 @@ class DirectArbStrategy(Strategy):
             llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
+            leg_count=2,
+            leg_prices=[poly_yes, Decimal('1') - kalshi_yes],
         )
 
         if edge_poly_cheap >= edge_kalshi_cheap:

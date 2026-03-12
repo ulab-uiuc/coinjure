@@ -78,6 +78,7 @@ class GroupArbStrategy(Strategy):
         min_markets: int = 2,
         llm_trade_sizing: bool = False,
         llm_model: str | None = None,
+        llm_portfolio_review: bool = False,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.relation_id = relation_id
@@ -90,6 +91,7 @@ class GroupArbStrategy(Strategy):
         self._min_markets_override = min_markets
         self.llm_trade_sizing = llm_trade_sizing
         self.llm_model = llm_model
+        self.llm_portfolio_review = llm_portfolio_review
 
         self._event_id = event_id
         self._relation_market_ids: set[str] = set()
@@ -314,6 +316,8 @@ class GroupArbStrategy(Strategy):
             llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
+            leg_count=len(prices),
+            leg_prices=list(prices.values()),
         )
 
         executed_legs = await self._open_positions(

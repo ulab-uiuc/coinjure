@@ -5,7 +5,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 from coinjure.trading.allocator import AllocationCandidate, allocate_capital
-from coinjure.trading.llm_allocator import allocate_capital_llm
+from coinjure.trading.llm_allocator import allocate_capital_llm, review_portfolio_llm, PortfolioAdjustment
 
 
 def _make_fake_client(
@@ -189,3 +189,110 @@ def test_allocate_capital_llm_falls_back_on_api_exception():
         result = asyncio.run(allocate_capital_llm(total_capital, candidates))
 
     assert result == baseline
+
+
+def test_review_portfolio_llm_returns_valid_adjustment():
+    response_content = (
+        '{"kelly_fraction": "0.15", "max_trade_size": "50", "reasoning": "reduce risk"}'
+    )
+    fake_client, _ = _make_fake_client(response_content)
+
+    with patch(
+        'coinjure.trading.llm_allocator._get_openai_client',
+        return_value=fake_client,
+    ):
+        result = asyncio.run(
+            review_portfolio_llm(
+                strategy_id='test-strat',
+                available_capital=Decimal('5000'),
+                current_exposure=Decimal('1200'),
+                realized_pnl=Decimal('100'),
+                unrealized_pnl=Decimal('-20'),
+                position_count=4,
+                kelly_fraction=Decimal('0.2'),
+                max_trade_size=Decimal('100'),
+                trade_count=50,
+            )
+        )
+
+    assert result is not None
+    assert result.kelly_fraction == Decimal('0.15')
+    assert result.max_trade_size == Decimal('50')
+    assert result.reasoning == 'reduce risk'
+
+
+def test_review_portfolio_llm_returns_none_on_null_adjustments():
+    response_content = (
+        '{"kelly_fraction": null, "max_trade_size": null, "reasoning": "no change needed"}'
+    )
+    fake_client, _ = _make_fake_client(response_content)
+
+    with patch(
+        'coinjure.trading.llm_allocator._get_openai_client',
+        return_value=fake_client,
+    ):
+        result = asyncio.run(
+            review_portfolio_llm(
+                strategy_id='test-strat',
+                available_capital=Decimal('5000'),
+                current_exposure=Decimal('500'),
+                realized_pnl=Decimal('200'),
+                unrealized_pnl=Decimal('30'),
+                position_count=2,
+                kelly_fraction=Decimal('0.1'),
+                max_trade_size=Decimal('50'),
+            )
+        )
+
+    assert result is not None
+    assert result.kelly_fraction is None
+    assert result.max_trade_size is None
+
+
+def test_review_portfolio_llm_returns_none_on_api_error():
+    fake_client, _ = _make_fake_client(side_effect=RuntimeError('api down'))
+
+    with patch(
+        'coinjure.trading.llm_allocator._get_openai_client',
+        return_value=fake_client,
+    ):
+        result = asyncio.run(
+            review_portfolio_llm(
+                strategy_id='test-strat',
+                available_capital=Decimal('5000'),
+                current_exposure=Decimal('1200'),
+                realized_pnl=Decimal('100'),
+                unrealized_pnl=Decimal('-20'),
+                position_count=4,
+                kelly_fraction=Decimal('0.2'),
+                max_trade_size=Decimal('100'),
+            )
+        )
+
+    assert result is None
+
+
+def test_review_portfolio_llm_returns_none_on_invalid_kelly():
+    response_content = (
+        '{"kelly_fraction": "0.9", "max_trade_size": null, "reasoning": "too aggressive"}'
+    )
+    fake_client, _ = _make_fake_client(response_content)
+
+    with patch(
+        'coinjure.trading.llm_allocator._get_openai_client',
+        return_value=fake_client,
+    ):
+        result = asyncio.run(
+            review_portfolio_llm(
+                strategy_id='test-strat',
+                available_capital=Decimal('5000'),
+                current_exposure=Decimal('1200'),
+                realized_pnl=Decimal('100'),
+                unrealized_pnl=Decimal('-20'),
+                position_count=4,
+                kelly_fraction=Decimal('0.2'),
+                max_trade_size=Decimal('100'),
+            )
+        )
+
+    assert result is None

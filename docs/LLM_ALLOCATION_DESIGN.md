@@ -27,33 +27,48 @@ _run_batch() in engine_commands.py
    |    adjusted budgets per relation
    |
    v
-build strategy kwargs (incl. llm_trade_sizing, llm_model) and launch engines
+build strategy kwargs (incl. llm_trade_sizing, llm_portfolio_review, llm_model) and launch engines
    |
    v
-builtin strategy process_event()
+TradingEngine event loop (engine.py)
    |
-   +--> detect opportunity (edge > threshold)
+   +--> data_source.get_next_event()
    |
-   +--> await compute_trade_size_with_llm(pm, edge, ...)
+   +--> strategy.process_event(event, trader)
+   |      |
+   |      +--> detect opportunity (edge > threshold)
+   |      |
+   |      +--> await compute_trade_size_with_llm(pm, edge, leg_count, leg_prices, ...)
+   |               |
+   |               +--> compute_trade_size()  [always runs first — quant baseline]
+   |               |
+   |               +--> if llm_trade_sizing=False: return quant_size  [fast path]
+   |               |
+   |               +--> if llm_trade_sizing=True:
+   |               |       +--> rate limiter check (configurable, disabled by default)
+   |               |       +--> build OpportunitySizingRequest with real portfolio state
+   |               |       |       includes leg_count and leg_prices for multi-leg context
+   |               |       +--> await compute_opportunity_sizing_llm(request)
+   |               |       +--> validate, clamp, quantize response
+   |               |       +--> return llm_size (or quant_size on failure/None)
+   |               |
+   |               v
+   |            trader.place_order(side, ticker, price, size)
+   |
+   +--> every 500 events: _check_llm_portfolio_review()
             |
-            +--> compute_trade_size()  [always runs first — quant baseline]
+            +--> if llm_portfolio_review=False: skip
             |
-            +--> if llm_trade_sizing=False: return quant_size  [fast path]
-            |
-             +--> if llm_trade_sizing=True:
-             |       +--> rate limiter check (configurable, disabled by default)
-             |       +--> build OpportunitySizingRequest with real portfolio state
-            |       +--> await compute_opportunity_sizing_llm(request)
-            |       +--> validate, clamp, quantize response
-            |       +--> return llm_size (or quant_size on failure/None)
-            |
-            v
-         trader.place_order(side, ticker, price, size)
+            +--> if llm_portfolio_review=True:
+                    +--> await review_portfolio_llm(strategy state snapshot)
+                    +--> validate response (kelly_fraction in [0.01, 0.5], max_trade_size >= 1)
+                    +--> apply adjustments to strategy.kelly_fraction / strategy.max_trade_size
+                    +--> fallback: no changes on error
 ```
 
-## Two LLM Control Points
+## Three LLM Control Points
 
-### 1. Portfolio Review (launch-time)
+### 1. Portfolio Allocation (launch-time)
 
 - Module: `coinjure/trading/llm_allocator.py`
 - Function: `allocate_capital_llm()`
@@ -67,11 +82,22 @@ builtin strategy process_event()
 - Function: `compute_opportunity_sizing_llm()`
 - Router: `coinjure/trading/sizing.py` → `compute_trade_size_with_llm()`
 - Triggered inside the event loop when a strategy detects an arb opportunity
-- Receives real context: edge, available capital, current exposure, portfolio utilization, quant baseline size
+- Receives real context: edge, available capital, current exposure, portfolio utilization, quant baseline size, leg_count, leg_prices
 - Rate-limited (configurable interval, disabled by default; set `_OPPORTUNITY_MIN_INTERVAL_SECONDS` or use API to adjust)
 - Fallback: returns quant size on rate-limit skip, API failure, invalid response, or None
 
-Both features are **off by default**.
+### 3. Periodic Portfolio Review (runtime)
+
+- Module: `coinjure/trading/llm_allocator.py`
+- Function: `review_portfolio_llm()`
+- Dataclass: `PortfolioAdjustment` (kelly_fraction, max_trade_size, reasoning)
+- Triggered every 500 events in the engine event loop via `_check_llm_portfolio_review()`
+- Receives runtime snapshot: available capital, exposure, realized/unrealized PnL, position/trade counts, current sizing parameters
+- Can adjust `kelly_fraction` (range [0.01, 0.5]) and `max_trade_size` (>= 1) on the live strategy instance
+- Null fields mean "keep current value" — conservative by default
+- Fallback: no adjustments on any error
+
+All three features are **off by default**.
 
 ## Strategy Integration
 
@@ -87,7 +113,7 @@ All 7 builtin strategies call `await compute_trade_size_with_llm()` at every tra
 | `CointSpreadStrategy` | 2 | `cointegrated` |
 | `LeadLagStrategy` | 2 | `lead_lag` |
 
-Each strategy accepts `llm_trade_sizing: bool` and `llm_model: str | None` as constructor kwargs. When `llm_trade_sizing=False` (default), the async router immediately returns the quant size with zero overhead.
+Each strategy accepts `llm_trade_sizing: bool`, `llm_portfolio_review: bool`, and `llm_model: str | None` as constructor kwargs. When `llm_trade_sizing=False` (default), the async router immediately returns the quant size with zero overhead. When `llm_portfolio_review=False` (default), the engine skips periodic review entirely.
 
 ## Safety Model
 
@@ -101,13 +127,16 @@ Each strategy accepts `llm_trade_sizing: bool` and `llm_model: str | None` as co
 
 | Failure Mode | Behavior |
 |---|---|
-| Portfolio review API error | Use baseline quant budgets |
-| Portfolio review invalid output | Use baseline quant budgets |
+| Portfolio allocation API error | Use baseline quant budgets |
+| Portfolio allocation invalid output | Use baseline quant budgets |
 | Per-opportunity API error | Return quant size |
 | Per-opportunity invalid size | Return quant size |
 | Per-opportunity rate-limited | Return quant size (no API call) |
 | LLM returns size > max_size | Clamp to max_size |
 | LLM returns size < 1 after rounding | Clamp to 1 |
+| Portfolio review API error | No adjustments applied |
+| Portfolio review invalid kelly/max_size | No adjustments applied |
+| Portfolio review null fields | Keep current values (no change) |
 
 ### Validation rules
 
@@ -131,17 +160,17 @@ The LLM cannot bypass runtime safety controls. Orders still flow through the exi
 ## CLI Toggles
 
 ```bash
-# Portfolio review only
+# Launch-time portfolio allocation review only
 coinjure engine paper-run --all-relations --llm-portfolio-review
 
 # Per-opportunity trade sizing only
 coinjure engine paper-run --all-relations --llm-trade-sizing
 
-# Both layers
+# Runtime periodic portfolio review (adjusts kelly_fraction / max_trade_size during trading)
 coinjure engine paper-run --all-relations --llm-portfolio-review --llm-trade-sizing
 
-# With custom model
-coinjure engine paper-run --all-relations --llm-trade-sizing --llm-model gemini-3.1-flash-lite-preview
+# All three layers with custom model
+coinjure engine paper-run --all-relations --llm-portfolio-review --llm-trade-sizing --llm-model gemini-3.1-flash-lite-preview
 
 # Backtest with LLM sizing
 coinjure engine backtest --all-relations --llm-trade-sizing --llm-model gpt-4.1-mini
@@ -153,31 +182,28 @@ All three commands (`paper-run`, `live-run`, `backtest`) support `--llm-portfoli
 
 | Module | Purpose |
 |---|---|
-| `coinjure/trading/llm_allocator.py` | Launch-time LLM portfolio budget review |
+| `coinjure/trading/llm_allocator.py` | Launch-time portfolio allocation + runtime periodic portfolio review |
 | `coinjure/trading/llm_sizing.py` | Per-opportunity LLM sizing + rate limiter |
 | `coinjure/trading/sizing.py` | Trade sizing router (`compute_trade_size_with_llm`) |
+| `coinjure/engine/engine.py` | Periodic `_check_llm_portfolio_review()` hook |
 | `coinjure/cli/engine_commands.py` | CLI wiring for LLM toggles |
 
 ## Tests
 
 | Test File | Tests | Coverage |
 |---|---|---|
-| `tests/test_llm_allocator.py` | 7 | Portfolio allocation validation and fallbacks |
-| `tests/test_llm_sizing.py` | 18 | Launch-time sizing (7) + per-opportunity sizing (8) + trade size router (3) |
+| `tests/test_llm_allocator.py` | 11 | Portfolio allocation validation/fallbacks (7) + runtime portfolio review (4) |
+| `tests/test_llm_sizing.py` | 13 | Per-opportunity sizing (8) + trade size router (3) + leg context serialization (2) |
 
 ## Known Limitations
 
 - **Live budget enforcement**: `--llm-portfolio-review` computes adjusted budgets but live mode does not enforce them (each live runner loads full exchange balance independently). Portfolio review is effective in paper/backtest only until live budget plumbing is added.
-- **Per-leg semantics**: The LLM sizes "a trade" but the returned size is applied per-leg. Multi-leg strategies (group, conditional, structural) multiply actual exposure by leg count. The prompt does not currently include leg count or per-leg prices.
-- **Dead launch-time sizing path**: `compute_llm_sizing()` (SizingContext/SizingOverride) exists in `llm_sizing.py` but is not called from production code. Only the per-opportunity path (`compute_opportunity_sizing_llm`) is wired in.
-- **Client-per-call**: A new `AsyncOpenAI` client is created on every LLM invocation. No connection reuse.
 - **Per-process throttling**: Rate limiting is per-strategy-process, not portfolio-wide.
 
 ## Non-Goals
 
 - LLM-driven trade entry or exit decisions (LLM only sizes, never triggers)
 - LLM-driven replacement of builtin arbitrage detection logic
-- Periodic portfolio rebalancing during trading (currently launch-time only)
 
 ## Rationale
 

@@ -57,6 +57,7 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         kelly_fraction: float = 0.1,
         llm_trade_sizing: bool = False,
         llm_model: str | None = None,
+        llm_portfolio_review: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -65,6 +66,7 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.llm_trade_sizing = llm_trade_sizing
         self.llm_model = llm_model
+        self.llm_portfolio_review = llm_portfolio_review
 
         self._init_from_relation(relation_id)
 
@@ -127,6 +129,8 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
+            leg_count=2,
+            leg_prices=[Decimal('1') - self._price_a, self._price_b],
         )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')

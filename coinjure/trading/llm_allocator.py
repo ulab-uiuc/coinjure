@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Protocol, cast
 
@@ -65,7 +66,18 @@ class _OpenAIClient(Protocol):
     chat: _ChatAPI
 
 
+# ---------------------------------------------------------------------------
+# Singleton OpenAI client
+# ---------------------------------------------------------------------------
+
+_openai_client: _OpenAIClient | None = None
+
+
 def _get_openai_client() -> _OpenAIClient:
+    global _openai_client
+    if _openai_client is not None:
+        return _openai_client
+
     try:
         import importlib
 
@@ -77,7 +89,8 @@ def _get_openai_client() -> _OpenAIClient:
     factory = getattr(module, 'AsyncOpenAI', None)
     if factory is None or not callable(factory):
         raise RuntimeError('openai.AsyncOpenAI is not available in this environment.')
-    return cast(_OpenAIClient, factory())
+    _openai_client = cast(_OpenAIClient, factory())
+    return _openai_client
 
 
 def _render_allocation_input(
@@ -89,7 +102,7 @@ def _render_allocation_input(
     reserve_pct: Decimal,
 ) -> str:
     deployable_capital = total_capital * (Decimal('1') - reserve_pct)
-    per_strategy_cap = total_capital * max_budget_pct
+    per_strategy_cap = deployable_capital * max_budget_pct
     candidate_rows = [
         {'strategy_id': c.strategy_id, 'backtest_pnl': c.backtest_pnl}
         for c in candidates
@@ -234,7 +247,7 @@ async def allocate_capital_llm(
         return baseline
 
     deployable_capital = total_capital * (Decimal('1') - reserve_pct)
-    max_per_strategy = total_capital * max_budget_pct
+    max_per_strategy = deployable_capital * max_budget_pct
     expected_strategy_ids = {candidate.strategy_id for candidate in candidates}
     baseline_for_log = {
         strategy_id: str(amount) for strategy_id, amount in sorted(baseline.items())
@@ -291,4 +304,144 @@ async def allocate_capital_llm(
     return adjusted_budgets
 
 
-__all__ = ['DEFAULT_ALLOCATION_PROMPT', 'allocate_capital_llm']
+@dataclass
+class PortfolioAdjustment:
+    kelly_fraction: Decimal | None = None
+    max_trade_size: Decimal | None = None
+    reasoning: str = ''
+
+
+PORTFOLIO_REVIEW_PROMPT = """You are Coinjure's periodic portfolio reviewer.
+
+You receive a snapshot of a single strategy's runtime state and decide whether
+to adjust its sizing parameters.  Return ONLY valid JSON:
+
+{
+  "kelly_fraction": "<decimal or null to keep current>",
+  "max_trade_size": "<decimal or null to keep current>",
+  "reasoning": "one sentence"
+}
+
+Rules:
+- kelly_fraction must be between 0.01 and 0.5 (or null).
+- max_trade_size must be >= 1 (or null).
+- If performance is healthy and exposure is reasonable, return nulls (no change).
+- If drawdown is significant (> 10% of capital), reduce kelly_fraction.
+- If utilization is very low (< 20%) and PnL is positive, consider increasing max_trade_size.
+- Be conservative. Only adjust when the data clearly warrants it.
+"""
+
+
+def _render_portfolio_snapshot(
+    *,
+    strategy_id: str,
+    available_capital: Decimal,
+    current_exposure: Decimal,
+    realized_pnl: Decimal,
+    unrealized_pnl: Decimal,
+    position_count: int,
+    kelly_fraction: Decimal,
+    max_trade_size: Decimal,
+    trade_count: int,
+) -> str:
+    total = available_capital + current_exposure
+    utilization = current_exposure / total if total > 0 else Decimal('0')
+    payload = {
+        'strategy_id': strategy_id,
+        'available_capital': str(available_capital),
+        'current_exposure': str(current_exposure),
+        'total_capital': str(total),
+        'portfolio_utilization': str(utilization),
+        'realized_pnl': str(realized_pnl),
+        'unrealized_pnl': str(unrealized_pnl),
+        'position_count': position_count,
+        'trade_count': trade_count,
+        'current_kelly_fraction': str(kelly_fraction),
+        'current_max_trade_size': str(max_trade_size),
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def _parse_portfolio_adjustment(content: str) -> PortfolioAdjustment:
+    parsed_obj = cast(object, json.loads(content))
+    if not isinstance(parsed_obj, dict):
+        raise ValueError('LLM payload must be a JSON object.')
+    parsed = cast(dict[str, object], parsed_obj)
+
+    adjustment = PortfolioAdjustment()
+
+    raw_kelly = parsed.get('kelly_fraction')
+    if raw_kelly is not None:
+        try:
+            kf = Decimal(str(raw_kelly))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f'kelly_fraction not valid: {raw_kelly!r}') from exc
+        if kf < Decimal('0.01') or kf > Decimal('0.5'):
+            raise ValueError(f'kelly_fraction {kf} out of range [0.01, 0.5]')
+        adjustment.kelly_fraction = kf
+
+    raw_max = parsed.get('max_trade_size')
+    if raw_max is not None:
+        try:
+            ms = Decimal(str(raw_max))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f'max_trade_size not valid: {raw_max!r}') from exc
+        if ms < Decimal('1'):
+            raise ValueError(f'max_trade_size {ms} must be >= 1')
+        adjustment.max_trade_size = ms
+
+    reasoning = parsed.get('reasoning', '')
+    adjustment.reasoning = reasoning.strip() if isinstance(reasoning, str) else ''
+    return adjustment
+
+
+async def review_portfolio_llm(
+    *,
+    strategy_id: str,
+    available_capital: Decimal,
+    current_exposure: Decimal,
+    realized_pnl: Decimal,
+    unrealized_pnl: Decimal,
+    position_count: int,
+    kelly_fraction: Decimal,
+    max_trade_size: Decimal,
+    trade_count: int = 0,
+    model: str = 'gpt-4.1-mini',
+    timeout: float = 15.0,
+) -> PortfolioAdjustment | None:
+    try:
+        client = _get_openai_client()
+        snapshot = _render_portfolio_snapshot(
+            strategy_id=strategy_id,
+            available_capital=available_capital,
+            current_exposure=current_exposure,
+            realized_pnl=realized_pnl,
+            unrealized_pnl=unrealized_pnl,
+            position_count=position_count,
+            kelly_fraction=kelly_fraction,
+            max_trade_size=max_trade_size,
+            trade_count=trade_count,
+        )
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=model,
+                messages=[
+                    {'role': 'system', 'content': PORTFOLIO_REVIEW_PROMPT},
+                    {'role': 'user', 'content': snapshot},
+                ],
+                response_format={'type': 'json_object'},
+            ),
+            timeout=timeout,
+        )
+        content = _extract_response_content(response)
+        return _parse_portfolio_adjustment(content)
+    except Exception:
+        logger.warning(
+            'LLM portfolio review failed for %s; no adjustments applied.',
+            strategy_id,
+            exc_info=True,
+        )
+        return None
+
+
+__all__ = ['DEFAULT_ALLOCATION_PROMPT', 'allocate_capital_llm', 'review_portfolio_llm', 'PortfolioAdjustment']

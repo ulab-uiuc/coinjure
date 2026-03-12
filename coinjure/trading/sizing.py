@@ -28,19 +28,6 @@ def compute_trade_size(
         weight    = min(edge / edge_cap, 1)
         raw       = available * kelly_fraction * weight
         result    = clamp(raw, min_size, max_size)
-
-    Args:
-        position_manager: Source of current cash balances.
-        edge: Detected price edge (e.g. 0.03 for a 3% gap).
-        collateral: If provided, only count cash for this collateral ticker.
-        kelly_fraction: Conservative Kelly multiplier (default 0.1 = 1/10 Kelly).
-        edge_cap: Edges above this are treated equally (prevents huge bets on
-            anomalous data).
-        min_size: Floor — don't trade dust.
-        max_size: Ceiling — per-trade cap.
-
-    Returns:
-        Trade size as a Decimal, or ``min_size`` if capital is insufficient.
     """
     available = Decimal('0')
     for pos in position_manager.get_cash_positions():
@@ -54,12 +41,10 @@ def compute_trade_size(
     weight = min(edge / edge_cap, Decimal('1'))
     raw = available * kelly_fraction * weight
 
-    # Clamp
     if raw < min_size:
         return min_size
     if raw > max_size:
         return max_size
-    # Round down to integer contracts (Kalshi requires whole contracts)
     return raw.quantize(Decimal('1'))
 
 
@@ -91,6 +76,8 @@ async def compute_trade_size_with_llm(
     edge_cap: Decimal = Decimal('0.10'),
     min_size: Decimal = Decimal('1'),
     max_size: Decimal = Decimal('100'),
+    leg_count: int = 1,
+    leg_prices: list[Decimal] | None = None,
 ) -> Decimal:
     quant_size = compute_trade_size(
         position_manager,
@@ -119,6 +106,8 @@ async def compute_trade_size_with_llm(
         quant_size=quant_size,
         kelly_fraction=kelly_fraction,
         max_size=max_size,
+        leg_count=leg_count,
+        leg_prices=leg_prices or [],
     )
     llm_size = await compute_opportunity_sizing_llm(
         request,

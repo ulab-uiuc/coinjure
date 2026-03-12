@@ -289,6 +289,10 @@ def _run_batch(
             kwargs['llm_trade_sizing'] = True
             if llm_model:
                 kwargs['llm_model'] = llm_model
+        if llm_portfolio_review:
+            kwargs['llm_portfolio_review'] = True
+            if llm_model:
+                kwargs['llm_model'] = llm_model
 
         budget = budgets.get(rel.relation_id, Decimal('10'))
 
@@ -1455,6 +1459,10 @@ def engine_backtest(
             merged_kwargs = dict(strategy_kwargs)
             if llm_trade_sizing:
                 merged_kwargs['llm_trade_sizing'] = True
+                if llm_model:
+                    merged_kwargs['llm_model'] = llm_model
+            if llm_portfolio_review:
+                merged_kwargs['llm_portfolio_review'] = True
                 if llm_model:
                     merged_kwargs['llm_model'] = llm_model
 

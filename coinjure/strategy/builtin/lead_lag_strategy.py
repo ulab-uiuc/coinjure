@@ -68,6 +68,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         kelly_fraction: float = 0.1,
         llm_trade_sizing: bool = False,
         llm_model: str | None = None,
+        llm_portfolio_review: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -80,6 +81,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.llm_trade_sizing = llm_trade_sizing
         self.llm_model = llm_model
+        self.llm_portfolio_review = llm_portfolio_review
 
         self._init_from_relation(relation_id)
 
@@ -192,6 +194,8 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
+            leg_count=1,
+            leg_prices=[self._follower_price],
         )
         ticker_b = self._find_ticker(trader, self._follower_id, side='yes')
         if not ticker_b or not self._follower_price:
@@ -242,6 +246,8 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
+            leg_count=1,
+            leg_prices=[Decimal('1') - self._follower_price],
         )
         ticker_b_no = self._find_ticker(trader, self._follower_id, side='no')
         if not ticker_b_no or not self._follower_price:
