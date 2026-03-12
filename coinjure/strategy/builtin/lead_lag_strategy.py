@@ -25,6 +25,7 @@ from decimal import Decimal
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.sizing import compute_trade_size
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -39,7 +40,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
     relation_id:
         Relation ID from RelationStore. Must be a temporal type.
     trade_size:
-        Dollar amount per trade.
+        Max dollar amount per trade.
     entry_threshold:
         Minimum move in A (as fraction, e.g. 0.03 = 3 cents) to trigger.
     warmup:
@@ -48,6 +49,8 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         Fraction of A's move that B must match to trigger exit (0.0-1.0).
     max_hold:
         Maximum number of B price updates to hold before forced exit.
+    kelly_fraction:
+        Conservative Kelly multiplier for dynamic sizing.
     """
 
     name = 'lead_lag'
@@ -62,11 +65,13 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         warmup: int = 50,
         exit_reversion: float = 0.5,
         max_hold: int = 100,
+        kelly_fraction: float = 0.1,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
-        self.trade_size = Decimal(str(trade_size))
+        self.max_trade_size = Decimal(str(trade_size))
         self.entry_threshold = Decimal(str(entry_threshold))
+        self.kelly_fraction = Decimal(str(kelly_fraction))
         self._warmup_size = warmup
         self._exit_reversion = exit_reversion
         self._max_hold = max_hold
@@ -112,6 +117,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         self._entry_leader_price = 0.0
         self._entry_follower_price = 0.0
         self._hold_count = 0
+        self._owned_symbols = set()
 
     async def process_event(self, event: Event, trader: Trader) -> None:
         if self.is_paused() or not isinstance(event, PriceChangeEvent):
@@ -172,13 +178,23 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
     async def _enter_long(self, trader: Trader, leader_move: float) -> None:
         """Leader moved up → buy follower YES."""
         ticker_b = self._find_ticker(trader, self._follower_id, side='yes')
-        if ticker_b and self._follower_price:
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_b,
-                limit_price=self._follower_price,
-                quantity=self.trade_size,
-            )
+        if not ticker_b or not self._follower_price:
+            return
+
+        size = compute_trade_size(
+            trader.position_manager, Decimal(str(abs(leader_move))),
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
+        result = await trader.place_order(
+            side=TradeSide.BUY,
+            ticker=ticker_b,
+            limit_price=self._follower_price,
+            quantity=size,
+        )
+        if result.failure_reason:
+            return
+        self._owned_symbols.add(ticker_b.symbol)
 
         self._position_state = 'long_follower'
         self._entry_leader_price = float(self._leader_price or 0)
@@ -201,14 +217,24 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
     async def _enter_short(self, trader: Trader, leader_move: float) -> None:
         """Leader moved down → sell follower (buy NO)."""
         ticker_b_no = self._find_ticker(trader, self._follower_id, side='no')
-        if ticker_b_no and self._follower_price:
-            no_price = Decimal('1') - self._follower_price
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_b_no,
-                limit_price=no_price,
-                quantity=self.trade_size,
-            )
+        if not ticker_b_no or not self._follower_price:
+            return
+
+        no_price = Decimal('1') - self._follower_price
+        size = compute_trade_size(
+            trader.position_manager, Decimal(str(abs(leader_move))),
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
+        result = await trader.place_order(
+            side=TradeSide.BUY,
+            ticker=ticker_b_no,
+            limit_price=no_price,
+            quantity=size,
+        )
+        if result.failure_reason:
+            return
+        self._owned_symbols.add(ticker_b_no.symbol)
 
         self._position_state = 'short_follower'
         self._entry_leader_price = float(self._leader_price or 0)
@@ -245,16 +271,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         )
 
         if should_exit:
-            for pos in trader.position_manager.positions.values():
-                if pos.quantity > 0:
-                    best_bid = trader.market_data.get_best_bid(pos.ticker)
-                    if best_bid:
-                        await trader.place_order(
-                            side=TradeSide.SELL,
-                            ticker=pos.ticker,
-                            limit_price=best_bid.price,
-                            quantity=pos.quantity,
-                        )
+            await self._close_owned(trader)
 
             reason = 'catchup' if catchup_ratio >= self._exit_reversion else 'timeout'
             self.record_decision(

@@ -107,7 +107,7 @@ class DirectArbStrategy(Strategy):
         self._poly_ticker: PolyMarketTicker | None = None
         self._kalshi_ticker_obj: KalshiTicker | None = None
 
-        self._last_arb_time: float = time.monotonic()
+        self._last_arb_time: float = 0.0
         self._poll_task: asyncio.Task | None = None
         self._initialized: bool = False
         # Position tracking: 'poly_cheap' or 'kalshi_cheap' or None
