@@ -76,6 +76,7 @@ class GroupArbStrategy(Strategy):
         cooldown_seconds: int = 120,
         warmup_seconds: float = 5.0,
         min_markets: int = 2,
+        llm_trade_sizing: bool = False,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.relation_id = relation_id
@@ -86,6 +87,7 @@ class GroupArbStrategy(Strategy):
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.cooldown_seconds = cooldown_seconds
         self._min_markets_override = min_markets
+        self.llm_trade_sizing = llm_trade_sizing
 
         self._event_id = event_id
         self._relation_market_ids: set[str] = set()

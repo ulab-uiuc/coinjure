@@ -81,6 +81,7 @@ class DirectArbStrategy(Strategy):
         cooldown_seconds: int = 60,
         warmup_seconds: float = 5.0,
         backtest_mode: bool = False,
+        llm_trade_sizing: bool = False,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.poly_market_id = poly_market_id
@@ -92,6 +93,7 @@ class DirectArbStrategy(Strategy):
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.cooldown_seconds = cooldown_seconds
         self.backtest_mode = backtest_mode
+        self.llm_trade_sizing = llm_trade_sizing
 
         # Latest mid prices (updated on every matching event)
         self._poly_yes_price: Decimal | None = None
