@@ -231,6 +231,7 @@ def _run_batch(
     no_hub: bool = False,
     llm_portfolio_review: bool = False,
     llm_trade_sizing: bool = False,
+    llm_model: str | None = None,
 ) -> None:
     """Spawn one detached engine process per matching relation."""
     from decimal import Decimal
@@ -257,8 +258,11 @@ def _run_batch(
     if llm_portfolio_review:
         from coinjure.trading.llm_allocator import allocate_capital_llm
 
+        llm_kwargs: dict[str, Any] = {}
+        if llm_model:
+            llm_kwargs['model'] = llm_model
         budgets = asyncio.run(
-            allocate_capital_llm(Decimal(initial_capital), candidates)
+            allocate_capital_llm(Decimal(initial_capital), candidates, **llm_kwargs)
         )
     else:
         budgets = allocate_capital(
@@ -271,6 +275,9 @@ def _run_batch(
     if llm_trade_sizing:
         from coinjure.trading.llm_sizing import SizingContext, compute_llm_sizing
 
+        llm_sz_kwargs: dict[str, Any] = {}
+        if llm_model:
+            llm_sz_kwargs['model'] = llm_model
         sizing_contexts = [
             SizingContext(
                 strategy_id=rel.relation_id,
@@ -285,7 +292,7 @@ def _run_batch(
             )
             for rel in relations
         ]
-        sizing_overrides = asyncio.run(compute_llm_sizing(sizing_contexts))
+        sizing_overrides = asyncio.run(compute_llm_sizing(sizing_contexts, **llm_sz_kwargs))
 
     reg = _load_registry()
     results = []
@@ -450,6 +457,11 @@ def engine() -> None:
     default=False,
     help='Use LLM to set per-strategy sizing parameters at launch time.',
 )
+@click.option(
+    '--llm-model',
+    default=None,
+    help='LLM model name for allocation/sizing (default: gpt-4.1-mini).',
+)
 def engine_paper_run(
     exchange: str,
     duration: float | None,
@@ -465,6 +477,7 @@ def engine_paper_run(
     data_dir: str | None,
     llm_portfolio_review: bool,
     llm_trade_sizing: bool,
+    llm_model: str | None,
 ) -> None:
     """Run a paper trading engine instance."""
     if all_relations and strategy_ref:
@@ -484,6 +497,7 @@ def engine_paper_run(
             no_hub=no_hub,
             llm_portfolio_review=llm_portfolio_review,
             llm_trade_sizing=llm_trade_sizing,
+            llm_model=llm_model,
         )
         return
 
@@ -674,6 +688,11 @@ def engine_paper_run(
     default=False,
     help='Use LLM to set per-strategy sizing parameters at launch time.',
 )
+@click.option(
+    '--llm-model',
+    default=None,
+    help='LLM model name for allocation/sizing (default: gpt-4.1-mini).',
+)
 def engine_live_run(
     exchange: str,
     duration: float | None,
@@ -691,6 +710,7 @@ def engine_live_run(
     detach: bool,
     llm_portfolio_review: bool,
     llm_trade_sizing: bool,
+    llm_model: str | None,
 ) -> None:
     """Run a live trading engine instance (real orders, real funds)."""
     if all_relations and strategy_ref:
@@ -711,6 +731,7 @@ def engine_live_run(
             as_json=as_json,
             llm_portfolio_review=llm_portfolio_review,
             llm_trade_sizing=llm_trade_sizing,
+            llm_model=llm_model,
         )
         return
 
@@ -1325,6 +1346,24 @@ def engine_killswitch(
     help='JSON object for strategy constructor kwargs.',
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON output')
+@click.option(
+    '--llm-portfolio-review',
+    is_flag=True,
+    default=False,
+    help='Use LLM to review and adjust capital allocation across strategies before backtest.',
+)
+@click.option(
+    '--llm-trade-sizing',
+    is_flag=True,
+    default=False,
+    help='Use LLM to set per-strategy sizing parameters before backtest.',
+)
+@click.option(
+    '--llm-model',
+    default=None,
+    help='LLM model name for allocation/sizing (default: gpt-4.1-mini). '
+    'Supports any OpenAI-compatible model via OPENAI_BASE_URL.',
+)
 def engine_backtest(
     relation_ids: tuple[str, ...],
     all_relations: bool,
@@ -1333,6 +1372,9 @@ def engine_backtest(
     initial_capital: str,
     strategy_kwargs_json: str | None,
     as_json: bool,
+    llm_portfolio_review: bool,
+    llm_trade_sizing: bool,
+    llm_model: str | None,
 ) -> None:
     """Backtest relations using auto-selected strategies.
 
@@ -1396,18 +1438,85 @@ def engine_backtest(
             'mode': 'backtest',
             'message': f'Backtesting {len(relations)} relation(s)',
             'relation_count': len(relations),
+            'llm_portfolio_review': llm_portfolio_review,
+            'llm_trade_sizing': llm_trade_sizing,
+            'llm_model': llm_model,
         },
         as_json=as_json,
     )
 
+    # ── Optional LLM portfolio review ─────────────────────────────────
+    llm_kwargs: dict[str, Any] = {}
+    if llm_model:
+        llm_kwargs['model'] = llm_model
+
+    budgets: dict[str, Decimal] = {}
+    if llm_portfolio_review:
+        from coinjure.trading.allocator import AllocationCandidate
+        from coinjure.trading.llm_allocator import allocate_capital_llm
+
+        candidates = [
+            AllocationCandidate(
+                strategy_id=rel.relation_id,
+                backtest_pnl=rel.backtest_pnl or 0.0,
+            )
+            for rel in relations
+        ]
+        if not as_json:
+            click.echo('Running LLM portfolio allocation review...')
+        budgets = asyncio.run(
+            allocate_capital_llm(capital, candidates, **llm_kwargs)
+        )
+        if not as_json:
+            for sid, bgt in budgets.items():
+                click.echo(f'  LLM budget: {sid[:30]:30s}  ${bgt:.2f}')
+
+    # ── Optional LLM trade sizing ─────────────────────────────────────
+    sizing_overrides: dict[str, Any] = {}
+    if llm_trade_sizing:
+        from coinjure.trading.llm_sizing import SizingContext, compute_llm_sizing
+
+        sizing_contexts = [
+            SizingContext(
+                strategy_id=rel.relation_id,
+                strategy_type='spread',
+                relation_type=rel.spread_type,
+                backtest_pnl=Decimal(str(rel.backtest_pnl or 0)),
+                current_edge=Decimal('0'),  # not known pre-backtest
+                volatility=Decimal('0'),  # not known pre-backtest
+                total_capital=capital,
+                allocated_budget=budgets.get(rel.relation_id, Decimal('10')),
+                current_exposure=Decimal('0'),
+            )
+            for rel in relations
+        ]
+        if not as_json:
+            click.echo('Running LLM trade sizing...')
+        sizing_overrides = asyncio.run(compute_llm_sizing(sizing_contexts, **llm_kwargs))
+        if not as_json:
+            for sid, ovr in sizing_overrides.items():
+                click.echo(
+                    f'  LLM sizing: {sid[:30]:30s}  '
+                    f'kelly={ovr.kelly_fraction:.3f}  max_size={ovr.max_size}'
+                )
+
     async def _run_all():
         results = []
         for rel in relations:
+            merged_kwargs = dict(strategy_kwargs)
+            override = sizing_overrides.get(rel.relation_id)
+            if override is not None:
+                merged_kwargs['kelly_fraction'] = float(override.kelly_fraction)
+                merged_kwargs['trade_size'] = float(override.max_size)
+                merged_kwargs['llm_trade_sizing'] = True
+
+            rel_capital = budgets.get(rel.relation_id, capital) if budgets else capital
+
             result = await run_backtest_relation(
                 rel,
-                initial_capital=capital,
+                initial_capital=rel_capital,
                 parquet_path=parquet,
-                strategy_kwargs=strategy_kwargs,
+                strategy_kwargs=merged_kwargs,
             )
             if result.error is None:
                 rel.set_backtest_result(
