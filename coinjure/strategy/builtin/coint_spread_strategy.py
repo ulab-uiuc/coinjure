@@ -219,11 +219,6 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
         ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
         ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')
 
-        size = compute_trade_size(
-            trader.position_manager, abs(deviation),
-            kelly_fraction=self.kelly_fraction,
-            max_size=self.max_trade_size,
-        )
         ok = await self._place_pair(
             trader,
             ticker_a, self._price_a or Decimal('0'),
@@ -265,11 +260,6 @@ class CointSpreadStrategy(RelationArbMixin, Strategy):
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
-        size = compute_trade_size(
-            trader.position_manager, abs(deviation),
-            kelly_fraction=self.kelly_fraction,
-            max_size=self.max_trade_size,
-        )
         ok = await self._place_pair(
             trader,
             ticker_a_no, Decimal('1') - self._price_a if self._price_a else Decimal('0'),

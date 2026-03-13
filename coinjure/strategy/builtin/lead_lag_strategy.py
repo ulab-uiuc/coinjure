@@ -201,11 +201,6 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
         if not ticker_b or not self._follower_price:
             return
 
-        size = compute_trade_size(
-            trader.position_manager, Decimal(str(abs(leader_move))),
-            kelly_fraction=self.kelly_fraction,
-            max_size=self.max_trade_size,
-        )
         result = await trader.place_order(
             side=TradeSide.BUY,
             ticker=ticker_b,
@@ -254,11 +249,6 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             return
 
         no_price = Decimal('1') - self._follower_price
-        size = compute_trade_size(
-            trader.position_manager, Decimal(str(abs(leader_move))),
-            kelly_fraction=self.kelly_fraction,
-            max_size=self.max_trade_size,
-        )
         result = await trader.place_order(
             side=TradeSide.BUY,
             ticker=ticker_b_no,
