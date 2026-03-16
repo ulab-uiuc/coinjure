@@ -29,8 +29,8 @@ from decimal import Decimal
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.sizing import compute_trade_size
 from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +43,15 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
     relation_id:
         Relation ID from RelationStore.
     trade_size:
-        Dollar amount per leg.
+        Max dollar amount per leg.
     cond_lower:
         Lower bound on p(A|B). Default 0 (no lower bound).
     cond_upper:
         Upper bound on p(A|B). Default 1 (no upper bound).
     min_edge:
         Minimum distance outside the band to trigger entry.
+    kelly_fraction:
+        Conservative Kelly multiplier for dynamic sizing.
     """
 
     name = 'conditional_arb'
@@ -63,13 +65,15 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         cond_lower: float = 0.0,
         cond_upper: float = 1.0,
         min_edge: float = 0.02,
+        kelly_fraction: float = 0.1,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
-        self.trade_size = Decimal(str(trade_size))
+        self.max_trade_size = Decimal(str(trade_size))
         self.cond_lower = cond_lower
         self.cond_upper = cond_upper
         self.min_edge = Decimal(str(min_edge))
+        self.kelly_fraction = Decimal(str(kelly_fraction))
 
         self._init_from_relation(relation_id)
 
@@ -82,6 +86,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         self._price_a = None
         self._price_b = None
         self._position_state = 'flat'
+        self._owned_symbols = set()
 
     def _compute_bounds(self, price_b: float) -> tuple[float, float]:
         """Compute the valid range for p(A) given p(B) and conditional bounds."""
@@ -147,20 +152,20 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
-        if ticker_a_no and self._price_a:
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_a_no,
-                limit_price=Decimal('1') - self._price_a,
-                quantity=self.trade_size,
-            )
-        if ticker_b and self._price_b:
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_b,
-                limit_price=self._price_b,
-                quantity=self.trade_size,
-            )
+        edge = Decimal(str(pa - upper))
+        size = compute_trade_size(
+            trader.position_manager, edge,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
+        ok = await self._place_pair(
+            trader,
+            ticker_a_no, Decimal('1') - self._price_a if self._price_a else Decimal('0'),
+            ticker_b, self._price_b or Decimal('0'),
+            size,
+        )
+        if not ok:
+            return
 
         self._position_state = 'short_a_long_b'
         self.record_decision(
@@ -188,20 +193,20 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
         ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')
 
-        if ticker_a and self._price_a:
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_a,
-                limit_price=self._price_a,
-                quantity=self.trade_size,
-            )
-        if ticker_b_no and self._price_b:
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_b_no,
-                limit_price=Decimal('1') - self._price_b,
-                quantity=self.trade_size,
-            )
+        edge = Decimal(str(lower - pa))
+        size = compute_trade_size(
+            trader.position_manager, edge,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
+        ok = await self._place_pair(
+            trader,
+            ticker_a, self._price_a or Decimal('0'),
+            ticker_b_no, Decimal('1') - self._price_b if self._price_b else Decimal('0'),
+            size,
+        )
+        if not ok:
+            return
 
         self._position_state = 'long_a_short_b'
         self.record_decision(
@@ -225,16 +230,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
         lower: float,
         upper: float,
     ) -> None:
-        for pos in trader.position_manager.positions.values():
-            if pos.quantity > 0:
-                best_bid = trader.market_data.get_best_bid(pos.ticker)
-                if best_bid:
-                    await trader.place_order(
-                        side=TradeSide.SELL,
-                        ticker=pos.ticker,
-                        limit_price=best_bid.price,
-                        quantity=pos.quantity,
-                    )
+        await self._close_owned(trader)
 
         prev = self._position_state
         self._position_state = 'flat'

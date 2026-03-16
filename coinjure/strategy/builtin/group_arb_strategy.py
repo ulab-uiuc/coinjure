@@ -150,7 +150,7 @@ class GroupArbStrategy(Strategy):
                 self._market_no_ticker[no_t.market_id] = no_t
 
         self._tickers: dict[str, Ticker] = {}
-        self._last_arb_time: float = time.monotonic()
+        self._last_arb_time: float = 0.0
         # Position tracking: 'BUY_YES', 'BUY_NO', or None
         self._held_direction: str | None = None
 

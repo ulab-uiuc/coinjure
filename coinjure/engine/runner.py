@@ -387,30 +387,42 @@ async def run_live_kalshi_trading(
                 continue
             from coinjure.ticker import KalshiTicker
 
+            # Kalshi: positive count = YES, negative = NO
+            if count > 0:
+                side = 'yes'
+                abs_count = count
+            else:
+                side = 'no'
+                abs_count = abs(count)
+
+            # Use distinct symbol for YES vs NO so PositionManager doesn't overwrite
+            sym = kpos.ticker if side == 'yes' else f'{kpos.ticker}__no'
             ticker = KalshiTicker(
-                symbol=kpos.ticker,
+                symbol=sym,
                 name='',
                 market_ticker=kpos.ticker,
                 event_ticker=kpos.event_ticker or '',
+                side=side,
             )
             avg_cost = Decimal('0')
-            if kpos.total_cost is not None and count > 0:
+            if kpos.total_cost is not None and abs_count > 0:
                 # total_cost is in cents
                 avg_cost = (
-                    Decimal(str(kpos.total_cost)) / Decimal('100') / Decimal(str(count))
+                    Decimal(str(abs(kpos.total_cost))) / Decimal('100') / Decimal(str(abs_count))
                 )
             position_manager.update_position(
                 Position(
                     ticker=ticker,
-                    quantity=Decimal(str(count)),
+                    quantity=Decimal(str(abs_count)),
                     average_cost=avg_cost,
                     realized_pnl=Decimal(str(kpos.realized_pnl or 0)) / Decimal('100'),
                 )
             )
             logger.info(
-                'Loaded position from exchange: %s qty=%d',
+                'Loaded position from exchange: %s side=%s qty=%d',
                 kpos.ticker,
-                count,
+                side,
+                abs_count,
             )
     except Exception:
         logger.warning('Failed to fetch positions from Kalshi', exc_info=True)
