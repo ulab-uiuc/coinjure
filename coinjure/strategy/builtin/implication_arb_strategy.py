@@ -24,8 +24,8 @@ from decimal import Decimal
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
+from coinjure.trading.sizing import compute_trade_size
 from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +38,11 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
     relation_id:
         Relation ID from RelationStore. Must be an implication type.
     trade_size:
-        Dollar amount per leg.
+        Max dollar amount per leg.
     min_edge:
         Minimum violation size (price_A - price_B) to trigger entry.
+    kelly_fraction:
+        Conservative Kelly multiplier for dynamic sizing.
     """
 
     name = 'implication_arb'
@@ -52,11 +54,13 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         relation_id: str = '',
         trade_size: float = 10.0,
         min_edge: float = 0.01,
+        kelly_fraction: float = 0.1,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
-        self.trade_size = Decimal(str(trade_size))
+        self.max_trade_size = Decimal(str(trade_size))
         self.min_edge = Decimal(str(min_edge))
+        self.kelly_fraction = Decimal(str(kelly_fraction))
 
         self._init_from_relation(relation_id)
 
@@ -112,21 +116,19 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
-        if ticker_a_no and self._price_a:
-            no_price = Decimal('1') - self._price_a
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_a_no,
-                limit_price=no_price,
-                quantity=self.trade_size,
-            )
-        if ticker_b and self._price_b:
-            await trader.place_order(
-                side=TradeSide.BUY,
-                ticker=ticker_b,
-                limit_price=self._price_b,
-                quantity=self.trade_size,
-            )
+        size = compute_trade_size(
+            trader.position_manager, violation,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+        )
+        ok = await self._place_pair(
+            trader,
+            ticker_a_no, Decimal('1') - self._price_a if self._price_a else Decimal('0'),
+            ticker_b, self._price_b or Decimal('0'),
+            size,
+        )
+        if not ok:
+            return
 
         self._position_state = 'short_a_long_b'
         self.record_decision(
@@ -151,17 +153,8 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         )
 
     async def _exit(self, trader: Trader, violation: Decimal) -> None:
-        """Close all positions — constraint restored."""
-        for pos in trader.position_manager.positions.values():
-            if pos.quantity > 0:
-                best_bid = trader.market_data.get_best_bid(pos.ticker)
-                if best_bid:
-                    await trader.place_order(
-                        side=TradeSide.SELL,
-                        ticker=pos.ticker,
-                        limit_price=best_bid.price,
-                        quantity=pos.quantity,
-                    )
+        """Close owned positions — constraint restored."""
+        await self._close_owned(trader)
 
         self._position_state = 'flat'
         self.record_decision(

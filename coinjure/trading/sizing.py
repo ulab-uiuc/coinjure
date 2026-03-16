@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from coinjure.ticker import CashTicker
+from coinjure.ticker import Ticker
 from coinjure.trading.position import PositionManager
 
 
@@ -10,6 +10,7 @@ def compute_trade_size(
     position_manager: PositionManager,
     edge: Decimal,
     *,
+    collateral: Ticker | None = None,
     kelly_fraction: Decimal = Decimal('0.1'),
     edge_cap: Decimal = Decimal('0.10'),
     min_size: Decimal = Decimal('1'),
@@ -19,7 +20,7 @@ def compute_trade_size(
 
     Formula::
 
-        available = sum(cash positions)
+        available = sum(cash positions matching collateral)
         weight    = min(edge / edge_cap, 1)
         raw       = available * kelly_fraction * weight
         result    = clamp(raw, min_size, max_size)
@@ -27,6 +28,7 @@ def compute_trade_size(
     Args:
         position_manager: Source of current cash balances.
         edge: Detected price edge (e.g. 0.03 for a 3% gap).
+        collateral: If provided, only count cash for this collateral ticker.
         kelly_fraction: Conservative Kelly multiplier (default 0.1 = 1/10 Kelly).
         edge_cap: Edges above this are treated equally (prevents huge bets on
             anomalous data).
@@ -38,6 +40,8 @@ def compute_trade_size(
     """
     available = Decimal('0')
     for pos in position_manager.get_cash_positions():
+        if collateral is not None and pos.ticker != collateral:
+            continue
         available += pos.quantity
 
     if available <= 0 or edge <= 0:
