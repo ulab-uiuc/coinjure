@@ -90,8 +90,12 @@ async def compute_trade_size_with_llm(
     if not llm_trade_sizing:
         return quant_size
 
+    non_cash = position_manager.get_non_cash_positions()
     available = _available_capital(position_manager)
-    exposure = _current_exposure(position_manager)
+    exposure = Decimal('0')
+    for pos in non_cash:
+        if pos.quantity > 0:
+            exposure += pos.quantity * pos.average_cost
     total = available + exposure
     utilization = exposure / total if total > 0 else Decimal('0')
     request = OpportunitySizingRequest(
@@ -101,7 +105,7 @@ async def compute_trade_size_with_llm(
         edge=edge,
         available_capital=available,
         current_exposure=exposure,
-        position_count=len(position_manager.get_non_cash_positions()),
+        position_count=len(non_cash),
         portfolio_utilization=utilization,
         quant_size=quant_size,
         kelly_fraction=kelly_fraction,

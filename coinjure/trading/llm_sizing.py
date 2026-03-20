@@ -295,9 +295,44 @@ async def compute_opportunity_sizing_llm(
         )
         size = request.max_size
 
+    # Enforce capital constraint: size × sum(leg_prices) <= available_capital
+    total_leg_price = Decimal('0')
+    for p in request.leg_prices:
+        if isinstance(p, Decimal) and p > 0:
+            total_leg_price += p
+    if total_leg_price > 0:
+        try:
+            max_by_capital = request.available_capital / total_leg_price
+        except (InvalidOperation, ZeroDivisionError):
+            max_by_capital = Decimal('0')
+        if max_by_capital <= 0:
+            logger.info(
+                'Per-opportunity LLM sizing for %s: insufficient capital '
+                '(available=%s, total_leg_price=%s)',
+                request.strategy_id,
+                request.available_capital,
+                total_leg_price,
+            )
+            return None
+        if size > max_by_capital:
+            logger.info(
+                'Per-opportunity LLM size %s clamped to capital-constrained max %s '
+                '(available=%s, total_leg_price=%s)',
+                size,
+                max_by_capital,
+                request.available_capital,
+                total_leg_price,
+            )
+            size = max_by_capital
+
     size = size.quantize(Decimal('1'))
     if size <= 0:
-        size = Decimal('1')
+        logger.info(
+            'Per-opportunity LLM sizing for %s: size rounded to non-positive after '
+            'constraints; no trade',
+            request.strategy_id,
+        )
+        return None
 
     logger.info(
         'Per-opportunity LLM sizing for %s: size=%s (quant=%s) reason=%s',

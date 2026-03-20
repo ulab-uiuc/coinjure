@@ -434,7 +434,7 @@ def engine() -> None:
     '--llm-trade-sizing',
     is_flag=True,
     default=False,
-    help='Use LLM to set per-strategy sizing parameters at launch time.',
+    help='Use LLM to size individual trade opportunities at runtime (per-opportunity sizing; may call the LLM API for each trade).',
 )
 @click.option(
     '--llm-model',
@@ -665,7 +665,7 @@ def engine_paper_run(
     '--llm-trade-sizing',
     is_flag=True,
     default=False,
-    help='Use LLM to set per-strategy sizing parameters at launch time.',
+    help='Use LLM to size individual trade opportunities at runtime (per-opportunity sizing; may call the LLM API for each trade).',
 )
 @click.option(
     '--llm-model',
@@ -1335,7 +1335,7 @@ def engine_killswitch(
     '--llm-trade-sizing',
     is_flag=True,
     default=False,
-    help='Use LLM to set per-strategy sizing parameters before backtest.',
+    help='Route trade sizing decisions through the LLM during backtest runtime (may trigger API calls during opportunity checks).',
 )
 @click.option(
     '--llm-model',

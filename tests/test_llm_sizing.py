@@ -252,8 +252,8 @@ def test_opportunity_sizing_rounds_to_integer():
     assert result == Decimal('13')
 
 
-def test_opportunity_sizing_minimum_one():
-    """Test that quantized result below 1 is clamped to 1."""
+def test_opportunity_sizing_sub_one_returns_none():
+    """Test that a size rounding to zero after quantize returns None (no trade)."""
     rate_limiter = get_opportunity_rate_limiter()
     rate_limiter._last_call = 0.0
 
@@ -267,7 +267,7 @@ def test_opportunity_sizing_minimum_one():
     ):
         result = asyncio.run(compute_opportunity_sizing_llm(request))
 
-    assert result == Decimal('1')
+    assert result is None
 
 
 def test_trade_size_with_llm_disabled():

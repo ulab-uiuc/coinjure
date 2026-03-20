@@ -573,11 +573,11 @@ class TradingEngine:
             available += pos.quantity
         exposure = Decimal('0')
         realized_pnl = Decimal('0')
-        unrealized_pnl = Decimal('0')
         for pos in pm.get_non_cash_positions():
             if pos.quantity > 0:
                 exposure += pos.quantity * pos.average_cost
             realized_pnl += pos.realized_pnl
+        unrealized_pnl = pm.get_total_unrealized_pnl(self.market_data)
 
         strategy_id = getattr(self.strategy, 'relation_id', None) or getattr(
             self.strategy, 'name', 'unknown'

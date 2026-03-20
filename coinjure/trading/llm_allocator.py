@@ -184,6 +184,8 @@ def _parse_and_validate_budgets(
                 f'Budget for {strategy_id} is not a valid decimal: {raw_budget!r}'
             ) from exc
 
+        if not budget.is_finite():
+            raise ValueError(f'Budget for {strategy_id} is not finite (got {budget!r}).')
         if budget <= 0:
             raise ValueError(f'Budget for {strategy_id} must be positive.')
         if budget > max_per_strategy:
@@ -376,6 +378,8 @@ def _parse_portfolio_adjustment(content: str) -> PortfolioAdjustment:
             kf = Decimal(str(raw_kelly))
         except (InvalidOperation, ValueError) as exc:
             raise ValueError(f'kelly_fraction not valid: {raw_kelly!r}') from exc
+        if not kf.is_finite():
+            raise ValueError(f'kelly_fraction is not finite (got {kf!r}).')
         if kf < Decimal('0.01') or kf > Decimal('0.5'):
             raise ValueError(f'kelly_fraction {kf} out of range [0.01, 0.5]')
         adjustment.kelly_fraction = kf
@@ -386,6 +390,8 @@ def _parse_portfolio_adjustment(content: str) -> PortfolioAdjustment:
             ms = Decimal(str(raw_max))
         except (InvalidOperation, ValueError) as exc:
             raise ValueError(f'max_trade_size not valid: {raw_max!r}') from exc
+        if not ms.is_finite():
+            raise ValueError(f'max_trade_size is not finite (got {ms!r}).')
         if ms < Decimal('1'):
             raise ValueError(f'max_trade_size {ms} must be >= 1')
         adjustment.max_trade_size = ms
