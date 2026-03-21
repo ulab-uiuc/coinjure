@@ -13,7 +13,6 @@ from coinjure.data.source import DataSource
 from coinjure.engine.performance import PerformanceAnalyzer
 from coinjure.events import NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
-from coinjure.ticker import CashTicker
 from coinjure.trading.risk import StandardRiskManager
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import OrderStatus
@@ -87,6 +86,10 @@ class TradingEngine:
         # [D1] Data-flow pause flag: when True the event loop sleeps instead
         # of calling data_source.get_next_event().  Set by ControlServer.
         self._data_paused: bool = False
+
+        # [LLM] Periodic LLM portfolio review counter
+        self._llm_review_event_counter: int = 0
+        self._LLM_REVIEW_INTERVAL = 500
 
     def _drain_backtest_timestamp_batch(self, event: object) -> list[object]:
         """Return all queued events that should be processed as a batch.
@@ -264,6 +267,11 @@ class TradingEngine:
                     )
             await self._check_drawdown_alert()
             await self._check_portfolio_health()
+
+        self._llm_review_event_counter += 1
+        if self._llm_review_event_counter >= self._LLM_REVIEW_INTERVAL:
+            self._llm_review_event_counter = 0
+            await self._check_llm_portfolio_review()
 
         if self._event_count - self._last_prune_event >= self._PRUNE_INTERVAL:
             self._last_prune_event = self._event_count
@@ -546,6 +554,76 @@ class TradingEngine:
                 await self._alerter.on_risk_limit_hit(reason)
             except Exception:
                 pass
+
+    async def _check_llm_portfolio_review(self) -> None:
+        llm_portfolio_review = getattr(self.strategy, 'llm_portfolio_review', False)
+        if not llm_portfolio_review:
+            return
+
+        llm_model = getattr(self.strategy, 'llm_model', None)
+        kelly_fraction = getattr(self.strategy, 'kelly_fraction', None)
+        max_trade_size = getattr(self.strategy, 'max_trade_size', None)
+        if kelly_fraction is None or max_trade_size is None:
+            return
+
+        pm = self.trader.position_manager
+        available = Decimal('0')
+        for pos in pm.get_cash_positions():
+            available += pos.quantity
+        exposure = Decimal('0')
+        realized_pnl = Decimal('0')
+        for pos in pm.get_non_cash_positions():
+            if pos.quantity > 0:
+                exposure += pos.quantity * pos.average_cost
+            realized_pnl += pos.realized_pnl
+        unrealized_pnl = pm.get_total_unrealized_pnl(self.market_data)
+
+        strategy_id = getattr(self.strategy, 'relation_id', None) or getattr(
+            self.strategy, 'name', 'unknown'
+        )
+        trade_count = len(self.trader.orders)
+
+        try:
+            from coinjure.trading.llm_allocator import review_portfolio_llm
+
+            adjustment = await review_portfolio_llm(
+                strategy_id=strategy_id,
+                available_capital=available,
+                current_exposure=exposure,
+                realized_pnl=realized_pnl,
+                unrealized_pnl=unrealized_pnl,
+                position_count=len(pm.get_non_cash_positions()),
+                kelly_fraction=kelly_fraction,
+                max_trade_size=max_trade_size,
+                trade_count=trade_count,
+                model=llm_model or 'gpt-4.1-mini',
+            )
+        except Exception:
+            logger.debug('_check_llm_portfolio_review() call failed', exc_info=True)
+            return
+
+        if adjustment is None:
+            return
+
+        if adjustment.kelly_fraction is not None:
+            old = self.strategy.kelly_fraction
+            self.strategy.kelly_fraction = adjustment.kelly_fraction
+            logger.info(
+                'LLM portfolio review adjusted kelly_fraction: %s -> %s (%s)',
+                old,
+                adjustment.kelly_fraction,
+                adjustment.reasoning,
+            )
+
+        if adjustment.max_trade_size is not None:
+            old = self.strategy.max_trade_size
+            self.strategy.max_trade_size = adjustment.max_trade_size
+            logger.info(
+                'LLM portfolio review adjusted max_trade_size: %s -> %s (%s)',
+                old,
+                adjustment.max_trade_size,
+                adjustment.reasoning,
+            )
 
     async def _auto_degrade_if_needed(self) -> None:
         """Pause strategy and force read-only mode on repeated processing errors."""

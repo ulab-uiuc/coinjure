@@ -86,10 +86,22 @@ def _mock_trader(ask_prices: dict[str, Decimal]) -> MagicMock:
             return Level(price=price, size=Decimal('100'))
         return None
 
+    def get_best_bid(ticker):
+        mid = ticker.identifier
+        price = ask_prices.get(mid)
+        if price is not None and price > 0:
+            # Bid is slightly below ask
+            bid = price - Decimal('0.01')
+            if bid > 0:
+                return Level(price=bid, size=Decimal('100'))
+        return None
+
     dm.get_best_ask = MagicMock(side_effect=get_best_ask)
+    dm.get_best_bid = MagicMock(side_effect=get_best_bid)
     dm.find_complement = MagicMock(return_value=None)
     trader.market_data = dm
     trader.place_order = AsyncMock(return_value=PlaceOrderResult())
+    trader.get_position = MagicMock(return_value=Decimal('1000'))
 
     # PositionManager mock for compute_trade_size
     pm = MagicMock()

@@ -22,6 +22,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Alias to avoid shadowing the builtin `list` with RelationStore.list method
+_List = list
+
 RELATIONS_DIR = Path.home() / '.coinjure'
 RELATIONS_PATH = RELATIONS_DIR / 'relations.json'
 
@@ -174,7 +177,7 @@ class RelationStore:
         data.append(relation.to_dict())
         self._save(data)
 
-    def add_batch(self, relations: list[MarketRelation]) -> int:
+    def add_batch(self, relations: _List[MarketRelation]) -> int:
         """Add multiple relations at once (upsert semantics)."""
         if not relations:
             return 0
@@ -201,7 +204,7 @@ class RelationStore:
 
     # ── Graph queries ──────────────────────────────────────────────────
 
-    def find_by_market(self, market_id: str) -> list[MarketRelation]:
+    def find_by_market(self, market_id: str) -> _List[MarketRelation]:
         """Return all relations involving a given market (by any id field)."""
         results = []
         for r in self.list():

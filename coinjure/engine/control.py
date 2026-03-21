@@ -21,10 +21,11 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from coinjure.engine.engine import TradingEngine
+    from coinjure.ticker import Ticker
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ SOCKET_DIR = Path.home() / '.coinjure'
 SOCKET_PATH = SOCKET_DIR / 'engine.sock'
 
 
-def _ticker_display_name(ticker: object) -> str:
+def _ticker_display_name(ticker: Ticker) -> str:
     """Build a display name with exchange prefix for positions/orders."""
     from coinjure.ticker import KalshiTicker, PolyMarketTicker
 
@@ -394,7 +395,7 @@ class ControlServer:
                         '_sort': abs(mid - 0.5),
                     }
                 )
-            books.sort(key=lambda x: x.pop('_sort'))
+            books.sort(key=lambda x: cast(float, x.pop('_sort')))
             state['order_books'] = books[:40]
         except Exception:
             state['order_books'] = []
