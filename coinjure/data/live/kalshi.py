@@ -48,12 +48,15 @@ async def fetch_kalshi_price_history(
     market_ticker: str,
     period_interval: int = 60,
     lookback_days: int = 30,
+    api_key_id: str | None = None,
+    private_key_path: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch candlestick price history from Kalshi REST API.
 
     Returns a list of ``{t, p}`` dicts (same format as Polymarket's
     ``fetch_price_history``) for interoperability with the backtester.
-    Uses the mid of yes_bid.close / yes_ask.close from each candlestick.
+    Uses the mid of yes_bid.close_dollars / yes_ask.close_dollars from
+    each candlestick (new API format) with fallback to legacy int cents.
 
     URL: /series/{series_ticker}/markets/{market_ticker}/candlesticks
     """
@@ -65,23 +68,42 @@ async def fetch_kalshi_price_history(
     start_ts = int((now - datetime.timedelta(days=lookback_days)).timestamp())
     end_ts = int(now.timestamp())
 
-    url = (
-        f'{KALSHI_API_URL}/series/{series_ticker}/markets/{market_ticker}/candlesticks'
-    )
+    path = f'/trade-api/v2/series/{series_ticker}/markets/{market_ticker}/candlesticks'
+    url = f'https://api.elections.kalshi.com{path}'
     params = {
         'period_interval': period_interval,
         'start_ts': start_ts,
         'end_ts': end_ts,
     }
 
+    # Build auth headers using RSA signing
+    key_id = api_key_id or os.environ.get('KALSHI_API_KEY_ID')
+    pk_path = private_key_path or os.environ.get('KALSHI_PRIVATE_KEY_PATH')
+    auth_headers: dict[str, str] = {}
+    if key_id and pk_path and os.path.exists(pk_path):
+        try:
+            ts = str(int(_time.time() * 1000))
+            msg = ts + 'GET' + path
+            with open(pk_path, 'rb') as f:
+                pk = _serialization.load_pem_private_key(f.read(), password=None)
+            sig = base64.b64encode(
+                pk.sign(msg.encode(), _padding.PKCS1v15(), _hashes.SHA256())
+            ).decode()
+            auth_headers = {
+                'KALSHI-ACCESS-KEY': key_id,
+                'KALSHI-ACCESS-TIMESTAMP': ts,
+                'KALSHI-ACCESS-SIGNATURE': sig,
+            }
+        except Exception as e:
+            logger.warning('Could not sign Kalshi candlestick request: %s', e)
+
     max_retries = 5
     base_delay = 3.0
+    resp = None
 
-    async with httpx.AsyncClient(
-        transport=httpx.AsyncHTTPTransport(), timeout=30.0
-    ) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         for attempt in range(max_retries):
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers=auth_headers)
             if resp.status_code == 429:
                 delay = base_delay * (2**attempt)
                 logger.warning(
@@ -95,14 +117,32 @@ async def fetch_kalshi_price_history(
                 continue
             break
 
-    if resp.status_code != 200:
+    if resp is None or resp.status_code != 200:
         logger.warning(
-            'Kalshi candlestick %s: HTTP %d %s',
+            'Kalshi candlestick %s: HTTP %s %s',
             market_ticker,
-            resp.status_code,
-            resp.text[:200],
+            resp.status_code if resp else 'N/A',
+            resp.text[:200] if resp else '',
         )
         return []
+
+    def _candle_price(side_dict: dict | None, field: str) -> float | None:
+        """Extract price from candle side dict, supporting dollars or int-cents."""
+        if not side_dict:
+            return None
+        dollars = side_dict.get(f'{field}_dollars')
+        if dollars is not None:
+            try:
+                return float(dollars)
+            except (ValueError, TypeError):
+                pass
+        cents = side_dict.get(field)
+        if cents is not None:
+            try:
+                return int(cents) / 100
+            except (ValueError, TypeError):
+                pass
+        return None
 
     data = resp.json()
     result: list[dict[str, Any]] = []
@@ -110,18 +150,18 @@ async def fetch_kalshi_price_history(
         ts = candle.get('end_period_ts')
         if ts is None:
             continue
-        bid_close = (candle.get('yes_bid') or {}).get('close')
-        ask_close = (candle.get('yes_ask') or {}).get('close')
+        bid_close = _candle_price(candle.get('yes_bid'), 'close')
+        ask_close = _candle_price(candle.get('yes_ask'), 'close')
         if bid_close is None and ask_close is None:
-            # Fall back to price.previous if available
-            price_prev = (candle.get('price') or {}).get('previous')
+            price_dict = candle.get('price') or {}
+            price_prev = _candle_price(price_dict, 'previous')
             if price_prev is None:
                 continue
-            mid = price_prev / 100
+            mid = price_prev
         else:
             b = bid_close if bid_close is not None else ask_close
             a = ask_close if ask_close is not None else bid_close
-            mid = (b + a) / 2 / 100  # cents → 0-1
+            mid = (b + a) / 2  # already in 0-1 range
         result.append({'t': ts, 'p': mid})
     return result
 
