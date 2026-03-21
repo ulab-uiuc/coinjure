@@ -17,7 +17,7 @@ from typing import Any
 
 from coinjure.data.source import DataSource
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
-from coinjure.ticker import KalshiTicker, PolyMarketTicker
+from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +192,7 @@ class HubDataSource(DataSource):
         ticker_type = data.get('ticker_type', 'unknown')
         ticker_data = data.get('ticker', {})
 
+        ticker: Ticker
         if ticker_type == 'polymarket':
             ticker = PolyMarketTicker(
                 symbol=ticker_data.get('symbol', ''),

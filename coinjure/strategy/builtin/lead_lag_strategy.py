@@ -195,7 +195,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=1,
-            leg_prices=[self._follower_price],
+            leg_prices=[self._follower_price or Decimal('0')],
         )
         ticker_b = self._find_ticker(trader, self._follower_id, side='yes')
         if not ticker_b or not self._follower_price:
@@ -242,7 +242,7 @@ class LeadLagStrategy(RelationArbMixin, Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=1,
-            leg_prices=[Decimal('1') - self._follower_price],
+            leg_prices=[Decimal('1') - (self._follower_price or Decimal('0'))],
         )
         ticker_b_no = self._find_ticker(trader, self._follower_id, side='no')
         if not ticker_b_no or not self._follower_price:

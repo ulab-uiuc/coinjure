@@ -343,8 +343,10 @@ class DirectArbStrategy(Strategy):
             await self._check_arb(trader)
 
     async def _check_arb(self, trader: Trader) -> None:
-        poly_yes = self._poly_yes_price  # type: ignore[assignment]
-        kalshi_yes = self._kalshi_yes_price  # type: ignore[assignment]
+        poly_yes = self._poly_yes_price
+        kalshi_yes = self._kalshi_yes_price
+        if poly_yes is None or kalshi_yes is None:
+            return
 
         # Direction 1: Poly cheaper → buy Poly YES + buy Kalshi NO
         edge_poly_cheap = kalshi_yes - poly_yes
@@ -408,7 +410,7 @@ class DirectArbStrategy(Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=2,
-            leg_prices=[poly_yes, Decimal('1') - kalshi_yes],
+            leg_prices=[poly_yes, Decimal('1') - kalshi_yes],  # both non-None after guard above
         )
 
         if edge_poly_cheap >= edge_kalshi_cheap:

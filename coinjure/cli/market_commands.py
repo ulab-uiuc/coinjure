@@ -92,6 +92,9 @@ def market_info(
         click.echo()
         return
 
+    if market_id is None:
+        raise click.UsageError('--market-id is required without --slug.')
+
     try:
         if exchange == 'polymarket':
             info = asyncio.run(polymarket_market_info(market_id))
@@ -657,18 +660,19 @@ def market_discover(
         if s['by_type']:
             click.echo(f'    By type: {s["by_type"]}')
         click.echo()
-        for r in s['candidates'][:20]:
-            n = r.get('market_count', 0)
-            ids = r.get('market_ids', [])
+        candidates: list[dict[str, Any]] = s.get('candidates', [])
+        for cand in candidates[:20]:
+            n = cand.get('market_count', 0)
+            ids = cand.get('market_ids', [])
             ids_s = ', '.join(str(i) for i in ids[:3])
             if len(ids) > 3:
                 ids_s += f' +{len(ids)-3} more'
-            click.echo(f'    [{r["type"]}] {n} markets: {ids_s}')
-            for q in r.get('market_questions', [])[:5]:
+            click.echo(f'    [{cand["type"]}] {n} markets: {ids_s}')
+            for q in cand.get('market_questions', [])[:5]:
                 click.echo(f'      - {q}')
-            click.echo(f'      {r["reasoning"]}')
+            click.echo(f'      {cand["reasoning"]}')
             click.echo()
-        if len(s['candidates']) > 20:
+        if len(candidates) > 20:
             click.echo(f'    ... and {len(s["candidates"]) - 20} more')
             click.echo()
 

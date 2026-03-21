@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from coinjure.market.relations import RelationStore
+from coinjure.market.relations import MarketRelation, RelationStore
 from coinjure.ticker import Ticker
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RelationArbMixin:
     """Provides common relation loading, token watching, and ticker matching."""
 
-    _relation: object | None
+    _relation: MarketRelation | None
     _ids: list[str]
     _tokens: list[str]
     # Pre-computed sets: _match_sets[i] contains all identifiers that match slot i

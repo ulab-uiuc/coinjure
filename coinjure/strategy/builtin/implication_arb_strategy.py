@@ -130,7 +130,7 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=2,
-            leg_prices=[Decimal('1') - self._price_a, self._price_b],
+            leg_prices=[Decimal('1') - (self._price_a or Decimal('0')), self._price_b or Decimal('0')],
         )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
@@ -150,8 +150,8 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             action='ENTER_ARB',
             executed=True,
             reasoning=(
-                f'Constraint violated: A={float(self._price_a):.4f} > '
-                f'B={float(self._price_b):.4f}, violation={float(violation):.4f}'
+                f'Constraint violated: A={float(self._price_a or 0):.4f} > '
+                f'B={float(self._price_b or 0):.4f}, violation={float(violation):.4f}'
             ),
             signal_values={
                 'price_a': float(self._price_a or 0),
@@ -176,8 +176,8 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             action='EXIT_ARB',
             executed=True,
             reasoning=(
-                f'Constraint restored: A={float(self._price_a):.4f} ≤ '
-                f'B={float(self._price_b):.4f}'
+                f'Constraint restored: A={float(self._price_a or 0):.4f} ≤ '
+                f'B={float(self._price_b or 0):.4f}'
             ),
             signal_values={
                 'price_a': float(self._price_a or 0),

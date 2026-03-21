@@ -1167,25 +1167,25 @@ def engine_retire(
         raise click.ClickException('Provide --id or use --all.')
 
     reg = _load_registry()
-    entry = reg.get(strategy_id)
-    if entry is None:
+    retire_entry: StrategyEntry | None = reg.get(strategy_id)
+    if retire_entry is None:
         raise click.ClickException(f'Strategy not found: {strategy_id!r}')
 
     stop_result_single: dict = {'ok': True, 'status': 'not_running'}
 
-    if entry.socket_path and Path(entry.socket_path).exists():
+    if retire_entry.socket_path and Path(retire_entry.socket_path).exists():
         try:
             stop_result_single = run_command(
-                'stop', socket_path=Path(entry.socket_path)
+                'stop', socket_path=Path(retire_entry.socket_path)
             )
         except Exception as exc:
             stop_result_single = {'ok': False, 'error': str(exc)}
 
-    entry.lifecycle = 'retired'
-    entry.retired_reason = reason
-    entry.pid = None
-    entry.socket_path = None
-    reg.update(entry)
+    retire_entry.lifecycle = 'retired'
+    retire_entry.retired_reason = reason
+    retire_entry.pid = None
+    retire_entry.socket_path = None
+    reg.update(retire_entry)
 
     resp = {
         'ok': True,
@@ -1484,39 +1484,40 @@ def engine_backtest(
             results.append(result)
         return results
 
-    results = asyncio.run(_run_all())
+    from coinjure.engine.backtester import BacktestResult
+    results: list[BacktestResult] = asyncio.run(_run_all())
 
     # Output results
-    passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if not r.passed and r.error is None)
-    errors = sum(1 for r in results if r.error is not None)
+    passed = sum(1 for br in results if br.passed)
+    failed = sum(1 for br in results if not br.passed and br.error is None)
+    errors = sum(1 for br in results if br.error is not None)
 
     if as_json:
         _emit_json(
             [
                 {
-                    'relation_id': r.relation_id,
-                    'spread_type': r.spread_type,
-                    'strategy': r.strategy_name,
-                    'pnl': float(r.total_pnl),
-                    'trades': r.trade_count,
-                    'passed': r.passed,
-                    'error': r.error,
+                    'relation_id': br.relation_id,
+                    'spread_type': br.spread_type,
+                    'strategy': br.strategy_name,
+                    'pnl': float(br.total_pnl),
+                    'trades': br.trade_count,
+                    'passed': br.passed,
+                    'error': br.error,
                 }
-                for r in results
+                for br in results
             ]
         )
     else:
         click.echo(
             f'\n  Backtest results: {passed} passed, {failed} failed, {errors} errors\n'
         )
-        for r in results:
-            status = 'PASS' if r.passed else ('ERROR' if r.error else 'FAIL')
-            pnl_str = f'pnl={r.total_pnl:+.2f}' if r.error is None else r.error
+        for br in results:
+            status = 'PASS' if br.passed else ('ERROR' if br.error else 'FAIL')
+            pnl_str = f'pnl={br.total_pnl:+.2f}' if br.error is None else br.error
             click.echo(
-                f'  [{status}] {r.relation_id[:20]}  '
-                f'{r.spread_type}  {r.strategy_name}  '
-                f'{pnl_str}  trades={r.trade_count}'
+                f'  [{status}] {br.relation_id[:20]}  '
+                f'{br.spread_type}  {br.strategy_name}  '
+                f'{pnl_str}  trades={br.trade_count}'
             )
 
 
@@ -1553,6 +1554,7 @@ def engine_promote(
         ]
         promoted = []
         for entry in entries:
+            assert entry.relation_id  # filtered above: `and e.relation_id`
             rel = store.get(entry.relation_id)
             if rel is None:
                 continue
@@ -1568,7 +1570,8 @@ def engine_promote(
             click.echo(f'Promoted {len(promoted)} relation(s) to deployed.')
         return
 
-    # Single relation
+    # Single relation — relation_id is non-None (checked at line 1544)
+    assert relation_id
     rel = store.get(relation_id)
     if rel is None:
         raise click.ClickException(f'Relation not found: {relation_id}')
@@ -1576,10 +1579,10 @@ def engine_promote(
     rel.status = 'deployed'
     store.update(rel)
 
-    entry = reg.get(relation_id)
-    if entry:
-        entry.lifecycle = 'deployed'
-        reg.update(entry)
+    promote_entry: StrategyEntry | None = reg.get(relation_id)
+    if promote_entry:
+        promote_entry.lifecycle = 'deployed'
+        reg.update(promote_entry)
 
     if as_json:
         _emit_json({'ok': True, 'relation_id': relation_id, 'status': 'deployed'})

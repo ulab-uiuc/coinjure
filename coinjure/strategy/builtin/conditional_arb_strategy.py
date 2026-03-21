@@ -167,7 +167,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=2,
-            leg_prices=[Decimal('1') - self._price_a, self._price_b],
+            leg_prices=[Decimal('1') - (self._price_a or Decimal('0')), self._price_b or Decimal('0')],
         )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
@@ -216,7 +216,7 @@ class ConditionalArbStrategy(RelationArbMixin, Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=2,
-            leg_prices=[self._price_a, Decimal('1') - self._price_b],
+            leg_prices=[self._price_a or Decimal('0'), Decimal('1') - (self._price_b or Decimal('0'))],
         )
         ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
         ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')

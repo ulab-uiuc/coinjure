@@ -161,7 +161,7 @@ class GroupArbStrategy(Strategy):
                             self._no_tickers[no_tid] = no_ticker
 
         # market_id → NO ticker for direct lookup in _check_arb
-        self._market_no_ticker: dict[str, PolyMarketTicker] = {}
+        self._market_no_ticker: dict[str, Ticker] = {}
         for no_tid, no_t in self._no_tickers.items():
             if no_t.market_id:
                 self._market_no_ticker[no_t.market_id] = no_t
@@ -434,8 +434,8 @@ class GroupArbStrategy(Strategy):
                 resolved.append((mid, trade_ticker, leg_price))
 
             # Verify total cost is affordable
-            cash = trader.get_position('__cash__')
-            if cash is not None and total_cost > cash:
+            cash = sum(p.quantity for p in trader.position_manager.get_cash_positions())
+            if cash > 0 and total_cost > cash:
                 logger.warning(
                     'GroupArb preflight ABORT: cost %s > cash %s',
                     total_cost, cash,
