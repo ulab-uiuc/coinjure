@@ -31,7 +31,7 @@ from decimal import Decimal
 from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
 from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker
-from coinjure.trading.sizing import compute_trade_size
+from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
@@ -81,6 +81,9 @@ class DirectArbStrategy(Strategy):
         cooldown_seconds: int = 60,
         warmup_seconds: float = 5.0,
         backtest_mode: bool = False,
+        llm_trade_sizing: bool = False,
+        llm_model: str | None = None,
+        llm_portfolio_review: bool = False,
     ) -> None:
         super().__init__(warmup_seconds=warmup_seconds)
         self.poly_market_id = poly_market_id
@@ -92,6 +95,9 @@ class DirectArbStrategy(Strategy):
         self.kelly_fraction = Decimal(str(kelly_fraction))
         self.cooldown_seconds = cooldown_seconds
         self.backtest_mode = backtest_mode
+        self.llm_trade_sizing = llm_trade_sizing
+        self.llm_model = llm_model
+        self.llm_portfolio_review = llm_portfolio_review
 
         # Latest mid prices (updated on every matching event)
         self._poly_yes_price: Decimal | None = None
@@ -107,7 +113,7 @@ class DirectArbStrategy(Strategy):
         self._poly_ticker: PolyMarketTicker | None = None
         self._kalshi_ticker_obj: KalshiTicker | None = None
 
-        self._last_arb_time: float = 0.0
+        self._last_arb_time: float = float('-inf')  # no previous arb; first trade always allowed
         self._poll_task: asyncio.Task | None = None
         self._initialized: bool = False
         # Position tracking: 'poly_cheap' or 'kalshi_cheap' or None
@@ -337,8 +343,10 @@ class DirectArbStrategy(Strategy):
             await self._check_arb(trader)
 
     async def _check_arb(self, trader: Trader) -> None:
-        poly_yes = self._poly_yes_price  # type: ignore[assignment]
-        kalshi_yes = self._kalshi_yes_price  # type: ignore[assignment]
+        poly_yes = self._poly_yes_price
+        kalshi_yes = self._kalshi_yes_price
+        if poly_yes is None or kalshi_yes is None:
+            return
 
         # Direction 1: Poly cheaper → buy Poly YES + buy Kalshi NO
         edge_poly_cheap = kalshi_yes - poly_yes
@@ -391,11 +399,18 @@ class DirectArbStrategy(Strategy):
             return
         self._last_arb_time = now
 
-        size = compute_trade_size(
+        size = await compute_trade_size_with_llm(
             trader.position_manager,
             net_edge,
+            strategy_id=self.poly_market_id or self.kalshi_ticker_str or self.name,
+            strategy_type=self.name,
+            relation_type='same_event',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
+            leg_count=2,
+            leg_prices=[poly_yes, Decimal('1') - kalshi_yes],  # both non-None after guard above
         )
 
         if edge_poly_cheap >= edge_kalshi_cheap:

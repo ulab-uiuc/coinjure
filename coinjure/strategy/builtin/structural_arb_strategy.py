@@ -25,7 +25,7 @@ from decimal import Decimal
 from coinjure.events import Event, PriceChangeEvent
 from coinjure.strategy.relation_mixin import RelationArbMixin
 from coinjure.strategy.strategy import Strategy
-from coinjure.trading.sizing import compute_trade_size
+from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,9 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         intercept: float = 0.0,
         min_edge: float = 0.02,
         kelly_fraction: float = 0.1,
+        llm_trade_sizing: bool = False,
+        llm_model: str | None = None,
+        llm_portfolio_review: bool = False,
     ) -> None:
         super().__init__()
         self.relation_id = relation_id
@@ -73,6 +76,9 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         self.intercept = intercept
         self.min_edge = Decimal(str(min_edge))
         self.kelly_fraction = Decimal(str(kelly_fraction))
+        self.llm_trade_sizing = llm_trade_sizing
+        self.llm_model = llm_model
+        self.llm_portfolio_review = llm_portfolio_review
 
         self._init_from_relation(relation_id)
 
@@ -147,14 +153,23 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         residual: float,
     ) -> None:
         """A overpriced → sell A (buy NO), buy B (buy YES)."""
+        edge = abs(Decimal(str(residual)))
+        size = await compute_trade_size_with_llm(
+            trader.position_manager,
+            edge,
+            strategy_id=self.relation_id or self.name,
+            strategy_type=self.name,
+            relation_type='structural',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+            leg_count=2,
+            leg_prices=[Decimal('1') - (self._price_a or Decimal('0')), self._price_b or Decimal('0')],
+        )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
 
-        size = compute_trade_size(
-            trader.position_manager, Decimal(str(abs(residual))),
-            kelly_fraction=self.kelly_fraction,
-            max_size=self.max_trade_size,
-        )
         ok = await self._place_pair(
             trader,
             ticker_a_no, Decimal('1') - self._price_a if self._price_a else Decimal('0'),
@@ -187,14 +202,23 @@ class StructuralArbStrategy(RelationArbMixin, Strategy):
         residual: float,
     ) -> None:
         """A underpriced → buy A (buy YES), sell B (buy NO)."""
+        edge = abs(Decimal(str(residual)))
+        size = await compute_trade_size_with_llm(
+            trader.position_manager,
+            edge,
+            strategy_id=self.relation_id or self.name,
+            strategy_type=self.name,
+            relation_type='structural',
+            llm_trade_sizing=self.llm_trade_sizing,
+            llm_model=self.llm_model,
+            kelly_fraction=self.kelly_fraction,
+            max_size=self.max_trade_size,
+            leg_count=2,
+            leg_prices=[self._price_a or Decimal('0'), Decimal('1') - (self._price_b or Decimal('0'))],
+        )
         ticker_a = self._find_ticker(trader, self._ids[0], side='yes')
         ticker_b_no = self._find_ticker(trader, self._ids[1], side='no')
 
-        size = compute_trade_size(
-            trader.position_manager, Decimal(str(abs(residual))),
-            kelly_fraction=self.kelly_fraction,
-            max_size=self.max_trade_size,
-        )
         ok = await self._place_pair(
             trader,
             ticker_a, self._price_a or Decimal('0'),

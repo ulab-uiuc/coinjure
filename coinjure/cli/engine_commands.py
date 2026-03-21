@@ -229,6 +229,9 @@ def _run_batch(
     duration: float | None,
     as_json: bool,
     no_hub: bool = False,
+    llm_portfolio_review: bool = False,
+    llm_trade_sizing: bool = False,
+    llm_model: str | None = None,
 ) -> None:
     """Spawn one detached engine process per matching relation."""
     from decimal import Decimal
@@ -251,10 +254,21 @@ def _run_batch(
         )
         for rel in relations
     ]
-    budgets = allocate_capital(
-        Decimal(initial_capital),
-        candidates,
-    )
+
+    if llm_portfolio_review:
+        from coinjure.trading.llm_allocator import allocate_capital_llm
+
+        llm_kwargs: dict[str, Any] = {}
+        if llm_model:
+            llm_kwargs['model'] = llm_model
+        budgets = asyncio.run(
+            allocate_capital_llm(Decimal(initial_capital), candidates, **llm_kwargs)
+        )
+    else:
+        budgets = allocate_capital(
+            Decimal(initial_capital),
+            candidates,
+        )
 
     reg = _load_registry()
     results = []
@@ -270,6 +284,15 @@ def _run_batch(
                 }
             )
             continue
+
+        if llm_trade_sizing:
+            kwargs['llm_trade_sizing'] = True
+            if llm_model:
+                kwargs['llm_model'] = llm_model
+        if llm_portfolio_review:
+            kwargs['llm_portfolio_review'] = True
+            if llm_model:
+                kwargs['llm_model'] = llm_model
 
         budget = budgets.get(rel.relation_id, Decimal('10'))
 
@@ -401,6 +424,23 @@ def engine() -> None:
     type=click.Path(),
     help='Directory for persisting positions/trades across sessions (enables resume).',
 )
+@click.option(
+    '--llm-portfolio-review',
+    is_flag=True,
+    default=False,
+    help='Use LLM to review and adjust capital allocation across strategies.',
+)
+@click.option(
+    '--llm-trade-sizing',
+    is_flag=True,
+    default=False,
+    help='Use LLM to size individual trade opportunities at runtime (per-opportunity sizing; may call the LLM API for each trade).',
+)
+@click.option(
+    '--llm-model',
+    default=None,
+    help='LLM model name for allocation/sizing (default: gpt-4.1-mini).',
+)
 def engine_paper_run(
     exchange: str,
     duration: float | None,
@@ -414,6 +454,9 @@ def engine_paper_run(
     all_relations: bool,
     detach: bool,
     data_dir: str | None,
+    llm_portfolio_review: bool,
+    llm_trade_sizing: bool,
+    llm_model: str | None,
 ) -> None:
     """Run a paper trading engine instance."""
     if all_relations and strategy_ref:
@@ -431,6 +474,9 @@ def engine_paper_run(
             duration=duration,
             as_json=as_json,
             no_hub=no_hub,
+            llm_portfolio_review=llm_portfolio_review,
+            llm_trade_sizing=llm_trade_sizing,
+            llm_model=llm_model,
         )
         return
 
@@ -609,6 +655,23 @@ def engine_paper_run(
     default=False,
     help='Run as a detached background process.',
 )
+@click.option(
+    '--llm-portfolio-review',
+    is_flag=True,
+    default=False,
+    help='Use LLM to review and adjust capital allocation across strategies.',
+)
+@click.option(
+    '--llm-trade-sizing',
+    is_flag=True,
+    default=False,
+    help='Use LLM to size individual trade opportunities at runtime (per-opportunity sizing; may call the LLM API for each trade).',
+)
+@click.option(
+    '--llm-model',
+    default=None,
+    help='LLM model name for allocation/sizing (default: gpt-4.1-mini).',
+)
 def engine_live_run(
     exchange: str,
     duration: float | None,
@@ -624,6 +687,9 @@ def engine_live_run(
     kalshi_private_key_path: str | None,
     all_relations: bool,
     detach: bool,
+    llm_portfolio_review: bool,
+    llm_trade_sizing: bool,
+    llm_model: str | None,
 ) -> None:
     """Run a live trading engine instance (real orders, real funds)."""
     if all_relations and strategy_ref:
@@ -642,6 +708,9 @@ def engine_live_run(
             initial_capital=initial_capital,
             duration=duration,
             as_json=as_json,
+            llm_portfolio_review=llm_portfolio_review,
+            llm_trade_sizing=llm_trade_sizing,
+            llm_model=llm_model,
         )
         return
 
@@ -1098,25 +1167,25 @@ def engine_retire(
         raise click.ClickException('Provide --id or use --all.')
 
     reg = _load_registry()
-    entry = reg.get(strategy_id)
-    if entry is None:
+    retire_entry: StrategyEntry | None = reg.get(strategy_id)
+    if retire_entry is None:
         raise click.ClickException(f'Strategy not found: {strategy_id!r}')
 
     stop_result_single: dict = {'ok': True, 'status': 'not_running'}
 
-    if entry.socket_path and Path(entry.socket_path).exists():
+    if retire_entry.socket_path and Path(retire_entry.socket_path).exists():
         try:
             stop_result_single = run_command(
-                'stop', socket_path=Path(entry.socket_path)
+                'stop', socket_path=Path(retire_entry.socket_path)
             )
         except Exception as exc:
             stop_result_single = {'ok': False, 'error': str(exc)}
 
-    entry.lifecycle = 'retired'
-    entry.retired_reason = reason
-    entry.pid = None
-    entry.socket_path = None
-    reg.update(entry)
+    retire_entry.lifecycle = 'retired'
+    retire_entry.retired_reason = reason
+    retire_entry.pid = None
+    retire_entry.socket_path = None
+    reg.update(retire_entry)
 
     resp = {
         'ok': True,
@@ -1256,6 +1325,24 @@ def engine_killswitch(
     help='JSON object for strategy constructor kwargs.',
 )
 @click.option('--json', 'as_json', is_flag=True, default=False, help='Emit JSON output')
+@click.option(
+    '--llm-portfolio-review',
+    is_flag=True,
+    default=False,
+    help='Use LLM to review and adjust capital allocation across strategies before backtest.',
+)
+@click.option(
+    '--llm-trade-sizing',
+    is_flag=True,
+    default=False,
+    help='Route trade sizing decisions through the LLM during backtest runtime (may trigger API calls during opportunity checks).',
+)
+@click.option(
+    '--llm-model',
+    default=None,
+    help='LLM model name for allocation/sizing (default: gpt-4.1-mini). '
+    'Supports any OpenAI-compatible model via OPENAI_BASE_URL.',
+)
 def engine_backtest(
     relation_ids: tuple[str, ...],
     all_relations: bool,
@@ -1264,6 +1351,9 @@ def engine_backtest(
     initial_capital: str,
     strategy_kwargs_json: str | None,
     as_json: bool,
+    llm_portfolio_review: bool,
+    llm_trade_sizing: bool,
+    llm_model: str | None,
 ) -> None:
     """Backtest relations using auto-selected strategies.
 
@@ -1327,18 +1417,62 @@ def engine_backtest(
             'mode': 'backtest',
             'message': f'Backtesting {len(relations)} relation(s)',
             'relation_count': len(relations),
+            'llm_portfolio_review': llm_portfolio_review,
+            'llm_trade_sizing': llm_trade_sizing,
+            'llm_model': llm_model,
         },
         as_json=as_json,
     )
 
+    # ── Optional LLM portfolio review ─────────────────────────────────
+    llm_kwargs: dict[str, Any] = {}
+    if llm_model:
+        llm_kwargs['model'] = llm_model
+
+    budgets: dict[str, Decimal] = {}
+    if llm_portfolio_review:
+        from coinjure.trading.allocator import AllocationCandidate
+        from coinjure.trading.llm_allocator import allocate_capital_llm
+
+        candidates = [
+            AllocationCandidate(
+                strategy_id=rel.relation_id,
+                backtest_pnl=rel.backtest_pnl or 0.0,
+            )
+            for rel in relations
+        ]
+        if not as_json:
+            click.echo('Running LLM portfolio allocation review...')
+        budgets = asyncio.run(
+            allocate_capital_llm(capital, candidates, **llm_kwargs)
+        )
+        if not as_json:
+            for sid, bgt in budgets.items():
+                click.echo(f'  LLM budget: {sid[:30]:30s}  ${bgt:.2f}')
+
+    if llm_trade_sizing and not as_json:
+        click.echo('Using runtime LLM trade sizing during opportunity checks...')
+
     async def _run_all():
         results = []
         for rel in relations:
+            merged_kwargs = dict(strategy_kwargs)
+            if llm_trade_sizing:
+                merged_kwargs['llm_trade_sizing'] = True
+                if llm_model:
+                    merged_kwargs['llm_model'] = llm_model
+            if llm_portfolio_review:
+                merged_kwargs['llm_portfolio_review'] = True
+                if llm_model:
+                    merged_kwargs['llm_model'] = llm_model
+
+            rel_capital = budgets.get(rel.relation_id, capital) if budgets else capital
+
             result = await run_backtest_relation(
                 rel,
-                initial_capital=capital,
+                initial_capital=rel_capital,
                 parquet_path=parquet,
-                strategy_kwargs=strategy_kwargs,
+                strategy_kwargs=merged_kwargs,
             )
             if result.error is None:
                 rel.set_backtest_result(
@@ -1350,39 +1484,40 @@ def engine_backtest(
             results.append(result)
         return results
 
-    results = asyncio.run(_run_all())
+    from coinjure.engine.backtester import BacktestResult
+    results: list[BacktestResult] = asyncio.run(_run_all())
 
     # Output results
-    passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if not r.passed and r.error is None)
-    errors = sum(1 for r in results if r.error is not None)
+    passed = sum(1 for br in results if br.passed)
+    failed = sum(1 for br in results if not br.passed and br.error is None)
+    errors = sum(1 for br in results if br.error is not None)
 
     if as_json:
         _emit_json(
             [
                 {
-                    'relation_id': r.relation_id,
-                    'spread_type': r.spread_type,
-                    'strategy': r.strategy_name,
-                    'pnl': float(r.total_pnl),
-                    'trades': r.trade_count,
-                    'passed': r.passed,
-                    'error': r.error,
+                    'relation_id': br.relation_id,
+                    'spread_type': br.spread_type,
+                    'strategy': br.strategy_name,
+                    'pnl': float(br.total_pnl),
+                    'trades': br.trade_count,
+                    'passed': br.passed,
+                    'error': br.error,
                 }
-                for r in results
+                for br in results
             ]
         )
     else:
         click.echo(
             f'\n  Backtest results: {passed} passed, {failed} failed, {errors} errors\n'
         )
-        for r in results:
-            status = 'PASS' if r.passed else ('ERROR' if r.error else 'FAIL')
-            pnl_str = f'pnl={r.total_pnl:+.2f}' if r.error is None else r.error
+        for br in results:
+            status = 'PASS' if br.passed else ('ERROR' if br.error else 'FAIL')
+            pnl_str = f'pnl={br.total_pnl:+.2f}' if br.error is None else br.error
             click.echo(
-                f'  [{status}] {r.relation_id[:20]}  '
-                f'{r.spread_type}  {r.strategy_name}  '
-                f'{pnl_str}  trades={r.trade_count}'
+                f'  [{status}] {br.relation_id[:20]}  '
+                f'{br.spread_type}  {br.strategy_name}  '
+                f'{pnl_str}  trades={br.trade_count}'
             )
 
 
@@ -1419,6 +1554,7 @@ def engine_promote(
         ]
         promoted = []
         for entry in entries:
+            assert entry.relation_id  # filtered above: `and e.relation_id`
             rel = store.get(entry.relation_id)
             if rel is None:
                 continue
@@ -1434,7 +1570,8 @@ def engine_promote(
             click.echo(f'Promoted {len(promoted)} relation(s) to deployed.')
         return
 
-    # Single relation
+    # Single relation — relation_id is non-None (checked at line 1544)
+    assert relation_id
     rel = store.get(relation_id)
     if rel is None:
         raise click.ClickException(f'Relation not found: {relation_id}')
@@ -1442,10 +1579,10 @@ def engine_promote(
     rel.status = 'deployed'
     store.update(rel)
 
-    entry = reg.get(relation_id)
-    if entry:
-        entry.lifecycle = 'deployed'
-        reg.update(entry)
+    promote_entry: StrategyEntry | None = reg.get(relation_id)
+    if promote_entry:
+        promote_entry.lifecycle = 'deployed'
+        reg.update(promote_entry)
 
     if as_json:
         _emit_json({'ok': True, 'relation_id': relation_id, 'status': 'deployed'})
