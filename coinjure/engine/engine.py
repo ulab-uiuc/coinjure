@@ -480,7 +480,10 @@ class TradingEngine:
                     self._state_store.append_order(order)
                 except Exception:
                     logger.debug('state_store.append_order() failed', exc_info=True)
-            if self._alerter:
+            if self._alerter and order.status not in (
+                OrderStatus.FILLED,
+                OrderStatus.REJECTED,
+            ):
                 try:
                     await self._alerter.on_order_placed(order)
                 except Exception:

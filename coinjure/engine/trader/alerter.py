@@ -38,8 +38,9 @@ class Alerter(ABC):
 
     async def on_order_placed(self, order: Order) -> None:
         ticker_name = getattr(order.ticker, 'name', '') or order.ticker.symbol
+        total_qty = order.remaining + order.filled_quantity
         msg = (
-            f'Order placed: {order.side.value.upper()} {order.remaining} '
+            f'Order placed: {order.side.value.upper()} {total_qty} '
             f'{ticker_name} @ {order.limit_price} [{order.status.value}]'
         )
         await self.send(msg, level='info')
