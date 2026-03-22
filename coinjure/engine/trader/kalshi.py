@@ -147,9 +147,19 @@ class KalshiTrader(Trader):
         # Use data from create_order response directly; fall back to
         # get_order only when needed fields are missing.
         order_detail = order_data
-        remaining_count = int(order_detail.get('remaining_count', 0))
-        total_count = int(order_detail.get('count', int(quantity)))
         api_status = order_detail.get('status', '')
+
+        # SDK to_dict() often returns None for count/remaining_count.
+        # When count is None, treat as fully unfilled (resting order).
+        _count_raw = order_detail.get('count')
+        _remaining_raw = order_detail.get('remaining_count')
+        if _count_raw is None or _remaining_raw is None:
+            # Unknown fill state — treat conservatively as unfilled
+            remaining_count = int(quantity)
+            total_count = int(quantity)
+        else:
+            remaining_count = int(_remaining_raw)
+            total_count = int(_count_raw)
 
         # For resting/pending orders, try to get fill info from API
         if api_status in ('resting', 'pending') and remaining_count > 0:

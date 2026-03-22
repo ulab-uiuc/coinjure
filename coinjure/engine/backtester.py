@@ -424,7 +424,11 @@ async def run_backtest_relation(
             continue
         yes_ticker = _make_ticker(relation, i)
         no_tid = relation.get_no_token_id(i)
-        no_ticker = _make_ticker(relation, i, side='no') if no_tid else None
+        # Kalshi markets are binary — always generate a NO ticker even when
+        # token_ids has no second element (NO side = 1 - YES, same market).
+        _m = relation.markets[i]
+        is_kalshi = str(_m.get('platform', 'polymarket')).lower() == 'kalshi'
+        no_ticker = _make_ticker(relation, i, side='no') if (no_tid or is_kalshi) else None
         legs.append((yes_ticker, prices, no_ticker))
 
     if len(legs) < 2:
