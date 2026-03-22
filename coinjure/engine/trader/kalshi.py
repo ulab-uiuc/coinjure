@@ -150,10 +150,14 @@ class KalshiTrader(Trader):
         api_status = order_detail.get('status', '')
 
         # SDK to_dict() often returns None for count/remaining_count.
-        # When count is None, treat as fully unfilled (resting order).
+        # 'executed' status means fully filled regardless of count fields.
+        # For other statuses where count is None, treat as unfilled (resting).
         _count_raw = order_detail.get('count')
         _remaining_raw = order_detail.get('remaining_count')
-        if _count_raw is None or _remaining_raw is None:
+        if api_status == 'executed':
+            remaining_count = 0
+            total_count = int(quantity)
+        elif _count_raw is None or _remaining_raw is None:
             # Unknown fill state — treat conservatively as unfilled
             remaining_count = int(quantity)
             total_count = int(quantity)
