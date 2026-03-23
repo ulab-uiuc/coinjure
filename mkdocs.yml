@@ -1,3 +1,4 @@
+use_directory_urls: false
 site_name: Coinjure
 site_description: An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.
 site_url: https://ulab-uiuc.github.io/coinjure
@@ -7,23 +8,11 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  custom_dir: docs/overrides
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+    scheme: default
+  font: false
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
@@ -31,6 +20,9 @@ theme:
     - search.highlight
     - content.code.copy
     - content.action.edit
+
+extra_css:
+  - stylesheets/custom.css
 
 plugins:
   - search
@@ -54,5 +46,12 @@ nav:
       - Quick Start: CLI_QUICK_START.md
   - CLI Reference:
       - Monitoring: CLI_MONITORING.md
+  - API Reference:
+      - Overview: api/index.md
+      - Strategy: api/strategy.md
+      - Trading Types: api/trading.md
+      - Data Sources: api/data.md
+      - Market Relations: api/relations.md
+      - Engine: api/engine.md
   - Architecture:
       - Project Specification: PROJECT_SPECIFICATION.md

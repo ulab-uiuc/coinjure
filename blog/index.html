@@ -1,0 +1,1198 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      Coinjure: An Agent-Native Trading Scaffold for Prediction Markets
+    </title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap");
+
+      :root {
+        --sans: "DM Sans", -apple-system, sans-serif;
+        --serif: "Source Serif 4", Georgia, serif;
+        --mono: "DM Mono", "SF Mono", Consolas, monospace;
+        --r: 14px;
+        --r-sm: 10px;
+        --r-pill: 20px;
+        --nav-h: 52px;
+        --toc-w: 180px;
+      }
+      [data-theme="light"] {
+        --bg: #f3f6fb;
+        --card: #e8edf6;
+        --elevated: #dde4f0;
+        --deep: #d2daea;
+        --code-bg: #1a1e24;
+        --border: #bec8d8;
+        --line: #aab4c6;
+        --t1: #18222e;
+        --t2: #26323f;
+        --t3: #415060;
+        --t4: #647585;
+        --t5: #8e9eae;
+        --code-t: #ced4dc;
+        --badge-bg: #18222e;
+        --badge-t: #f3f6fb;
+        --link: #2a5282;
+        --link-h: #18222e;
+      }
+
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: calc(var(--nav-h) + 24px);
+      }
+      body {
+        font-family: var(--sans);
+        background: var(--bg);
+        color: var(--t2);
+        font-size: 17px;
+        line-height: 1.75;
+        -webkit-font-smoothing: antialiased;
+        transition:
+          background 0.2s,
+          color 0.2s;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+      a:hover {
+        color: var(--link-h);
+      }
+      ::selection {
+        background: var(--badge-bg);
+        color: var(--badge-t);
+      }
+
+      /* NAV */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        height: var(--nav-h);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 28px;
+        background: var(--bg);
+        border-bottom: 0.7px solid var(--border);
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .nav-logo {
+        font-family: var(--sans);
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--t1);
+        display: flex;
+        align-items: center;
+        letter-spacing: 0.02em;
+        transition: color 0.2s;
+      }
+      .nav-r {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .nav-link {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--t4);
+        padding: 5px 10px;
+        border-radius: var(--r-sm);
+        transition: all 0.15s;
+      }
+      .nav-link:hover {
+        color: var(--t2);
+        background: var(--card);
+      }
+      .gh-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: var(--r-pill);
+        background: var(--badge-bg);
+        color: #f3f6fb;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        transition: opacity 0.15s;
+      }
+      .gh-pill,
+      .gh-pill:visited,
+      .gh-pill:link {
+        color: #f3f6fb;
+      }
+      .gh-pill:hover {
+        opacity: 0.85;
+        color: #f3f6fb;
+      }
+      .gh-pill svg {
+        flex-shrink: 0;
+      }
+
+      /* HERO */
+      .hero-wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 28px;
+      }
+      .hero {
+        text-align: center;
+        padding: 72px 0 40px;
+      }
+      .hero h1 {
+        font-family: var(--serif);
+        font-size: clamp(34px, 5.5vw, 52px);
+        font-weight: 700;
+        color: var(--t1);
+        letter-spacing: -0.04em;
+        line-height: 1.08;
+        margin-bottom: 18px;
+        transition: color 0.2s;
+      }
+      .hero-sub {
+        font-size: 16px;
+        color: var(--t3);
+        max-width: 640px;
+        margin: 0 auto 20px;
+        line-height: 1.6;
+      }
+      .hero-date {
+        font-size: 12.5px;
+        color: var(--t4);
+        margin-bottom: 16px;
+      }
+      .hero-authors {
+        margin: 0 auto 24px;
+        max-width: 760px;
+        text-align: center;
+      }
+      .author-row {
+        font-size: 17px;
+        color: var(--t2);
+        margin-bottom: 6px;
+        line-height: 1.8;
+      }
+      .author-name {
+        display: inline;
+        white-space: nowrap;
+      }
+      .author-core {
+        font-weight: 600;
+        color: var(--t1);
+      }
+      .author-sep {
+        color: var(--t5);
+        margin: 0 2px;
+      }
+      .author-affil {
+        font-size: 17px;
+        color: var(--t4);
+        margin-top: 12px;
+        line-height: 2;
+      }
+      .author-affil sup {
+        font-size: 11px;
+      }
+      .hero-btns {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 7px 16px;
+        border-radius: var(--r-pill);
+        font-family: var(--sans);
+        font-size: 12.5px;
+        font-weight: 500;
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .btn-dark {
+        background: var(--badge-bg);
+        color: var(--badge-t);
+      }
+      .btn-dark:hover {
+        opacity: 0.85;
+        color: var(--badge-t);
+      }
+      .btn-ghost {
+        background: transparent;
+        border: 0.7px solid var(--border);
+        color: var(--t2);
+      }
+      .btn-ghost:hover {
+        background: var(--card);
+        color: var(--t1);
+      }
+
+      /* TLDR */
+      .tldr {
+        background: var(--card);
+        border-radius: 0 12px 12px 0;
+        border-left: 3px solid var(--t1);
+        padding: 16px 22px;
+        margin: 0 0 32px;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .tldr-body {
+        font-size: 17px;
+        line-height: 1.75;
+        color: var(--t2);
+      }
+      .tldr-body strong {
+        color: var(--t1);
+      }
+
+      /* LAYOUT */
+      .layout {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 0 28px 80px;
+        position: relative;
+      }
+
+      /* Sticky left TOC */
+      .toc {
+        position: fixed;
+        top: calc(var(--nav-h) + 24px);
+        width: 180px;
+        right: calc(50% + 410px);
+        max-height: calc(100vh - var(--nav-h) - 48px);
+        overflow-y: auto;
+        padding: 4px 0;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 0.35s ease,
+          transform 0.35s ease;
+      }
+      .toc.visible {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+      .toc-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--t4);
+        margin-bottom: 10px;
+        transition: color 0.2s;
+      }
+      .toc a {
+        display: block;
+        font-size: 12.5px;
+        color: var(--t4);
+        padding: 4px 0 4px 12px;
+        border-left: 2px solid transparent;
+        transition: all 0.15s;
+        line-height: 1.45;
+      }
+      .toc a:hover {
+        color: var(--t2);
+      }
+      .toc a.active {
+        color: var(--t1);
+        border-left-color: var(--t1);
+        font-weight: 500;
+      }
+      .toc a.sub {
+        padding-left: 24px;
+        font-size: 12px;
+      }
+
+      /* ARTICLE */
+      .article {
+        max-width: 100%;
+        min-width: 0;
+      }
+      .article h2 {
+        font-family: var(--serif);
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--t1);
+        letter-spacing: -0.3px;
+        line-height: 1.3;
+        margin: 48px 0 14px;
+        padding-top: 20px;
+        border-top: 0.7px solid var(--border);
+        transition:
+          color 0.2s,
+          border-color 0.2s;
+      }
+      .article h2:first-child {
+        margin-top: 0;
+        border-top: none;
+        padding-top: 0;
+      }
+      .article h3 {
+        font-family: var(--serif);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--t1);
+        letter-spacing: -0.2px;
+        margin: 32px 0 10px;
+        transition: color 0.2s;
+      }
+      .article h4 {
+        font-family: var(--serif);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--t1);
+        letter-spacing: -0.1px;
+        margin: 24px 0 8px;
+        transition: color 0.2s;
+      }
+      .article p {
+        margin-bottom: 14px;
+      }
+      .article strong {
+        color: var(--t1);
+        font-weight: 600;
+        transition: color 0.2s;
+      }
+      .article ul,
+      .article ol {
+        margin: 0 0 14px 22px;
+      }
+      .article li {
+        margin-bottom: 5px;
+      }
+      .article code {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        background: var(--card);
+        padding: 2px 6px;
+        border-radius: 5px;
+        color: var(--t1);
+        transition: all 0.2s;
+      }
+      .article a {
+        color: var(--link);
+      }
+      .article a:hover {
+        color: var(--link-h);
+        text-decoration: underline;
+      }
+      .article a.btn {
+        color: unset;
+        text-decoration: none;
+      }
+      .article a.btn-dark {
+        color: var(--badge-t);
+      }
+      .article a.btn-dark:hover {
+        color: var(--badge-t);
+      }
+      .article a.btn-ghost {
+        color: var(--t2);
+      }
+      .article a.btn-ghost:hover {
+        color: var(--t1);
+        text-decoration: none;
+      }
+
+      /* Code block */
+      .cb {
+        background: var(--card);
+        border-radius: var(--r);
+        margin: 16px 0 20px;
+        overflow: hidden;
+        border: 0.7px solid var(--border);
+      }
+      .cb-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        border-bottom: 0.7px solid var(--border);
+      }
+      .cb-lang {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--t4);
+        letter-spacing: 0.04em;
+      }
+      .cb pre {
+        padding: 14px 18px;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--t1);
+      }
+      .cb .kw {
+        color: #2a5282;
+      }
+      .cb .str {
+        color: #4a7c59;
+      }
+      .cb .cmt {
+        color: #8e9eae;
+        font-style: italic;
+      }
+      .cb .fn {
+        color: #18222e;
+      }
+      .cb .num {
+        color: #8b5e3c;
+      }
+
+      /* Table */
+      .article table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0 20px;
+        font-size: 13.5px;
+      }
+      .article th {
+        text-align: left;
+        padding: 10px 14px;
+        font-weight: 600;
+        font-size: 11.5px;
+        color: var(--t1);
+        background: var(--card);
+        border-bottom: 0.7px solid var(--border);
+        transition: all 0.2s;
+      }
+      .article td {
+        padding: 10px 14px;
+        border-bottom: 0.7px solid var(--border);
+        color: var(--t2);
+        transition: all 0.2s;
+      }
+
+      /* Callout */
+      .callout {
+        border: 0.7px dashed var(--border);
+        border-radius: var(--r);
+        padding: 14px 18px;
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+        transition: border-color 0.2s;
+      }
+      .callout-icon {
+        font-size: 15px;
+        flex-shrink: 0;
+        line-height: 1.75;
+      }
+      .callout-body {
+        font-size: 13.5px;
+        line-height: 1.7;
+      }
+
+      /* Result highlight */
+      .result-hl {
+        background: var(--deep);
+        border-radius: var(--r);
+        padding: 24px;
+        text-align: center;
+        margin: 20px 0;
+        transition: background 0.2s;
+      }
+      .result-val {
+        font-family: var(--serif);
+        font-size: 36px;
+        font-weight: 700;
+        color: var(--t1);
+        letter-spacing: -0.02em;
+        transition: color 0.2s;
+      }
+      .result-sub {
+        font-size: 13px;
+        color: var(--t3);
+        margin-top: 4px;
+        transition: color 0.2s;
+      }
+
+      /* Pipeline diagram */
+      .pipeline-box {
+        margin: 24px 0;
+        border-radius: var(--r);
+        overflow: hidden;
+        border: 0.7px solid var(--border);
+        background: var(--bg);
+        transition: all 0.2s;
+      }
+      .p-canvas {
+        width: 100%;
+        max-width: 700px;
+        margin: 0 auto;
+        padding: 28px 40px;
+      }
+      .p-row {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        align-items: stretch;
+        margin-bottom: 0;
+      }
+      .p-card {
+        background: var(--card);
+        border-radius: 12px;
+        padding: 14px 18px;
+        text-align: center;
+        flex: 1;
+        min-width: 0;
+        transition: background 0.2s;
+      }
+      .p-card-title {
+        font-family: var(--serif);
+        font-size: 15px;
+        color: var(--t1);
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+      .p-card-sub {
+        font-size: 11px;
+        color: var(--t3);
+        margin-top: 3px;
+      }
+      .p-hline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 0;
+      }
+      .p-hline-bar {
+        flex: 1;
+        height: 1px;
+        background: var(--line);
+      }
+      .p-hline-label {
+        font-size: 11px;
+        color: var(--t4);
+        white-space: nowrap;
+      }
+
+      /* Placeholder section */
+      .placeholder {
+        background: var(--card);
+        border-radius: var(--r);
+        padding: 32px;
+        text-align: center;
+        margin: 20px 0;
+        color: var(--t4);
+        font-size: 14px;
+        font-style: italic;
+      }
+
+      /* BibTeX */
+      .bibtex-block {
+        background: var(--card);
+        border: 0.7px solid var(--border);
+        border-radius: var(--r);
+        padding: 18px 22px;
+        margin: 16px 0 20px;
+        overflow-x: auto;
+      }
+      .bibtex-block pre {
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--t1);
+        margin: 0;
+        white-space: pre;
+      }
+
+      /* Footer */
+      .footer {
+        border-top: 0.7px solid var(--border);
+        padding: 28px;
+        text-align: center;
+        font-size: 12px;
+        color: var(--t4);
+        transition: all 0.2s;
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 8px;
+      }
+      .footer-links a {
+        color: var(--t2);
+        font-weight: 500;
+      }
+
+      /* Responsive */
+      @media (max-width: 1100px) {
+        .toc {
+          display: none;
+        }
+      }
+      @media (max-width: 768px) {
+        .hero-wrap {
+          padding: 0 16px;
+        }
+        .layout {
+          padding: 0 16px 56px;
+        }
+        .nav {
+          padding: 0 16px;
+        }
+        .nav-link {
+          display: none;
+        }
+        .hero h1 {
+          font-size: 32px;
+        }
+        .hero {
+          padding: 48px 0 28px;
+        }
+        .article h2 {
+          font-size: 20px;
+          margin: 36px 0 12px;
+          padding-top: 16px;
+        }
+        .article h3 {
+          font-size: 16px;
+          margin: 24px 0 8px;
+        }
+        .article {
+          font-size: 14px;
+        }
+        .cb pre {
+          font-size: 11.5px;
+          padding: 12px 14px;
+        }
+        .p-row {
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .p-card {
+          flex: 1 1 120px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- NAV -->
+    <nav class="nav">
+      <a href="../site/index.html" class="nav-logo"
+        ><span style="color: #d4a017">Coin</span
+        ><span style="color: #2c5f8a">jure</span></a
+      >
+      <div class="nav-r">
+        <a href="../site/index.html" class="nav-link">Docs</a>
+        <a href="#" class="nav-link" style="color: var(--t1)">Blog</a>
+        <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </nav>
+
+    <!-- HERO -->
+    <div class="hero-wrap">
+      <header class="hero">
+        <h1>
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span>: An Agent-Native Trading<br />Scaffold
+          for Prediction Markets
+        </h1>
+        <p class="hero-date">March 2026</p>
+
+        <div class="hero-authors">
+          <div class="author-row">
+            <span class="author-name author-core">Haofei Yu</span
+            ><span class="author-sep">&nbsp;&nbsp;</span>
+            <span class="author-name author-core">Yicheng Yang</span
+            ><span class="author-sep">&nbsp;&nbsp;</span>
+            <span class="author-name author-core">Yuxiang Liu</span
+            ><span class="author-sep">&nbsp;&nbsp;</span>
+            <span class="author-name author-core">Jiaxuan You</span>
+          </div>
+          <div class="author-affil">
+            University of Illinois Urbana-Champaign
+          </div>
+        </div>
+
+        <div class="hero-btns">
+          <a href="https://github.com/ulab-uiuc/coinjure" class="btn btn-dark"
+            >Code</a
+          >
+          <a href="../site/index.html" class="btn btn-ghost">Documentation</a>
+        </div>
+      </header>
+
+      <!-- TL;DR -->
+      <div class="tldr">
+        <div class="tldr-body">
+          <strong>TL;DR</strong> &mdash; <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> is an agent-native trading
+          scaffold for prediction markets. Rather than patching AI onto legacy
+          human systems, it is built from the ground up around the needs of LLM
+          agents: an end-to-end strategy discovery pipeline, a dual-layer
+          control system (AI drives via CLI, humans supervise via TUI), and
+          cognitive scaffolding that abstracts deterministic tasks into
+          high-level functions so agents can focus on semantic reasoning and
+          alpha discovery.
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-COL: STICKY TOC + ARTICLE -->
+    <div class="layout">
+      <!-- LEFT STICKY TOC -->
+      <aside class="toc" id="toc">
+        <div class="toc-label">On this page</div>
+        <a href="#introduction" data-section="introduction">Introduction</a>
+        <a
+          href="#why-prediction-markets"
+          data-section="why-prediction-markets"
+          class="sub"
+          >Why Prediction Markets?</a
+        >
+        <a
+          href="#why-agent-native-cli"
+          data-section="why-agent-native-cli"
+          class="sub"
+          >Why Agent-Native CLI?</a
+        >
+        <a
+          href="#why-not-skills-alone"
+          data-section="why-not-skills-alone"
+          class="sub"
+          >Why Not Skills Alone?</a
+        >
+        <a href="#coinjure-solution" data-section="coinjure-solution"
+          >The Coinjure Solution</a
+        >
+        <a href="#system-overview" data-section="system-overview"
+          >System Overview</a
+        >
+        <a
+          href="#strategy-discovery"
+          data-section="strategy-discovery"
+          class="sub"
+          >Strategy Discovery</a
+        >
+        <a href="#backtesting" data-section="backtesting" class="sub"
+          >Backtesting</a
+        >
+        <a href="#trade-execution" data-section="trade-execution" class="sub"
+          >Trade Execution</a
+        >
+        <a href="#human-monitoring" data-section="human-monitoring" class="sub"
+          >Human Monitoring</a
+        >
+        <a href="#experiments" data-section="experiments">Experiments</a>
+        <a href="#exp-discovery" data-section="exp-discovery" class="sub"
+          >Strategy Discovery</a
+        >
+        <a href="#exp-backtest" data-section="exp-backtest" class="sub"
+          >Backtesting</a
+        >
+        <a href="#exp-live" data-section="exp-live" class="sub">Live Trading</a>
+        <a href="#citation" data-section="citation">Citation</a>
+      </aside>
+
+      <!-- ARTICLE -->
+      <article class="article">
+        <h2 id="introduction">Introduction</h2>
+
+        <p>
+          <strong>Trading is rapidly entering an AI-native era.</strong>
+          Although modern quantitative technologies have heavily automated
+          lower-level trading mechanics&mdash;such as high-frequency execution,
+          statistical arbitrage, and basic algorithmic rebalancing&mdash;a
+          substantial portion of trading across diverse markets still relies
+          heavily on human oversight. In equity markets, human traders still
+          drive qualitative news analysis and narrative-based stock selection.
+          In options markets, human intuition is required for managing complex
+          volatility surfaces and tail risks. Furthermore, high-level
+          operational decisions, such as multi-strategy management, capital
+          allocation, and dynamic market selection, remain fundamentally
+          human-driven. However, with the rapid advancement of LLM agents, these
+          complex reasoning and management tasks can now be fully automated. To
+          unlock this potential, we need purpose-built, agent-native trading
+          systems that empower AI to execute these high-level functions,
+          ultimately surpassing human traders in both speed and decision-making
+          quality.
+        </p>
+
+        <h3 id="why-prediction-markets">Why Prediction Markets?</h3>
+
+        <p>
+          While equity and options markets are dominated by entrenched
+          institutional infrastructure and massive capital, prediction markets
+          (such as <a href="https://polymarket.com/">Polymarket</a> and
+          <a href="https://kalshi.com/">Kalshi</a>) offer an ideal, accessible
+          testing ground for AI agents. More importantly, prediction markets are
+          mostly semantic and event-driven. Prices fluctuate dramatically based
+          on real-world news, political events, and social narratives. Since
+          LLM-based agents natively excel at parsing massive amounts of
+          qualitative text and extracting actionable sentiment, prediction
+          markets allow them to fully leverage their semantic reasoning
+          advantages to mine alpha.
+        </p>
+
+        <h3 id="why-agent-native-cli">Why an Agent-Native CLI?</h3>
+
+        <p>
+          Existing trading platforms are fundamentally constrained by their
+          human-centric design. They rely heavily on visual dashboards and
+          Graphical User Interfaces (GUIs) tailored to human cognitive limits.
+          AI agents, however, do not perceive the market through screens; they
+          require high-bandwidth, programmatic data streams and direct execution
+          environments. By utilizing an agent-native Command Line Interface
+          (CLI), the friction of UIs is entirely removed.
+        </p>
+
+        <h3 id="why-not-skills-alone">Why Agent Skills Are Not Enough?</h3>
+
+        <p>
+          A common misconception in AI development is treating &ldquo;agent
+          skills&rdquo; as a silver bullet. In reality, skills are merely the
+          instruction manuals for the tools provided to the agent; they are
+          fundamentally complementary to the underlying trading system. If a
+          system only provides raw, low-level APIs, the agent must generate
+          extensive, complex code to execute even basic functions. This not only
+          throttles execution efficiency but also inflates the context window
+          with tedious operational logic, increasing the probability of errors
+          and hallucinations.
+        </p>
+
+        <h2 id="coinjure-solution">
+          The <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> Solution
+        </h2>
+
+        <p>
+          To address these critical gaps, we propose
+          <strong
+            ><span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span></strong
+          >: an agent-native trading scaffold explicitly designed for prediction
+          markets. Rather than patching AI onto legacy human systems,
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> is built from the ground up
+          around the cognitive and operational needs of LLM agents, offering
+          three core pillars:
+        </p>
+
+        <ul>
+          <li>
+            <strong>End-to-End Strategy Discovery Pipeline:</strong>
+            <span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span> provides a complete,
+            natively integrated workflow tailored for semantic, event-driven
+            environments. It equips agents with specialized modules covering the
+            entire trading lifecycle: automated data ingestion, strategy
+            discovery, backtesting, paper trading, and live execution.
+          </li>
+          <li>
+            <strong>Dual-Layer Control System:</strong> We invert traditional
+            trading roles. AI agents operate via a streamlined, high-bandwidth
+            Command Line Interface (CLI) to autonomously drive the system.
+            Meanwhile, human traders transition to a pure supervisory role,
+            utilizing a dedicated top-level monitor to observe, pause, resume,
+            or safely terminate operations without interfering with the
+            agent&rsquo;s micro-mechanics.
+          </li>
+          <li>
+            <strong>Cognitive Scaffolding over Raw Skills:</strong> Instead of
+            forcing agents to write complex code for deterministic tasks (e.g.,
+            order state polling, slippage calculation, or backtest rendering),
+            <span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span> abstracts these into
+            robust, high-level functions. This deep integration transforms basic
+            &ldquo;skills&rdquo; into powerful capabilities, drastically
+            reducing context-window bloat and freeing the LLM to focus entirely
+            on semantic reasoning and alpha discovery.
+          </li>
+        </ul>
+
+        <h2 id="system-overview">System Overview</h2>
+
+        <p>
+          This section details the architecture of
+          <strong
+            ><span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span></strong
+          >, which is divided into four primary components: Strategy Discovery,
+          Backtesting, Trade Execution, and Human Monitoring.
+        </p>
+
+        <div class="pipeline-box">
+          <div class="p-canvas">
+            <div style="text-align: center; margin-bottom: 8px">
+              <div
+                class="p-card"
+                style="
+                  display: inline-block;
+                  flex: none;
+                  min-width: 280px;
+                  background: #dde4f0;
+                "
+              >
+                <div class="p-card-title">Human Monitor</div>
+                <div class="p-card-sub">TUI dashboard + control + alerts</div>
+              </div>
+            </div>
+            <div style="display: flex; justify-content: center; padding: 4px 0">
+              <div style="width: 1px; height: 20px; background: #aab4c6"></div>
+            </div>
+            <div
+              style="
+                text-align: center;
+                font-size: 11px;
+                color: #647585;
+                margin-bottom: 4px;
+              "
+            >
+              observes &amp; controls
+            </div>
+            <div
+              style="display: flex; justify-content: center; padding: 2px 0 8px"
+            >
+              <div
+                style="
+                  width: 0;
+                  height: 0;
+                  border-left: 5px solid transparent;
+                  border-right: 5px solid transparent;
+                  border-top: 7px solid #aab4c6;
+                "
+              ></div>
+            </div>
+            <div class="p-row">
+              <div class="p-card">
+                <div class="p-card-title">Discovery</div>
+                <div class="p-card-sub">Relation detection</div>
+              </div>
+              <div class="p-card">
+                <div class="p-card-title">Backtest</div>
+                <div class="p-card-sub">Historical validation</div>
+              </div>
+              <div class="p-card">
+                <div class="p-card-title">Trade</div>
+                <div class="p-card-sub">Paper &rarr; live</div>
+              </div>
+            </div>
+            <div class="p-hline">
+              <div class="p-hline-bar"></div>
+              <div class="p-hline-label">Strategy pipeline: left to right</div>
+              <div class="p-hline-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <h3 id="strategy-discovery">1. Strategy Discovery</h3>
+
+        <p>
+          In <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span>, strategy discovery focuses
+          on identifying and exploiting the structural, statistical, or semantic
+          relationships between different prediction markets. Rather than
+          relying on isolated market signals, the system seeks out specific
+          groupings&mdash;such as identical markets across platforms
+          (<code>same_event</code>), mutually exclusive outcomes
+          (<code>complementary</code>), or cointegrated price series
+          (<code>correlated</code>). Once a distinct relationship is identified,
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> applies a specialized
+          trading strategy tailored to extract value from that specific market
+          dynamic.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Relation</th>
+              <th>Constraint</th>
+              <th>Strategy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>same_event</strong></td>
+              <td>Identical market across platforms</td>
+              <td><code>DirectArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>complementary</strong></td>
+              <td>Outcomes sum to 1</td>
+              <td><code>GroupArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>implication</strong></td>
+              <td>A implies B</td>
+              <td><code>ImplicationArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>exclusivity</strong></td>
+              <td>Mutually exclusive</td>
+              <td><code>GroupArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>correlated</strong></td>
+              <td>Cointegrated prices</td>
+              <td><code>CointSpreadStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>structural</strong></td>
+              <td>Known linear relationship</td>
+              <td><code>StructuralArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>conditional</strong></td>
+              <td>Conditional probability bounds</td>
+              <td><code>ConditionalArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>temporal</strong></td>
+              <td>Lead-lag information flow</td>
+              <td><code>LeadLagStrategy</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="backtesting">2. Strategy Backtesting</h3>
+
+        <p>
+          Before any capital is risked, every discovered relationship undergoes
+          rigorous validation through backtesting. The system replays historical
+          market data, utilizing either Parquet order book snapshots or exchange
+          price history APIs, directly through the trading engine. This
+          simulation is powered by a <code>PaperTrader</code> module that
+          ensures realistic order execution by accurately accounting for
+          historical fill rates and actual order book liquidity.
+        </p>
+
+        <h3 id="trade-execution">3. Trade Execution</h3>
+
+        <p>
+          Strategies that successfully pass the backtesting phase are seamlessly
+          transitioned through a designated paper-to-live trading pipeline. This
+          entire execution process is managed by an asynchronous, event-driven
+          <code>TradingEngine</code> that handles the complexities of live
+          market interaction, order routing, and state management.
+        </p>
+
+        <h3 id="human-monitoring">4. Human Monitoring</h3>
+
+        <p>
+          To ensure safety and visibility,
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> provides a comprehensive,
+          fully decoupled real-time observability suite for human operators. A
+          Textual-based TUI dashboard connects to the engine via Unix domain
+          sockets, allowing operators to monitor portfolio values, order books,
+          and strategy decisions, while also providing granular control to
+          pause, resume, or hot-swap strategies on the fly. Additionally, the
+          system features robust emergency protocols, including a global CLI
+          kill-switch and instant TUI emergency stops, all supported by an
+          isolated alerting framework that broadcasts critical events without
+          risking the stability of the core trading engine.
+        </p>
+
+        <h2 id="experiments">Experiments</h2>
+
+        <h3 id="exp-discovery">Strategy Discovery</h3>
+
+        <div class="placeholder">Experimental results coming soon.</div>
+
+        <h3 id="exp-backtest">Backtesting</h3>
+
+        <div class="placeholder">Experimental results coming soon.</div>
+
+        <h3 id="exp-live">Live Trading Results</h3>
+
+        <div class="placeholder">Experimental results coming soon.</div>
+
+        <h2 id="citation">Citation</h2>
+
+        <p>
+          If you find <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> useful in your research or
+          work, please cite:
+        </p>
+
+        <div class="bibtex-block">
+          <pre>
+@software{coinjure2026,
+  title   = {Coinjure: An Agent-Native Trading Scaffold for Prediction Markets},
+  author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
+  year    = {2026},
+  url     = {https://github.com/ulab-uiuc/coinjure},
+  note    = {University of Illinois Urbana-Champaign}
+}</pre
+          >
+        </div>
+      </article>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <div class="footer-links">
+        <a href="../site/index.html">Documentation</a>
+        <a href="https://github.com/ulab-uiuc/coinjure">GitHub</a>
+      </div>
+      &copy; 2026 Coinjure &middot; Apache 2.0
+    </footer>
+
+    <!-- TOC scroll spy -->
+    <script>
+      (function () {
+        const toc = document.getElementById("toc");
+        const links = [...toc.querySelectorAll("a[data-section]")];
+        const ids = links.map((a) => a.dataset.section);
+
+        function update() {
+          let active = ids[0];
+          for (const id of ids) {
+            const el = document.getElementById(id);
+            if (el && el.getBoundingClientRect().top <= 100) active = id;
+          }
+          links.forEach((a) => {
+            a.classList.toggle("active", a.dataset.section === active);
+          });
+        }
+
+        const obs = new IntersectionObserver(
+          () => {
+            toc.classList.add("visible");
+            obs.disconnect();
+          },
+          { rootMargin: "-40% 0px -40% 0px" },
+        );
+        const first = document.getElementById(ids[0]);
+        if (first) obs.observe(first);
+
+        window.addEventListener("scroll", update, { passive: true });
+        update();
+      })();
+    </script>
+  </body>
+</html>
