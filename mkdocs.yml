@@ -26,6 +26,8 @@ extra_css:
 
 plugins:
   - search
+  - blog:
+      blog_dir: .
 
 markdown_extensions:
   - admonition
@@ -41,17 +43,20 @@ markdown_extensions:
   - def_list
 
 nav:
-  - Home: index.md
-  - Getting Started:
-      - Quick Start: CLI_QUICK_START.md
-  - CLI Reference:
-      - Monitoring: CLI_MONITORING.md
-  - API Reference:
-      - Overview: api/index.md
-      - Strategy: api/strategy.md
-      - Trading Types: api/trading.md
-      - Data Sources: api/data.md
-      - Market Relations: api/relations.md
-      - Engine: api/engine.md
-  - Architecture:
-      - Project Specification: PROJECT_SPECIFICATION.md
+  - Blog:
+      - index.md
+  - Docs:
+      - Overview: overview.md
+      - Getting Started:
+          - Quick Start: CLI_QUICK_START.md
+      - CLI Reference:
+          - Monitoring: CLI_MONITORING.md
+      - API Reference:
+          - Overview: api/index.md
+          - Strategy: api/strategy.md
+          - Trading Types: api/trading.md
+          - Data Sources: api/data.md
+          - Market Relations: api/relations.md
+          - Engine: api/engine.md
+      - Architecture:
+          - Project Specification: PROJECT_SPECIFICATION.md
