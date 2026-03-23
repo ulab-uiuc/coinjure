@@ -8,6 +8,8 @@ Usage:
     poetry run python data/kalshi-live/fomc_arb.py --execute 20  # place 20 contracts
     poetry run python data/kalshi-live/fomc_arb.py --status      # check fill status
     poetry run python data/kalshi-live/fomc_arb.py --cancel      # cancel all resting
+    poetry run python data/kalshi-live/fomc_arb.py --watch       # auto-convert unfilled makers to taker
+    poetry run python data/kalshi-live/fomc_arb.py --watch --fallback-minutes 30
 """
 import asyncio
 import json
@@ -93,14 +95,13 @@ async def execute(client, legs, num_contracts):
     async with httpx.AsyncClient(timeout=15) as http:
         for leg in legs:
             if leg['use_taker']:
-                price_cents = int(leg['yes_ask'] * 100)
+                price_cents = round(leg['yes_ask'] * 100)
                 mode = 'taker'
             else:
-                price_cents = int(leg['yes_bid'] * 100)
+                price_cents = round(leg['yes_bid'] * 100)
                 mode = 'maker'
 
-            if price_cents <= 0:
-                price_cents = 1  # minimum 1c
+            price_cents = max(1, min(price_cents, 99))
 
             body = {
                 'ticker': leg['ticker'],
@@ -209,6 +210,137 @@ async def check_status(client):
         print(f'⏳ Waiting for maker fills...')
 
 
+async def watch_and_fallback(client, fallback_minutes=30):
+    """Watch unfilled maker orders and auto-convert to taker after timeout."""
+    if not STATE_FILE.exists():
+        print('No state file found. Run --execute first.')
+        return
+
+    state = json.loads(STATE_FILE.read_text())
+    orders = state.get('orders', [])
+    executed_at = datetime.fromisoformat(state.get('executed_at', ''))
+    fallback_seconds = fallback_minutes * 60
+
+    print(f'Watching {len(orders)} orders, fallback after {fallback_minutes}min...')
+
+    while True:
+        elapsed = (datetime.now() - executed_at).total_seconds()
+        all_filled = True
+        unfilled_makers = []
+
+        async with httpx.AsyncClient(timeout=15) as http:
+            for o in orders:
+                oid = o.get('order_id', '')
+                if not oid or o.get('mode') != 'maker':
+                    continue
+
+                url = f'https://api.elections.kalshi.com/trade-api/v2/portfolio/orders/{oid}'
+                auth = client.kalshi_auth.create_auth_headers('GET', url)
+                try:
+                    r = await http.get(url, headers=auth)
+                    if r.status_code != 200:
+                        all_filled = False
+                        print(f'  Warning: cannot check {o["ticker"]} (HTTP {r.status_code})')
+                        continue
+                    detail = r.json().get('order', r.json())
+                    status = detail.get('status', '?')
+                    remaining = float(detail.get('remaining_count_fp', 0) or 0)
+
+                    if status in ('executed', 'filled') or remaining == 0:
+                        continue  # fully filled
+                    all_filled = False
+                    unfilled_makers.append({
+                        'order_id': oid,
+                        'ticker': o['ticker'],
+                        'remaining': int(remaining),
+                        'status': status,
+                    })
+                except Exception as e:
+                    all_filled = False
+                    print(f'  Error checking {o["ticker"]}: {e}')
+
+        if all_filled:
+            print(f'[{datetime.now():%H:%M:%S}] All maker orders filled!')
+            break
+
+        if elapsed >= fallback_seconds:
+            if unfilled_makers:
+                print(f'\n[{datetime.now():%H:%M:%S}] Fallback triggered after {elapsed/60:.0f}min')
+                await _convert_makers_to_taker(client, unfilled_makers)
+            else:
+                print(f'[{datetime.now():%H:%M:%S}] Cannot verify orders (API errors), timeout reached')
+            break
+
+        # Status update
+        if unfilled_makers:
+            tickers = ', '.join(u['ticker'].split('-')[-1] for u in unfilled_makers)
+            print(
+                f'[{datetime.now():%H:%M:%S}] {len(unfilled_makers)} unfilled makers '
+                f'({tickers}), {elapsed/60:.0f}/{fallback_minutes}min elapsed'
+            )
+        else:
+            print(f'[{datetime.now():%H:%M:%S}] Cannot verify some orders, retrying in 60s...')
+        await asyncio.sleep(60)
+
+
+async def _convert_makers_to_taker(client, unfilled_makers):
+    """Cancel unfilled maker orders and re-place as taker at ask."""
+    # First fetch current market prices
+    markets = await fetch_markets(client)
+    price_map = {}
+    for m in markets:
+        ticker = m.get('ticker', '')
+        price_map[ticker] = float(m.get('yes_ask_dollars', 0) or 0)
+
+    async with httpx.AsyncClient(timeout=15) as http:
+        for um in unfilled_makers:
+            oid = um['order_id']
+            ticker = um['ticker']
+            remaining = um['remaining']
+
+            # Cancel the maker order
+            cancel_url = f'https://api.elections.kalshi.com/trade-api/v2/portfolio/orders/{oid}'
+            auth = client.kalshi_auth.create_auth_headers('DELETE', cancel_url)
+            r = await http.delete(cancel_url, headers=auth)
+            if r.status_code not in (200, 204):
+                print(f'  Failed to cancel {ticker}: HTTP {r.status_code}')
+                continue
+            print(f'  Cancelled maker: {ticker} ({remaining} remaining)')
+
+            # Re-place as taker at ask
+            ask = price_map.get(ticker, 0)
+            if ask <= 0:
+                print(f'  No ask price for {ticker}, skipping re-place')
+                continue
+
+            price_cents = min(round(ask * 100), 99)  # Kalshi prices: 1-99c
+            if price_cents < 1:
+                price_cents = 1
+            body = {
+                'ticker': ticker,
+                'action': 'buy',
+                'side': 'yes',
+                'type': 'limit',
+                'count': remaining,
+                'yes_price': price_cents,
+                'client_order_id': str(uuid.uuid4()),
+            }
+            order_url = 'https://api.elections.kalshi.com/trade-api/v2/portfolio/orders'
+            auth2 = client.kalshi_auth.create_auth_headers('POST', order_url)
+            r2 = await http.post(
+                order_url, json=body,
+                headers={**auth2, 'Content-Type': 'application/json'},
+            )
+            if r2.status_code == 201:
+                order = r2.json().get('order', r2.json())
+                fee = order.get('taker_fees_dollars', '0')
+                print(f'  Taker re-placed: {ticker} @{price_cents}c x{remaining} fee=${fee}')
+            else:
+                print(f'  Taker re-place failed: {ticker} HTTP {r2.status_code}: {r2.text[:80]}')
+
+            await asyncio.sleep(0.3)
+
+
 async def cancel_resting(client):
     """Cancel all resting orders."""
     url = 'https://api.elections.kalshi.com/trade-api/v2/portfolio/orders?status=resting&limit=50'
@@ -241,6 +373,14 @@ async def main():
         await check_status(client)
         return
 
+    if '--watch' in sys.argv:
+        fb_min = 30
+        if '--fallback-minutes' in sys.argv:
+            idx = sys.argv.index('--fallback-minutes')
+            fb_min = int(sys.argv[idx + 1])
+        await watch_and_fallback(client, fallback_minutes=fb_min)
+        return
+
     # Fetch and analyze
     markets = await fetch_markets(client)
     legs, profit_per_contract, total_cost = analyze(markets)
@@ -265,7 +405,7 @@ async def main():
     print(f'{"Profit per contract":42s} {"":>5s} {"":>5s} {"":>6s} {profit_per_contract:5.2f}')
     print()
 
-    if profit_per_contract <= 0:
+    if not legs or profit_per_contract <= 0:
         print('❌ No profitable arb opportunity right now.')
         return
 
@@ -298,7 +438,7 @@ async def main():
         print(f'\nState saved to {STATE_FILE}')
         print(f'Run with --status to check fill progress.')
     else:
-        max_contracts = int(balance * 0.6 / total_cost)
+        max_contracts = int(balance * 0.6 / total_cost) if total_cost > 0 else 0
         print(f'Recommended size: {max_contracts} contracts (60% of balance)')
         print(f'Expected profit: ${max_contracts * profit_per_contract:.2f}')
         print(f'\nRun: poetry run python data/kalshi-live/fomc_arb.py --execute {max_contracts}')

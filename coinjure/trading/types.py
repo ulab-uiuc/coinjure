@@ -60,6 +60,7 @@ class Order:
     trades: list[Trade]
     remaining: Decimal
     commission: Decimal
+    order_id: str = ''
 
     def to_payload(self) -> dict[str, object]:
         return {

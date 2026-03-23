@@ -54,6 +54,10 @@ class Trader(ABC):
         """Place an order."""
         pass
 
+    async def cancel_order(self, order_id: str) -> bool:
+        """Cancel a resting order by ID. Returns True if cancelled."""
+        raise NotImplementedError(f'{type(self).__name__} does not support cancel_order')
+
     def set_read_only(self, enabled: bool) -> None:
         """Enable/disable read-only mode (blocks new orders when enabled)."""
         self.read_only = enabled

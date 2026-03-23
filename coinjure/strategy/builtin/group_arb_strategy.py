@@ -34,7 +34,7 @@ from coinjure.strategy.strategy import Strategy
 from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
 from coinjure.trading.sizing import compute_trade_size_with_llm
 from coinjure.trading.trader import Trader
-from coinjure.trading.types import TradeSide
+from coinjure.trading.types import OrderStatus, TradeSide
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,9 @@ class GroupArbStrategy(Strategy):
     use_maker_orders:
         If True, place orders at bid price (maker) instead of ask (taker).
         Maker orders have 0 fees on Kalshi but may not fill immediately.
+    maker_fallback_seconds:
+        When use_maker_orders is True, auto-convert unfilled maker orders
+        to taker after this many seconds. 0 = disabled.
     preflight_check:
         If True, verify all legs can be afforded before placing any orders.
         Prevents partial arb exposure.
@@ -84,6 +87,7 @@ class GroupArbStrategy(Strategy):
         warmup_seconds: float = 5.0,
         min_markets: int = 2,
         use_maker_orders: bool = False,
+        maker_fallback_seconds: float = 0,
         preflight_check: bool = True,
         llm_trade_sizing: bool = False,
         llm_model: str | None = None,
@@ -99,6 +103,7 @@ class GroupArbStrategy(Strategy):
         self.cooldown_seconds = cooldown_seconds
         self._min_markets_override = min_markets
         self.use_maker_orders = use_maker_orders
+        self.maker_fallback_seconds = maker_fallback_seconds
         self.preflight_check = preflight_check
         self.llm_trade_sizing = llm_trade_sizing
         self.llm_model = llm_model
@@ -168,8 +173,12 @@ class GroupArbStrategy(Strategy):
 
         self._tickers: dict[str, Ticker] = {}
         self._last_arb_time: float = float('-inf')  # no previous arb; first trade always allowed
+        self._last_log_time: float = 0.0
         # Position tracking: 'BUY_YES', 'BUY_NO', or None
         self._held_direction: str | None = None
+        # Pending maker orders awaiting fill (for maker→taker fallback)
+        # Each entry: {order_id, ticker, quantity, placed_at, market_id}
+        self._pending_maker_orders: list[dict] = []
 
         # Require ALL markets in the relation to have prices before arbing.
         # With partial data, sum_yes is artificially low → false BUY_YES signals.
@@ -229,6 +238,10 @@ class GroupArbStrategy(Strategy):
                 mid[:16],
                 ticker.name[:40] if ticker.name else '?',
             )
+
+        # Check pending maker orders for fallback before arb check
+        if self._pending_maker_orders and self.maker_fallback_seconds > 0:
+            await self._check_maker_fallback(trader)
 
         await self._check_arb(trader)
 
@@ -318,6 +331,14 @@ class GroupArbStrategy(Strategy):
 
         # ── Open logic: enter new position if edge is sufficient ──
         if best_edge < self.min_edge:
+            now = time.monotonic()
+            if now - self._last_log_time > 120:
+                self._last_log_time = now
+                logger.info(
+                    '%s no_arb: sum=%.3f edge=%.4f (need %.4f) %s',
+                    label, float(sum_yes), float(best_edge),
+                    float(self.min_edge), preferred_action,
+                )
             return
 
         # Warmup & cooldown guard
@@ -443,6 +464,7 @@ class GroupArbStrategy(Strategy):
                 return 0
 
             # All checks pass — execute all legs
+            now = time.monotonic()
             for mid, trade_ticker, leg_price in resolved:
                 try:
                     result = await trader.place_order(
@@ -456,6 +478,21 @@ class GroupArbStrategy(Strategy):
                         failed_legs += 1
                     else:
                         executed_legs += 1
+                        # Track unfilled maker orders for fallback
+                        if (
+                            self.use_maker_orders
+                            and self.maker_fallback_seconds > 0
+                            and result.order
+                            and result.order.status == OrderStatus.PLACED
+                            and result.order.order_id
+                        ):
+                            self._pending_maker_orders.append({
+                                'order_id': result.order.order_id,
+                                'ticker': trade_ticker,
+                                'quantity': size,
+                                'placed_at': now,
+                                'market_id': mid,
+                            })
                 except Exception:
                     logger.exception(
                         'GroupArb: exception placing leg for market %s', mid[:16]
@@ -463,6 +500,7 @@ class GroupArbStrategy(Strategy):
                     failed_legs += 1
         else:
             # No preflight — original behavior
+            now = time.monotonic()
             for mid, ask_price in prices.items():
                 leg = self._resolve_leg(trader, mid, ask_price, action)
                 if leg is None:
@@ -481,6 +519,20 @@ class GroupArbStrategy(Strategy):
                         failed_legs += 1
                     else:
                         executed_legs += 1
+                        if (
+                            self.use_maker_orders
+                            and self.maker_fallback_seconds > 0
+                            and result.order
+                            and result.order.status == OrderStatus.PLACED
+                            and result.order.order_id
+                        ):
+                            self._pending_maker_orders.append({
+                                'order_id': result.order.order_id,
+                                'ticker': trade_ticker,
+                                'quantity': size,
+                                'placed_at': now,
+                                'market_id': mid,
+                            })
                 except Exception:
                     logger.exception(
                         'GroupArb: exception placing leg for market %s', mid[:16]
@@ -498,6 +550,63 @@ class GroupArbStrategy(Strategy):
             signal_values={**signal, 'executed_legs': executed_legs},
         )
         return executed_legs
+
+    async def _check_maker_fallback(self, trader: Trader) -> None:
+        """Convert unfilled maker orders to taker if they've waited too long."""
+        now = time.monotonic()
+        remaining: list[dict] = []
+
+        for pending in self._pending_maker_orders:
+            elapsed = now - pending['placed_at']
+            if elapsed < self.maker_fallback_seconds:
+                remaining.append(pending)
+                continue
+
+            order_id = pending['order_id']
+            ticker = pending['ticker']
+            quantity = pending['quantity']
+
+            logger.info(
+                'GroupArb: maker fallback — cancelling %s after %.0fs, re-placing as taker',
+                order_id, elapsed,
+            )
+
+            # Cancel the resting maker order
+            cancelled = await trader.cancel_order(order_id)
+            if not cancelled:
+                logger.warning('GroupArb: cancel failed for %s, keeping in pending', order_id)
+                remaining.append(pending)
+                continue
+
+            # Re-place at ask price (taker)
+            best_ask = trader.market_data.get_best_ask(ticker)
+            if best_ask is None or best_ask.price <= 0:
+                logger.warning(
+                    'GroupArb: no ask price for %s after cancel, leg lost', ticker.symbol
+                )
+                continue
+
+            try:
+                result = await trader.place_order(
+                    side=TradeSide.BUY,
+                    ticker=ticker,
+                    limit_price=best_ask.price,
+                    quantity=quantity,
+                )
+                if result.failure_reason:
+                    logger.warning(
+                        'GroupArb: taker re-place failed for %s: %s',
+                        ticker.symbol, result.failure_reason,
+                    )
+                else:
+                    logger.info(
+                        'GroupArb: maker→taker conversion OK: %s @%.2f',
+                        ticker.symbol, float(best_ask.price),
+                    )
+            except Exception:
+                logger.exception('GroupArb: taker re-place exception for %s', ticker.symbol)
+
+        self._pending_maker_orders = remaining
 
     async def _close_positions(
         self,

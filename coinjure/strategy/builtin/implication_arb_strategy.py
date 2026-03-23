@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import time
 from decimal import Decimal
 
 from coinjure.events import Event, PriceChangeEvent
@@ -67,6 +68,7 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         self.llm_trade_sizing = llm_trade_sizing
         self.llm_model = llm_model
         self.llm_portfolio_review = llm_portfolio_review
+        self._last_log_time: float = 0.0
 
         self._init_from_relation(relation_id)
 
@@ -98,6 +100,15 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             if violation > self.min_edge:
                 await self._enter(trader, violation)
             else:
+                now = time.monotonic()
+                if now - self._last_log_time > 120:
+                    self._last_log_time = now
+                    logger.info(
+                        'impl(%s) no_arb: A=%.4f B=%.4f violation=%.4f (need %.4f)',
+                        self.relation_id[:20],
+                        float(self._price_a), float(self._price_b),
+                        float(violation), float(self.min_edge),
+                    )
                 self.record_decision(
                     ticker_name=f'impl({self.relation_id[:20]})',
                     action='HOLD',

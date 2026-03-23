@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import os
+import time
 import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -62,6 +64,48 @@ class KalshiTrader(Trader):
         self._portfolio_api = PortfolioApi(self._api_client)
         self.orders: list[Order] = []
 
+        # Store credentials for raw HTTP calls (SDK omits fields like prices/positions)
+        self._key_id = key_id
+        self._private_key = self._load_private_key(pk_path)
+
+        self._sync_usd_balance()
+        self._sync_positions()
+
+    @staticmethod
+    def _load_private_key(pk_path: str) -> Any:
+        try:
+            from cryptography.hazmat.primitives import serialization
+            with open(pk_path, 'rb') as f:
+                return serialization.load_pem_private_key(f.read(), password=None)
+        except Exception:
+            return None
+
+    def _raw_get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Authenticated raw HTTP GET — bypasses SDK which omits many response fields."""
+        import requests
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        ts = str(int(time.time() * 1000))
+        msg = ts + 'GET' + path.split('?')[0]
+        sig_b64 = ''
+        if self._private_key is not None:
+            sig = self._private_key.sign(msg.encode(), padding.PKCS1v15(), hashes.SHA256())
+            sig_b64 = base64.b64encode(sig).decode()
+        headers = {
+            'KALSHI-ACCESS-KEY': self._key_id or '',
+            'KALSHI-ACCESS-TIMESTAMP': ts,
+            'KALSHI-ACCESS-SIGNATURE': sig_b64,
+        }
+        r = requests.get(
+            f'https://api.elections.kalshi.com{path}',
+            params=params,
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()  # type: ignore[no-any-return]
+
     def _sync_usd_balance(self) -> None:
         """Re-fetch USD balance from Kalshi and update position manager."""
         try:
@@ -78,6 +122,61 @@ class KalshiTrader(Trader):
             )
         except Exception:
             pass  # Non-critical — local tracking continues as fallback
+
+    def _sync_positions(self) -> None:
+        """Load existing Kalshi market positions into position_manager at startup.
+
+        Uses raw HTTP because the SDK's get_positions() returns None for all fields.
+        Positive quantity = holding YES contracts; negative = holding NO contracts.
+        """
+        try:
+            data = self._raw_get('/trade-api/v2/portfolio/positions')
+            market_positions = data.get('market_positions') or []
+            count = 0
+            for pos in market_positions:
+                market_id: str = pos.get('market_id', '')
+                quantity: int = pos.get('position', 0)  # +YES / -NO
+                if not market_id or quantity == 0:
+                    continue
+                # Determine side: positive = YES contracts, negative = NO contracts
+                if quantity > 0:
+                    side = 'yes'
+                    qty = Decimal(str(quantity))
+                else:
+                    side = 'no'
+                    qty = Decimal(str(-quantity))
+
+                # Symbol format must match LiveKalshiDataSource:
+                # YES → symbol=market_id, NO → symbol=f'{market_id}_NO'
+                symbol = market_id if side == 'yes' else f'{market_id}_NO'
+                ticker = KalshiTicker(
+                    symbol=symbol,
+                    market_ticker=market_id,
+                    side=side,
+                )
+                # Use market_exposure (cents) as cost basis if available
+                exposure_cents = pos.get('market_exposure', 0) or 0
+                avg_cost = (
+                    Decimal(str(exposure_cents)) / Decimal('100') / qty
+                    if qty > 0 else Decimal('0')
+                )
+                self.position_manager.update_position(
+                    Position(
+                        ticker=ticker,
+                        quantity=qty,
+                        average_cost=avg_cost,
+                        realized_pnl=Decimal('0'),
+                    )
+                )
+                count += 1
+                logger.info(
+                    'Loaded existing position: %s %s contracts @ avg $%s',
+                    market_id, qty, avg_cost,
+                )
+            if count:
+                logger.info('Synced %d existing Kalshi positions at startup', count)
+        except Exception:
+            logger.debug('_sync_positions() failed — starting with empty positions', exc_info=True)
 
     async def _submit_order(
         self,
@@ -230,6 +329,7 @@ class KalshiTrader(Trader):
             trades=trades,
             remaining=remaining,
             commission=commission,
+            order_id=order_id,
         )
 
     async def _alert_rejected(self, reason: OrderFailureReason, ticker: Ticker) -> None:
@@ -238,6 +338,18 @@ class KalshiTrader(Trader):
                 await self.alerter.on_order_rejected(reason, ticker)
             except Exception:
                 pass
+
+    async def cancel_order(self, order_id: str) -> bool:
+        """Cancel a resting Kalshi order."""
+        try:
+            await asyncio.to_thread(
+                lambda: self._portfolio_api.cancel_order(order_id)
+            )
+            logger.info('Cancelled Kalshi order %s', order_id)
+            return True
+        except Exception:
+            logger.warning('Failed to cancel Kalshi order %s', order_id, exc_info=True)
+            return False
 
     async def place_order(  # noqa: C901
         self,

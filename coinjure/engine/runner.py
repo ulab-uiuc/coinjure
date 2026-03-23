@@ -376,56 +376,8 @@ async def run_live_kalshi_trading(
     initial_balance = Decimal(str(balance_response.balance)) / Decimal('100')
     _fund_position(position_manager, CashTicker.KALSHI_USD, initial_balance)
 
-    # ── Fetch contract positions from exchange ──────────────────────────
-    try:
-        positions_response = await asyncio.to_thread(
-            lambda: trader._portfolio_api.get_positions(limit=200)
-        )
-        for kpos in positions_response.positions or []:
-            count = kpos.position or 0
-            if count == 0 or not kpos.ticker:
-                continue
-            from coinjure.ticker import KalshiTicker
-
-            # Kalshi: positive count = YES, negative = NO
-            if count > 0:
-                side = 'yes'
-                abs_count = count
-            else:
-                side = 'no'
-                abs_count = abs(count)
-
-            # Use distinct symbol for YES vs NO so PositionManager doesn't overwrite
-            sym = kpos.ticker if side == 'yes' else f'{kpos.ticker}__no'
-            ticker = KalshiTicker(
-                symbol=sym,
-                name='',
-                market_ticker=kpos.ticker,
-                event_ticker=kpos.event_ticker or '',
-                side=side,
-            )
-            avg_cost = Decimal('0')
-            if kpos.total_cost is not None and abs_count > 0:
-                # total_cost is in cents
-                avg_cost = (
-                    Decimal(str(abs(kpos.total_cost))) / Decimal('100') / Decimal(str(abs_count))
-                )
-            position_manager.update_position(
-                Position(
-                    ticker=ticker,
-                    quantity=Decimal(str(abs_count)),
-                    average_cost=avg_cost,
-                    realized_pnl=Decimal(str(kpos.realized_pnl or 0)) / Decimal('100'),
-                )
-            )
-            logger.info(
-                'Loaded position from exchange: %s side=%s qty=%d',
-                kpos.ticker,
-                side,
-                abs_count,
-            )
-    except Exception:
-        logger.warning('Failed to fetch positions from Kalshi', exc_info=True)
+    # Positions already loaded by KalshiTrader._sync_positions() via raw HTTP
+    # (SDK get_positions() returns None for most fields — do not use it here)
 
     logger.info('Starting live Kalshi trading with balance: $%s', initial_balance)
 
