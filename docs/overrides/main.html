@@ -1,0 +1,111 @@
+{% extends "base.html" %} {% block styles %} {{ super() }}
+<style>
+  /* Critical inline styles — prevent FOUC on file:// */
+  :root,
+  [data-md-color-scheme="default"],
+  [data-md-color-scheme="slate"],
+  [data-md-color-scheme] {
+    --md-default-bg-color: #f3f6fb !important;
+    --md-default-fg-color: #26323f !important;
+    --md-primary-fg-color: #f3f6fb !important;
+    --md-primary-bg-color: #18222e !important;
+    --md-accent-fg-color: #2a5282 !important;
+    --md-code-bg-color: #e8edf6 !important;
+    --md-code-fg-color: #18222e !important;
+    --md-text-font: "DM Sans", sans-serif;
+    --md-code-font: "DM Mono", monospace;
+    --md-shadow-z1: none !important;
+    --md-shadow-z2: none !important;
+    --md-shadow-z3: none !important;
+    --md-footer-bg-color: #f3f6fb !important;
+    --md-footer-bg-color--dark: #e8edf6 !important;
+  }
+  body {
+    background: #f3f6fb !important;
+    font-family: "DM Sans", sans-serif !important;
+  }
+  .md-tabs {
+    display: none !important;
+  }
+  .md-banner {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .md-banner__inner {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .nav {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: #f3f6fb;
+    border-bottom: 0.7px solid #bec8d8;
+    font-family: "DM Sans", sans-serif;
+  }
+  .nav-logo {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #18222e !important;
+    text-decoration: none !important;
+    letter-spacing: 0.02em;
+  }
+  .nav-r {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link {
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #647585 !important;
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none !important;
+  }
+  .gh-pill,
+  .gh-pill:link,
+  .gh-pill:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: #18222e !important;
+    color: #f3f6fb !important;
+    font-size: 11px !important;
+    font-weight: 500;
+    text-decoration: none !important;
+  }
+</style>
+{% endblock %} {% block announce %}
+<nav class="nav">
+  <a href="{{ base_url }}" class="nav-logo"
+    ><span style="color: #d4a017">Coin</span
+    ><span style="color: #2c5f8a">jure</span></a
+  >
+  <div class="nav-r">
+    <a href="{{ base_url }}" class="nav-link" style="color: #18222e">Docs</a>
+    <a href="javascript:void(0)" class="nav-link" id="blog-link">Blog</a>
+    <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+<script>
+  (function () {
+    var a = document.createElement("a");
+    a.href = document.querySelector(".nav-logo").getAttribute("href");
+    var siteRoot = a.href.replace(/\/?$/, "/");
+    document.getElementById("blog-link").href = siteRoot + "../blog/index.html";
+  })();
+</script>
+{% endblock %} {% block header %}{% endblock %}
