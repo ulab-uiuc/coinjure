@@ -1,4 +1,4 @@
-name: Deploy Docs
+name: Deploy Blog & Docs
 
 on:
   push:
@@ -22,5 +22,20 @@ jobs:
       - name: Install MkDocs dependencies
         run: pip install mkdocs mkdocs-material
 
+      - name: Build site
+        run: |
+          # Build MkDocs docs into site/docs/
+          mkdocs build --site-dir site/docs
+
+          # Copy blog to site root
+          cp blog/index.html site/index.html
+
+          # Add .nojekyll to prevent GitHub Pages from ignoring _files
+          touch site/.nojekyll
+
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: true
