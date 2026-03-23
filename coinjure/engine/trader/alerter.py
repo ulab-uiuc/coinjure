@@ -15,7 +15,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from coinjure.trading.types import OrderFailureReason, Trade
+from coinjure.trading.types import Order, OrderFailureReason, Trade
 from coinjure.ticker import Ticker
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,15 @@ class Alerter(ABC):
         msg = (
             f'Trade: {trade.side.value.upper()} {trade.quantity} '
             f'{ticker_name} @ {trade.price}'
+        )
+        await self.send(msg, level='info')
+
+    async def on_order_placed(self, order: Order) -> None:
+        ticker_name = getattr(order.ticker, 'name', '') or order.ticker.symbol
+        total_qty = order.remaining + order.filled_quantity
+        msg = (
+            f'Order placed: {order.side.value.upper()} {total_qty} '
+            f'{ticker_name} @ {order.limit_price} [{order.status.value}]'
         )
         await self.send(msg, level='info')
 
@@ -119,6 +128,15 @@ class CompositeAlerter(Alerter):
                 await alerter.on_trade(trade)
             except Exception:
                 logger.debug('CompositeAlerter: on_trade() failed', exc_info=True)
+
+    async def on_order_placed(self, order: Order) -> None:
+        for alerter in self.alerters:
+            try:
+                await alerter.on_order_placed(order)
+            except Exception:
+                logger.debug(
+                    'CompositeAlerter: on_order_placed() failed', exc_info=True
+                )
 
     async def on_order_rejected(
         self, reason: OrderFailureReason, ticker: Ticker

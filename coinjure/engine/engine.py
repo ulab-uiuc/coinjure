@@ -473,12 +473,21 @@ class TradingEngine:
 
         # Process new orders
         while self._last_orders_idx < len(orders):
+            order = orders[self._last_orders_idx]
             self._order_times.append(now_str)
             if self._state_store:
                 try:
-                    self._state_store.append_order(orders[self._last_orders_idx])
+                    self._state_store.append_order(order)
                 except Exception:
                     logger.debug('state_store.append_order() failed', exc_info=True)
+            if self._alerter and order.status not in (
+                OrderStatus.FILLED,
+                OrderStatus.REJECTED,
+            ):
+                try:
+                    await self._alerter.on_order_placed(order)
+                except Exception:
+                    logger.debug('alerter.on_order_placed() failed', exc_info=True)
             self._last_orders_idx += 1
 
         # Scan all orders for new trades (handles resting order fills)
