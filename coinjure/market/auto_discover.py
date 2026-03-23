@@ -11,11 +11,15 @@ understanding and are left for the LLM agent to discover.
 
 from __future__ import annotations
 
+import logging
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import date
 
 from coinjure.market.relations import MarketRelation
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Date parsing
@@ -226,6 +230,60 @@ def detect_exclusivity(
 
 
 # ---------------------------------------------------------------------------
+# LLM exhaustiveness verification
+# ---------------------------------------------------------------------------
+
+
+def _llm_verify_exhaustive(markets: list[dict], event_title: str) -> bool | None:
+    """Ask an LLM whether these markets are mutually exclusive and exhaustive.
+
+    Returns True if verified exhaustive, False if not, None if the LLM is
+    unavailable (caller should treat None as unverified and accept the relation).
+    """
+    api_key = os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        return None
+
+    questions = [m.get('question', '') or m.get('title', '') for m in markets]
+    questions_str = '\n'.join(f'- {q}' for q in questions if q)
+
+    prompt = (
+        f'Event: "{event_title}"\n'
+        f'Markets:\n{questions_str}\n\n'
+        'Are these markets MUTUALLY EXCLUSIVE and COLLECTIVELY EXHAUSTIVE?\n'
+        'Mutually exclusive = at most one can resolve YES.\n'
+        'Collectively exhaustive = at least one MUST resolve YES '
+        '(impossible for ALL to resolve NO).\n'
+        'Both conditions must hold for valid complementary arbitrage.\n\n'
+        'Reply with exactly one word: YES or NO.'
+    )
+
+    use_deepseek = bool(os.environ.get('DEEPSEEK_API_KEY'))
+    base_url = 'https://api.deepseek.com' if use_deepseek else None
+    model = 'deepseek-chat' if use_deepseek else 'gpt-4o-mini'
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{'role': 'user', 'content': prompt}],
+            max_tokens=5,
+            temperature=0,
+        )
+        answer = response.choices[0].message.content.strip().upper()
+        verdict = answer.startswith('YES')
+        logger.info(
+            'LLM exhaustiveness check for "%s": %s → %s',
+            event_title, answer, 'PASS' if verdict else 'FAIL',
+        )
+        return verdict
+    except Exception:
+        logger.debug('LLM exhaustiveness check failed, accepting relation', exc_info=True)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Layer 3: Intra-event complementary outcomes (sum ≈ 1)
 # ---------------------------------------------------------------------------
 
@@ -235,9 +293,17 @@ def detect_complementary(
     event_title: str,
     platform: str,
     max_event_size: int = 50,
-    sum_tolerance: float = 0.30,
+    sum_tolerance: float = 0.15,
+    llm_verify: bool = True,
 ) -> list[MarketRelation]:
-    """Detect complementary group whose probabilities sum to ~1."""
+    """Detect complementary group whose probabilities sum to ~1.
+
+    sum_tolerance of 0.15 means sum must be in [0.85, 1.15].  Markets with
+    larger deviations are likely illiquid or not truly exhaustive.
+
+    When llm_verify=True, a lightweight LLM call confirms mutual exclusivity
+    and collective exhaustiveness before the relation is accepted.
+    """
     if len(markets) < 2 or len(markets) > max_event_size:
         return []
 
@@ -255,6 +321,19 @@ def detect_complementary(
     if abs(total - 1.0) > sum_tolerance:
         return []
 
+    # LLM verification: confirm markets are truly mutually exclusive and exhaustive.
+    # Returns None when LLM is unavailable → accept the relation (don't block).
+    llm_note = ''
+    if llm_verify:
+        result = _llm_verify_exhaustive([m for _, m in priced], event_title)
+        if result is False:
+            logger.info(
+                'Rejecting complementary relation for "%s": LLM says not exhaustive',
+                event_title,
+            )
+            return []
+        llm_note = ' [LLM-verified]' if result is True else ' [LLM-unavailable]'
+
     enriched = [_enrich(m, platform) for _, m in priced]
     market_ids = sorted(_mid(m) for _, m in priced if _mid(m))
     id_part = '-'.join(market_ids[:3]) + (
@@ -269,7 +348,7 @@ def detect_complementary(
             confidence=0.95,
             reasoning=(
                 f'Complementary outcomes (sum={total:.2f}) '
-                f'within "{event_title}" ({len(priced)} markets)'
+                f'within "{event_title}" ({len(priced)} markets){llm_note}'
             ),
             hypothesis='sum(prices) = 1',
         )
