@@ -2,8 +2,8 @@ use_directory_urls: false
 site_name: Coinjure
 site_description: An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.
 site_url: https://ulab-uiuc.github.io/prediction-market-cli/docs
-repo_url: https://github.com/ulab-uiuc/coinjure
-repo_name: ulab-uiuc/coinjure
+repo_url: https://github.com/ulab-uiuc/prediction-market-cli
+repo_name: ulab-uiuc/prediction-market-cli
 edit_uri: edit/main/docs/
 
 theme:
