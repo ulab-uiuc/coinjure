@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from decimal import Decimal
 
@@ -17,6 +18,68 @@ def test_ticker() -> PolyMarketTicker:
         market_id='market123',
         event_id='event123',
     )
+
+
+class TestEventBaseFields:
+    """Tests for timestamp_epoch and dedup_id set by Event.__init__."""
+
+    def test_orderbook_event_has_timestamp_epoch(self, test_ticker: PolyMarketTicker):
+        before = time.time()
+        event = OrderBookEvent(
+            ticker=test_ticker,
+            price=Decimal('0.50'),
+            size=Decimal('1000'),
+            size_delta=Decimal('500'),
+        )
+        after = time.time()
+        assert before <= event.timestamp_epoch <= after
+
+    def test_price_change_event_has_timestamp_epoch(self, test_ticker: PolyMarketTicker):
+        before = time.time()
+        event = PriceChangeEvent(ticker=test_ticker, price=Decimal('0.65'))
+        after = time.time()
+        assert before <= event.timestamp_epoch <= after
+
+    def test_news_event_has_timestamp_epoch(self):
+        before = time.time()
+        event = NewsEvent(news='Hello')
+        after = time.time()
+        assert before <= event.timestamp_epoch <= after
+
+    def test_dedup_id_is_12_char_string(self, test_ticker: PolyMarketTicker):
+        event = OrderBookEvent(
+            ticker=test_ticker,
+            price=Decimal('0.50'),
+            size=Decimal('1000'),
+            size_delta=Decimal('500'),
+        )
+        assert isinstance(event.dedup_id, str)
+        assert len(event.dedup_id) == 12
+
+    def test_dedup_ids_are_unique(self, test_ticker: PolyMarketTicker):
+        events = [
+            OrderBookEvent(
+                ticker=test_ticker,
+                price=Decimal('0.50'),
+                size=Decimal('1000'),
+                size_delta=Decimal('500'),
+            )
+            for _ in range(10)
+        ]
+        ids = {e.dedup_id for e in events}
+        assert len(ids) == 10
+
+    def test_news_event_id_not_overwritten(self, test_ticker: PolyMarketTicker):
+        """NewsEvent.event_id (Polymarket concept) must not be clobbered."""
+        event = NewsEvent(
+            news='test',
+            event_id='polymarket-event-123',
+            ticker=test_ticker,
+        )
+        assert event.event_id == 'polymarket-event-123'
+        # dedup_id is the new observability field
+        assert isinstance(event.dedup_id, str)
+        assert len(event.dedup_id) == 12
 
 
 class TestOrderBookEvent:
