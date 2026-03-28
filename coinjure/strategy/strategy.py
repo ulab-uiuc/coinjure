@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, ClassVar
 
 from coinjure.data.manager import DataPoint
 from coinjure.events import Event
 from coinjure.ticker import CashTicker, Ticker
 from coinjure.trading.trader import Trader
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -190,6 +194,9 @@ class Strategy(ABC):
     author: ClassVar[str] = ''
     strategy_type: ClassVar[str] = 'generic'
 
+    # Per-strategy position limit (0 = unlimited)
+    max_position_value: ClassVar[Decimal] = Decimal('0')
+
     @classmethod
     def supports_auto_tune(cls) -> bool:
         """Return True if this strategy can participate in parameter grid search.
@@ -290,6 +297,40 @@ class Strategy(ABC):
             )
         return context
 
+    # -- Position limit guard ------------------------------------------------
+
+    def _check_position_limit(self) -> bool:
+        """Return True if position limit is not exceeded.
+
+        If ``max_position_value`` is set (> 0), sums the absolute exposure
+        across all non-cash positions and rejects when the total reaches
+        the limit.  Returns False (and logs a warning) when the limit is
+        breached.
+        """
+        limit = self.max_position_value
+        if limit <= 0:
+            return True  # unlimited
+
+        context = self.get_context()
+        if context is None:
+            return True  # no context bound yet; allow
+
+        exposure = Decimal('0')
+        for pos in context.positions():
+            if pos.is_cash:
+                continue
+            exposure += abs(Decimal(str(pos.quantity)) * Decimal(str(pos.average_cost)))
+
+        if exposure >= limit:
+            logger.warning(
+                'Strategy %s position limit reached: exposure=%s limit=%s',
+                self.name or self.__class__.__name__,
+                exposure,
+                limit,
+            )
+            return False
+        return True
+
     # -- Decision recording --------------------------------------------------
 
     def record_decision(
@@ -308,9 +349,19 @@ class Strategy(ABC):
         Updates both the decision deque and the running counters.
         All built-in strategies should call this instead of maintaining
         their own deque + counters.
+
+        If the strategy has a ``max_position_value`` set and the limit is
+        exceeded, decisions with executing actions are recorded as not
+        executed with a position-limit note appended.
         """
         signal_payload = signal_values or {}
         self._ensure_init()
+
+        # Guard: reject executing trades that would exceed the position limit
+        if executed and action.upper() not in {'HOLD', 'CLOSE', 'SELL'}:
+            if not self._check_position_limit():
+                executed = False
+                reasoning = f'[POSITION_LIMIT_EXCEEDED] {reasoning}'
         self._decisions.append(
             StrategyDecision(
                 timestamp=timestamp or datetime.now().strftime('%H:%M:%S'),
@@ -399,6 +450,11 @@ class Strategy(ABC):
             if param.default is not inspect.Parameter.empty:
                 info['default'] = param.default
             schema[name] = info
+        # Include the class-level position limit
+        schema['max_position_value'] = {
+            'type': 'Decimal',
+            'default': cls.max_position_value,
+        }
         return schema
 
 

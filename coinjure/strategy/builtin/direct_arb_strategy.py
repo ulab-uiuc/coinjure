@@ -126,6 +126,31 @@ class DirectArbStrategy(Strategy):
             tokens.append(self.poly_token_id)
         return tokens
 
+    async def on_stop(self) -> None:
+        """Cancel the background price poll task on shutdown."""
+        self._cancel_poll_task()
+        await super().on_stop()
+
+    def reset_live_state(self) -> None:
+        """Cancel poll task and reset ephemeral state between walk-forward phases."""
+        self._cancel_poll_task()
+        self._poly_yes_price = None
+        self._kalshi_yes_price = None
+        self._poly_ask_price = None
+        self._poly_bid_price = None
+        self._kalshi_ask_price = None
+        self._kalshi_bid_price = None
+        self._held_direction = None
+        self._initialized = False
+        super().reset_live_state()
+
+    def _cancel_poll_task(self) -> None:
+        """Cancel the ``_poll_task`` if it is running."""
+        if self._poll_task is not None and not self._poll_task.done():
+            self._poll_task.cancel()
+            logger.debug('DirectArb: cancelled _poll_task')
+        self._poll_task = None
+
     async def _ensure_initialized(self, trader: Trader) -> None:
         """On first event, seed prices from REST and start background poll loop."""
         if self._initialized:
