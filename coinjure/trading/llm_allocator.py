@@ -5,6 +5,7 @@ import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Protocol, cast
 
@@ -126,6 +127,15 @@ def _render_allocation_input(
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
+def _append_audit_log(audit_file: str, record: dict[str, object]) -> None:
+    """Append a single JSON record to a JSONL audit file."""
+    try:
+        with open(audit_file, 'a') as fh:
+            fh.write(json.dumps(record, default=str, sort_keys=True) + '\n')
+    except OSError:
+        logger.warning('Failed to write audit log to %s', audit_file, exc_info=True)
+
+
 def _extract_response_content(response: _ChatCompletionResponse) -> str:
     if not response.choices:
         raise ValueError('LLM response contained no choices.')
@@ -215,6 +225,7 @@ async def allocate_capital_llm(
     min_budget: Decimal = DEFAULT_MIN_BUDGET,
     max_budget_pct: Decimal = DEFAULT_MAX_BUDGET_PCT,
     reserve_pct: Decimal = DEFAULT_RESERVE_PCT,
+    audit_file: str = 'llm_allocation_audit.jsonl',
 ) -> dict[str, Decimal]:
     """Allocate strategy budgets with LLM review and strict fallback.
 
@@ -230,6 +241,7 @@ async def allocate_capital_llm(
         min_budget: Minimum capital per strategy used by the baseline allocator.
         max_budget_pct: Maximum share of total capital any strategy can receive.
         reserve_pct: Fraction of total capital held in reserve (not allocated).
+        audit_file: Path to a JSONL file for logging LLM request/response pairs.
 
     Returns:
         Dict mapping strategy_id -> allocated capital (Decimal).
@@ -255,6 +267,15 @@ async def allocate_capital_llm(
         strategy_id: str(amount) for strategy_id, amount in sorted(baseline.items())
     }
 
+    request_summary = _render_allocation_input(
+        total_capital,
+        candidates,
+        baseline,
+        min_budget,
+        max_budget_pct,
+        reserve_pct,
+    )
+
     try:
         client = _get_openai_client()
         response = await asyncio.wait_for(
@@ -264,14 +285,7 @@ async def allocate_capital_llm(
                     {'role': 'system', 'content': DEFAULT_ALLOCATION_PROMPT},
                     {
                         'role': 'user',
-                        'content': _render_allocation_input(
-                            total_capital,
-                            candidates,
-                            baseline,
-                            min_budget,
-                            max_budget_pct,
-                            reserve_pct,
-                        ),
+                        'content': request_summary,
                     },
                 ],
                 response_format={"type": "json_object"},
@@ -303,6 +317,15 @@ async def allocate_capital_llm(
         adjusted_for_log,
         reasoning or 'n/a',
     )
+
+    # Audit trail
+    _append_audit_log(audit_file, {
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'request_summary': request_summary,
+        'llm_response': content,
+        'final_budgets': {sid: str(amt) for sid, amt in adjusted_budgets.items()},
+    })
+
     return adjusted_budgets
 
 
@@ -414,6 +437,7 @@ async def review_portfolio_llm(
     trade_count: int = 0,
     model: str = 'gpt-4.1-mini',
     timeout: float = 15.0,
+    audit_file: str = 'llm_allocation_audit.jsonl',
 ) -> PortfolioAdjustment | None:
     try:
         client = _get_openai_client()
@@ -440,7 +464,23 @@ async def review_portfolio_llm(
             timeout=timeout,
         )
         content = _extract_response_content(response)
-        return _parse_portfolio_adjustment(content)
+        adjustment = _parse_portfolio_adjustment(content)
+
+        # Audit trail for portfolio review
+        _append_audit_log(audit_file, {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'type': 'portfolio_review',
+            'strategy_id': strategy_id,
+            'request_summary': snapshot,
+            'llm_response': content,
+            'adjustments': {
+                'kelly_fraction': str(adjustment.kelly_fraction) if adjustment.kelly_fraction is not None else None,
+                'max_trade_size': str(adjustment.max_trade_size) if adjustment.max_trade_size is not None else None,
+                'reasoning': adjustment.reasoning,
+            },
+        })
+
+        return adjustment
     except Exception:
         logger.warning(
             'LLM portfolio review failed for %s; no adjustments applied.',
