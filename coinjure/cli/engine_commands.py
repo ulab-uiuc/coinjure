@@ -81,6 +81,24 @@ def _load_strategy(strategy_ref: str, strategy_kwargs: dict[str, Any] | None = N
         raise click.ClickException(str(exc)) from exc
 
 
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+_AUDIT_DIR = Path.home() / '.coinjure'
+_AUDIT_FILE = _AUDIT_DIR / 'audit.jsonl'
+
+
+def _audit_log(command: str, args: dict[str, Any] | None = None) -> None:
+    """Append a JSON-lines entry to ``~/.coinjure/audit.jsonl``."""
+    _AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    entry = {
+        'timestamp': time.time(),
+        'command': command,
+        'args': args or {},
+    }
+    with open(_AUDIT_FILE, 'a') as fh:
+        fh.write(json.dumps(entry, default=str) + '\n')
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -459,6 +477,12 @@ def engine_paper_run(
     llm_model: str | None,
 ) -> None:
     """Run a paper trading engine instance."""
+    _audit_log('paper-run', {
+        'exchange': exchange,
+        'duration': duration,
+        'initial_capital': initial_capital,
+        'strategy_ref': strategy_ref,
+    })
     if all_relations and strategy_ref:
         raise click.ClickException(
             '--all-relations and --strategy-ref are mutually exclusive.'
@@ -692,6 +716,12 @@ def engine_live_run(
     llm_model: str | None,
 ) -> None:
     """Run a live trading engine instance (real orders, real funds)."""
+    _audit_log('live-run', {
+        'exchange': exchange,
+        'duration': duration,
+        'initial_capital': initial_capital,
+        'strategy_ref': strategy_ref,
+    })
     if all_relations and strategy_ref:
         raise click.ClickException(
             '--all-relations and --strategy-ref are mutually exclusive.'
@@ -1360,6 +1390,11 @@ def engine_backtest(
     Each relation's spread_type determines the strategy. Results update the
     relation lifecycle (backtest_passed / backtest_failed) in the store.
     """
+    _audit_log('backtest', {
+        'relation_ids': list(relation_ids),
+        'all_relations': all_relations,
+        'initial_capital': initial_capital,
+    })
     from coinjure.engine.backtester import run_backtest_relation
     from coinjure.market.relations import RelationStore
 

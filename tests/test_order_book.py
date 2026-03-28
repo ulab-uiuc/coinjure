@@ -147,111 +147,108 @@ class TestOrderBook:
         asks = [Level(price=Decimal('0.55'), size=Decimal('500'))]
         bids = [Level(price=Decimal('0.50'), size=Decimal('1000'))]
         ob.update(asks=asks, bids=bids)
-
         assert ob.spread == Decimal('0.05')
 
     def test_spread_empty(self):
         """Test spread returns None when a side is empty."""
         ob = OrderBook()
         assert ob.spread is None
-
         ob.update(asks=[Level(price=Decimal('0.55'), size=Decimal('500'))], bids=[])
         assert ob.spread is None
-
         ob.update(asks=[], bids=[Level(price=Decimal('0.50'), size=Decimal('1000'))])
         assert ob.spread is None
 
     def test_validate_valid_book(self):
-        """Test validate on a properly sorted order book."""
         ob = OrderBook()
-        asks = [
-            Level(price=Decimal('0.55'), size=Decimal('500')),
-            Level(price=Decimal('0.56'), size=Decimal('300')),
-        ]
-        bids = [
-            Level(price=Decimal('0.50'), size=Decimal('1000')),
-            Level(price=Decimal('0.49'), size=Decimal('800')),
-        ]
+        asks = [Level(price=Decimal('0.55'), size=Decimal('500')), Level(price=Decimal('0.56'), size=Decimal('300'))]
+        bids = [Level(price=Decimal('0.50'), size=Decimal('1000')), Level(price=Decimal('0.49'), size=Decimal('800'))]
         ob.update(asks=asks, bids=bids)
         assert ob.validate() is True
 
     def test_validate_empty_book(self):
-        """Test validate on an empty order book."""
         ob = OrderBook()
         assert ob.validate() is True
 
     def test_validate_unsorted_bids(self):
-        """Test validate fails when bids are not sorted descending."""
         ob = OrderBook()
-        bids = [
-            Level(price=Decimal('0.49'), size=Decimal('800')),
-            Level(price=Decimal('0.50'), size=Decimal('1000')),
-        ]
+        bids = [Level(price=Decimal('0.49'), size=Decimal('800')), Level(price=Decimal('0.50'), size=Decimal('1000'))]
         ob.update(asks=[], bids=bids)
         assert ob.validate() is False
 
     def test_validate_unsorted_asks(self):
-        """Test validate fails when asks are not sorted ascending."""
         ob = OrderBook()
-        asks = [
-            Level(price=Decimal('0.56'), size=Decimal('300')),
-            Level(price=Decimal('0.55'), size=Decimal('500')),
-        ]
+        asks = [Level(price=Decimal('0.56'), size=Decimal('300')), Level(price=Decimal('0.55'), size=Decimal('500'))]
         ob.update(asks=asks, bids=[])
         assert ob.validate() is False
 
     def test_validate_negative_price(self):
-        """Test validate fails on negative price."""
         ob = OrderBook()
         bids = [Level(price=Decimal('-0.01'), size=Decimal('100'))]
         ob.update(asks=[], bids=bids)
         assert ob.validate() is False
 
     def test_validate_negative_size(self):
-        """Test validate fails on negative size."""
         ob = OrderBook()
         asks = [Level(price=Decimal('0.55'), size=Decimal('-10'))]
         ob.update(asks=asks, bids=[])
         assert ob.validate() is False
 
     def test_cumulative_size(self):
-        """Test cumulative_size returns total for top N levels."""
         ob = OrderBook()
-        asks = [
-            Level(price=Decimal('0.55'), size=Decimal('500')),
-            Level(price=Decimal('0.56'), size=Decimal('300')),
-            Level(price=Decimal('0.57'), size=Decimal('200')),
-        ]
-        bids = [
-            Level(price=Decimal('0.50'), size=Decimal('1000')),
-            Level(price=Decimal('0.49'), size=Decimal('800')),
-            Level(price=Decimal('0.48'), size=Decimal('600')),
-        ]
+        asks = [Level(price=Decimal('0.55'), size=Decimal('500')), Level(price=Decimal('0.56'), size=Decimal('300')), Level(price=Decimal('0.57'), size=Decimal('200'))]
+        bids = [Level(price=Decimal('0.50'), size=Decimal('1000')), Level(price=Decimal('0.49'), size=Decimal('800')), Level(price=Decimal('0.48'), size=Decimal('600'))]
         ob.update(asks=asks, bids=bids)
-
         bid_size, ask_size = ob.cumulative_size(depth_levels=2)
         assert bid_size == Decimal('1800')
         assert ask_size == Decimal('800')
 
-    def test_cumulative_size_default_depth(self):
-        """Test cumulative_size with default depth of 5."""
-        ob = OrderBook()
-        asks = [
-            Level(price=Decimal('0.55'), size=Decimal('100')),
-            Level(price=Decimal('0.56'), size=Decimal('200')),
-        ]
-        bids = [
-            Level(price=Decimal('0.50'), size=Decimal('300')),
-        ]
-        ob.update(asks=asks, bids=bids)
-
-        bid_size, ask_size = ob.cumulative_size()
-        assert bid_size == Decimal('300')
-        assert ask_size == Decimal('300')
-
     def test_cumulative_size_empty_book(self):
-        """Test cumulative_size on empty order book."""
         ob = OrderBook()
         bid_size, ask_size = ob.cumulative_size()
         assert bid_size == Decimal('0')
         assert ask_size == Decimal('0')
+
+
+class TestOrderBookHelpers:
+    """Tests for best_bid_price, best_ask_price, mid_price, depth."""
+
+    def _make_book(self) -> OrderBook:
+        ob = OrderBook()
+        asks = [Level(price=Decimal('0.55'), size=Decimal('500')), Level(price=Decimal('0.56'), size=Decimal('300')), Level(price=Decimal('0.57'), size=Decimal('200'))]
+        bids = [Level(price=Decimal('0.50'), size=Decimal('1000')), Level(price=Decimal('0.49'), size=Decimal('800')), Level(price=Decimal('0.48'), size=Decimal('600'))]
+        ob.update(asks=asks, bids=bids)
+        return ob
+
+    def test_best_bid_price(self):
+        assert self._make_book().best_bid_price == Decimal('0.50')
+
+    def test_best_ask_price(self):
+        assert self._make_book().best_ask_price == Decimal('0.55')
+
+    def test_best_bid_price_empty(self):
+        assert OrderBook().best_bid_price is None
+
+    def test_best_ask_price_empty(self):
+        assert OrderBook().best_ask_price is None
+
+    def test_mid_price(self):
+        expected = (Decimal('0.50') + Decimal('0.55')) / 2
+        assert self._make_book().mid_price == expected
+
+    def test_mid_price_empty(self):
+        assert OrderBook().mid_price is None
+
+    def test_depth_bid(self):
+        assert self._make_book().depth('bid', levels=2) == Decimal('1800')
+
+    def test_depth_ask(self):
+        assert self._make_book().depth('ask', levels=2) == Decimal('800')
+
+    def test_depth_default_levels(self):
+        ob = self._make_book()
+        assert ob.depth('bid') == Decimal('2400')
+        assert ob.depth('ask') == Decimal('1000')
+
+    def test_depth_empty(self):
+        assert OrderBook().depth('bid') == Decimal('0')
+        assert OrderBook().depth('ask') == Decimal('0')

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from coinjure.ticker import Ticker
 
@@ -12,6 +14,26 @@ if TYPE_CHECKING:
 
 
 class Event(ABC):
+    """Base class for all market events.
+
+    Attributes:
+        timestamp_epoch: Unix timestamp (seconds since epoch) for when the event
+            was created.  Defaults to ``time.time()`` at construction.
+        dedup_id: Short unique identifier (12-char UUID prefix) useful for
+            deduplicating events across restarts.  Named ``dedup_id`` rather
+            than ``event_id`` to avoid colliding with the Polymarket-specific
+            ``event_id`` that already exists on several concrete event classes.
+    """
+
+    timestamp_epoch: float
+    dedup_id: str
+
+    def __init__(self) -> None:
+        if not hasattr(self, 'timestamp_epoch'):
+            self.timestamp_epoch = time.time()
+        if not hasattr(self, 'dedup_id'):
+            self.dedup_id = str(uuid4())[:12]
+
     @abstractmethod
     def trigger(self) -> None:
         pass
@@ -45,6 +67,7 @@ class OrderBookEvent(Event):
         self.size = size
         self.size_delta = size_delta
         self.side = side
+        super().__init__()
 
     def trigger(self) -> None:
         pass
@@ -94,6 +117,7 @@ class NewsEvent(Event):
         self.uuid = uuid
         self.event_id = event_id
         self.ticker = ticker
+        super().__init__()
 
     def trigger(self) -> None:
         pass
@@ -117,6 +141,7 @@ class PriceChangeEvent(Event):
         self.ticker = ticker
         self.price = price
         self.timestamp = timestamp or datetime.now()
+        super().__init__()
 
     def trigger(self) -> None:
         pass
