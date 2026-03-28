@@ -332,6 +332,13 @@ class TradingEngine:
         # silence instead of silently spinning.
         consecutive_none = 0
 
+        # [C1] Exponential backoff state for data-fetch errors.
+        _fetch_backoff: float = 1.0
+        _FETCH_BACKOFF_BASE: float = 1.0
+        _FETCH_BACKOFF_CAP: float = 30.0
+        _consecutive_fetch_failures: int = 0
+        _MAX_FETCH_FAILURES: int = 10
+
         while self.running:
             # [D1] When data flow is paused, sleep instead of polling the source.
             if self._data_paused:
@@ -341,10 +348,42 @@ class TradingEngine:
             try:
                 event = await self.data_source.get_next_event()
             except Exception:
-                logger.exception('Error fetching next event')
-                # [C1] Back off on repeated fetch errors to avoid CPU spin.
-                await asyncio.sleep(1.0)
+                _consecutive_fetch_failures += 1
+                logger.exception(
+                    'Error fetching next event (attempt %d, backoff %.1fs)',
+                    _consecutive_fetch_failures,
+                    _fetch_backoff,
+                )
+                # [C1] Exponential back off on repeated fetch errors.
+                await asyncio.sleep(_fetch_backoff)
+                _fetch_backoff = min(_fetch_backoff * 2, _FETCH_BACKOFF_CAP)
+
+                if _consecutive_fetch_failures >= _MAX_FETCH_FAILURES:
+                    msg = (
+                        f'{_consecutive_fetch_failures} consecutive data-fetch '
+                        'failures — freezing positions'
+                    )
+                    logger.error(msg)
+                    self.trader.set_read_only(True)
+                    self.strategy.set_paused(True)
+                    self._degraded_read_only = True
+                    if self._alerter:
+                        try:
+                            await self._alerter.on_risk_limit_hit(
+                                'data_fetch_failure_storm'
+                            )
+                        except Exception:
+                            pass
                 continue
+
+            # Reset backoff on successful fetch.
+            if _consecutive_fetch_failures > 0:
+                logger.info(
+                    'Data fetch recovered after %d failures',
+                    _consecutive_fetch_failures,
+                )
+            _fetch_backoff = _FETCH_BACKOFF_BASE
+            _consecutive_fetch_failures = 0
 
             if event is None:
                 # [P1] Process deferred news when the queue is idle.
