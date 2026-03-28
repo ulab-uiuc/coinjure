@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -276,45 +277,106 @@ class PolymarketTrader(Trader):
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,
             )
 
-        try:
-            # Submit the FOK order
-            response = await self._submit_fok_order(side, ticker, limit_price, quantity)
+        # Retry with jitter for transient errors.
+        _MAX_RETRIES = 3
+        _BASE_DELAY = 0.2
 
-            # Process the response
-            order = await self._process_order_response(
-                response, side, ticker, limit_price, quantity
-            )
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                # Submit the FOK order
+                response = await self._submit_fok_order(
+                    side, ticker, limit_price, quantity
+                )
 
-            # update positions
-            for trade in order.trades:
-                self.position_manager.apply_trade(trade)
-            self._sync_usdc_balance()
+                # Process the response
+                order = await self._process_order_response(
+                    response, side, ticker, limit_price, quantity
+                )
 
-            # Store order
-            self.orders.append(order)
-            if order.status == OrderStatus.REJECTED:
-                failure_reason = OrderFailureReason.UNKNOWN
-                await self._alert_rejected(failure_reason, ticker)
-                return PlaceOrderResult(order=order, failure_reason=failure_reason)
+                # update positions
+                for trade in order.trades:
+                    self.position_manager.apply_trade(trade)
+                self._sync_usdc_balance()
 
-            return PlaceOrderResult(order=order)
+                # Store order
+                self.orders.append(order)
+                if order.status == OrderStatus.REJECTED:
+                    failure_reason = OrderFailureReason.UNKNOWN
+                    await self._alert_rejected(failure_reason, ticker)
+                    return PlaceOrderResult(order=order, failure_reason=failure_reason)
 
-        except PolyApiException as e:
-            logger.error('Polymarket API error: %s', e)
-            failure_reason = OrderFailureReason.UNKNOWN
-            if e.status_code == 400:
-                error_msg = str(e.error_msg).lower()
-                if 'insufficient' in error_msg or 'balance' in error_msg:
-                    failure_reason = OrderFailureReason.INSUFFICIENT_CASH
-                else:
-                    failure_reason = OrderFailureReason.INVALID_ORDER
-            return PlaceOrderResult(order=None, failure_reason=failure_reason)
-        except Exception as e:
-            logger.error('Error placing order: %s', e, exc_info=True)
-            return PlaceOrderResult(
-                order=None,
-                failure_reason=OrderFailureReason.UNKNOWN,
-            )
+                return PlaceOrderResult(order=order)
+
+            except PolyApiException as e:
+                # Non-retryable: 400 bad input
+                if e.status_code == 400:
+                    logger.error('Polymarket API error (400): %s', e)
+                    failure_reason = OrderFailureReason.UNKNOWN
+                    error_msg = str(e.error_msg).lower()
+                    if 'insufficient' in error_msg or 'balance' in error_msg:
+                        failure_reason = OrderFailureReason.INSUFFICIENT_CASH
+                    else:
+                        failure_reason = OrderFailureReason.INVALID_ORDER
+                    return PlaceOrderResult(order=None, failure_reason=failure_reason)
+
+                if attempt == _MAX_RETRIES:
+                    logger.error(
+                        'Polymarket order failed after %d attempts: %s',
+                        _MAX_RETRIES,
+                        e,
+                    )
+                    return PlaceOrderResult(
+                        order=None,
+                        failure_reason=OrderFailureReason.UNKNOWN,
+                    )
+
+                status_code = getattr(e, 'status_code', None)
+                base = 2.0 if status_code == 429 else _BASE_DELAY
+                delay = base * (2 ** (attempt - 1))
+                jitter = delay * random.uniform(-0.25, 0.25)
+                sleep_time = max(0, delay + jitter)
+                logger.warning(
+                    'Polymarket order attempt %d/%d failed (status=%s), '
+                    'retrying in %.2fs: %s',
+                    attempt,
+                    _MAX_RETRIES,
+                    status_code,
+                    sleep_time,
+                    e,
+                )
+                await asyncio.sleep(sleep_time)
+
+            except Exception as e:
+                if attempt == _MAX_RETRIES:
+                    logger.error(
+                        'Polymarket order failed after %d attempts: %s',
+                        _MAX_RETRIES,
+                        e,
+                        exc_info=True,
+                    )
+                    return PlaceOrderResult(
+                        order=None,
+                        failure_reason=OrderFailureReason.UNKNOWN,
+                    )
+
+                delay = _BASE_DELAY * (2 ** (attempt - 1))
+                jitter = delay * random.uniform(-0.25, 0.25)
+                sleep_time = max(0, delay + jitter)
+                logger.warning(
+                    'Polymarket order attempt %d/%d failed, '
+                    'retrying in %.2fs: %s',
+                    attempt,
+                    _MAX_RETRIES,
+                    sleep_time,
+                    e,
+                )
+                await asyncio.sleep(sleep_time)
+
+        # Should not reach here, but satisfy the type checker.
+        return PlaceOrderResult(
+            order=None,
+            failure_reason=OrderFailureReason.UNKNOWN,
+        )
 
 
 if __name__ == '__main__':

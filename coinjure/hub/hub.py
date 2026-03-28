@@ -39,6 +39,9 @@ class MarketDataHub:
         # Per-subscriber queues: id → queue of encoded bytes
         self._subscribers: dict[int, asyncio.Queue[bytes]] = {}
         self._sub_filters: dict[int, set[str]] = {}
+        self._sub_writers: dict[int, asyncio.StreamWriter] = {}
+        self._drop_count: dict[int, int] = {}
+        self._MAX_CONSECUTIVE_DROPS: int = 3
         self._sub_tasks: set[asyncio.Task] = set()
         self._next_id = 0
         self._server: asyncio.AbstractServer | None = None
@@ -133,10 +136,38 @@ class MarketDataHub:
             if sub_filter is not None and ticker_key not in sub_filter:
                 continue
             if q.full():
+                # Track consecutive drops per subscriber.
+                self._drop_count[sub_id] = self._drop_count.get(sub_id, 0) + 1
+                drop_n = self._drop_count[sub_id]
+                logger.warning(
+                    'Hub: subscriber %d queue full (depth=%d), '
+                    'dropping oldest event (consecutive drops: %d)',
+                    sub_id,
+                    q.qsize(),
+                    drop_n,
+                )
+                if drop_n >= self._MAX_CONSECUTIVE_DROPS:
+                    logger.warning(
+                        'Hub: subscriber %d exceeded %d consecutive drops — '
+                        'disconnecting slow consumer',
+                        sub_id,
+                        self._MAX_CONSECUTIVE_DROPS,
+                    )
+                    writer = self._sub_writers.get(sub_id)
+                    if writer is not None:
+                        try:
+                            writer.close()
+                        except Exception:
+                            pass
+                    dead.append(sub_id)
+                    continue
                 try:
                     q.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
+            else:
+                # Queue is not full — reset drop counter for this subscriber.
+                self._drop_count.pop(sub_id, None)
             try:
                 q.put_nowait(encoded)
             except Exception:
@@ -144,6 +175,8 @@ class MarketDataHub:
         for sub_id in dead:
             self._subscribers.pop(sub_id, None)
             self._sub_filters.pop(sub_id, None)
+            self._sub_writers.pop(sub_id, None)
+            self._drop_count.pop(sub_id, None)
 
     async def _fan_loop(self) -> None:
         """Pull events from source and broadcast to filtered subscriber queues."""
@@ -256,6 +289,7 @@ class MarketDataHub:
         self._next_id += 1
         q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=500)
         self._subscribers[sub_id] = q
+        self._sub_writers[sub_id] = writer
         logger.debug(
             'Hub: subscriber %d connected (total=%d)', sub_id, len(self._subscribers)
         )
@@ -269,6 +303,8 @@ class MarketDataHub:
         finally:
             self._subscribers.pop(sub_id, None)
             self._sub_filters.pop(sub_id, None)
+            self._sub_writers.pop(sub_id, None)
+            self._drop_count.pop(sub_id, None)
             logger.debug(
                 'Hub: subscriber %d disconnected (total=%d)',
                 sub_id,
@@ -303,6 +339,7 @@ class MarketDataHub:
         q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=500)
         self._subscribers[sub_id] = q
         self._sub_filters[sub_id] = ticker_filter
+        self._sub_writers[sub_id] = writer
         logger.debug(
             'Hub: subscriber %d connected with %d ticker filter(s) (total=%d)',
             sub_id,
@@ -319,6 +356,8 @@ class MarketDataHub:
         finally:
             self._subscribers.pop(sub_id, None)
             self._sub_filters.pop(sub_id, None)
+            self._sub_writers.pop(sub_id, None)
+            self._drop_count.pop(sub_id, None)
             logger.debug(
                 'Hub: subscriber %d disconnected (total=%d)',
                 sub_id,
