@@ -73,9 +73,10 @@ class PriceHistoryDataSource(DataSource):
     events for each YES price point, enabling strategies that trade NO sides.
     """
 
-    def __init__(self, legs: list[Leg]) -> None:
+    def __init__(self, legs: list[Leg], half_spread: Decimal | None = None) -> None:
         self._events: list[Event] = []
         self._idx = 0
+        self._half_spread = half_spread if half_spread is not None else _HALF_SPREAD
         self._build_events(legs)
 
     def _build_events(self, legs: list[Leg]) -> None:
@@ -100,7 +101,7 @@ class PriceHistoryDataSource(DataSource):
                 PriceChangeEvent(ticker=ticker, price=price, timestamp=dt)
             )
             # Synthetic bid
-            bid_price = max(price - _HALF_SPREAD, Decimal('0.001'))
+            bid_price = max(price - self._half_spread, Decimal('0.001'))
             self._events.append(
                 OrderBookEvent(
                     ticker=ticker,
@@ -111,7 +112,7 @@ class PriceHistoryDataSource(DataSource):
                 )
             )
             # Synthetic ask
-            ask_price = min(price + _HALF_SPREAD, Decimal('0.999'))
+            ask_price = min(price + self._half_spread, Decimal('0.999'))
             self._events.append(
                 OrderBookEvent(
                     ticker=ticker,
@@ -197,6 +198,8 @@ def _build_engine(
     data_source: DataSource,
     strategy: Strategy,
     initial_capital: Decimal,
+    slippage_bps: int = 0,
+    commission_rate: Decimal = Decimal('0.0'),
 ) -> TradingEngine:
     """Assemble a TradingEngine with PaperTrader for backtesting."""
     market_data = DataManager(
@@ -229,7 +232,8 @@ def _build_engine(
         position_manager=position_manager,
         min_fill_rate=Decimal('1.0'),
         max_fill_rate=Decimal('1.0'),
-        commission_rate=Decimal('0.0'),
+        commission_rate=commission_rate,
+        slippage_bps=slippage_bps,
     )
     return TradingEngine(data_source=data_source, strategy=strategy, trader=trader)
 
@@ -336,6 +340,8 @@ async def run_backtest_relation(
     initial_capital: Decimal = Decimal('10000'),
     parquet_path: str | list[str] | None = None,
     strategy_kwargs: dict[str, Any] | None = None,
+    slippage_bps: int = 0,
+    commission_rate: Decimal = Decimal('0.0'),
 ) -> BacktestResult:
     """Backtest a relation using its auto-selected strategy.
 
@@ -385,6 +391,9 @@ async def run_backtest_relation(
         'strategy_name': strategy_cls.name or strategy_cls.__name__,
     }
 
+    # Derive half-spread from slippage_bps for synthetic orderbook generation
+    half_spread = Decimal(str(slippage_bps)) / Decimal('10000') if slippage_bps else _HALF_SPREAD
+
     # --- Resolve data source ---
     if parquet_path is not None:
         from coinjure.data.backtest.parquet import ParquetDataSource
@@ -395,7 +404,7 @@ async def run_backtest_relation(
             market_ids=[m for m in market_ids if m],
         )
         strategy = strategy_cls(**kwargs)
-        engine = _build_engine(data_source, strategy, initial_capital)
+        engine = _build_engine(data_source, strategy, initial_capital, slippage_bps, commission_rate)
         await engine.start()
         return _run_and_score(engine, result_base, initial_capital)
 
@@ -440,9 +449,9 @@ async def run_backtest_relation(
 
     if spread_type in STRUCTURAL_TYPES:
         # Structural: run on full data
-        ds = PriceHistoryDataSource(legs)
+        ds = PriceHistoryDataSource(legs, half_spread=half_spread)
         strategy = strategy_cls(**kwargs)
-        engine = _build_engine(ds, strategy, initial_capital)
+        engine = _build_engine(ds, strategy, initial_capital, slippage_bps, commission_rate)
         await engine.start()
         return _run_and_score(engine, result_base, initial_capital)
 
@@ -462,14 +471,14 @@ async def run_backtest_relation(
 
     # Train phase: warm up strategy
     strategy = strategy_cls(**kwargs)
-    train_ds = PriceHistoryDataSource(train_legs)
-    train_engine = _build_engine(train_ds, strategy, initial_capital)
+    train_ds = PriceHistoryDataSource(train_legs, half_spread=half_spread)
+    train_engine = _build_engine(train_ds, strategy, initial_capital, slippage_bps, commission_rate)
     await train_engine.start()
 
     # Test phase: reuse calibrated strategy, fresh engine
     strategy.reset_live_state()
-    test_ds = PriceHistoryDataSource(test_legs)
-    test_engine = _build_engine(test_ds, strategy, initial_capital)
+    test_ds = PriceHistoryDataSource(test_legs, half_spread=half_spread)
+    test_engine = _build_engine(test_ds, strategy, initial_capital, slippage_bps, commission_rate)
     await test_engine.start()
 
     return _run_and_score(test_engine, result_base, initial_capital)
