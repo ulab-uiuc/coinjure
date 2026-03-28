@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -22,13 +24,17 @@ from coinjure.storage.serializers import (
 
 logger = logging.getLogger(__name__)
 
+# Schema version embedded in every saved JSON file.
+_SCHEMA_VERSION = 1
+
 
 class StateStore:
     """JSON-file-based persistence layer for trading state."""
 
     def __init__(self, data_dir: str | Path) -> None:
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        os.makedirs(self.data_dir, mode=0o700, exist_ok=True)
+        self._write_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -42,15 +48,33 @@ class StateStore:
         if not path.exists():
             return {}
         try:
-            return json.loads(path.read_text())
+            data = json.loads(path.read_text())
         except Exception:
             logger.warning(
                 'Failed to read %s — starting fresh', filename, exc_info=True
             )
             return {}
 
+        # Schema version check
+        version = data.get('_schema_version')
+        if version is None:
+            logger.warning(
+                '%s is missing _schema_version — assuming v%d',
+                filename,
+                _SCHEMA_VERSION,
+            )
+        elif version != _SCHEMA_VERSION:
+            logger.warning(
+                '%s has _schema_version=%s, expected %d',
+                filename,
+                version,
+                _SCHEMA_VERSION,
+            )
+        return data
+
     def _write_json_atomic(self, filename: str, data: dict) -> None:
         """Write *data* to *filename* atomically via a temp-file rename."""
+        data['_schema_version'] = _SCHEMA_VERSION
         path = self._path(filename)
         tmp_path = path.parent / (path.name + '.tmp')
         try:
@@ -69,12 +93,13 @@ class StateStore:
 
     def save_positions(self, position_manager: PositionManager) -> None:
         """Write all positions (including cash) to positions.json."""
-        all_positions = list(position_manager.positions.values())
-        data = {
-            'saved_at': datetime.now().isoformat(),
-            'positions': [serialize_position(p) for p in all_positions],
-        }
-        self._write_json_atomic('positions.json', data)
+        with self._write_lock:
+            all_positions = list(position_manager.positions.values())
+            data = {
+                'saved_at': datetime.now().isoformat(),
+                'positions': [serialize_position(p) for p in all_positions],
+            }
+            self._write_json_atomic('positions.json', data)
 
     def load_positions(self) -> list[Position]:
         """Load positions from positions.json. Returns empty list if file missing."""
@@ -95,11 +120,12 @@ class StateStore:
 
     def append_trade(self, trade: Trade) -> None:
         """Append *trade* (with current timestamp) to trades.json."""
-        data = self._read_json('trades.json')
-        if not data:
-            data = {'trades': []}
-        data['trades'].append(serialize_trade(trade, datetime.now()))
-        self._write_json_atomic('trades.json', data)
+        with self._write_lock:
+            data = self._read_json('trades.json')
+            if not data:
+                data = {'trades': []}
+            data['trades'].append(serialize_trade(trade, datetime.now()))
+            self._write_json_atomic('trades.json', data)
 
     def load_trades(self) -> list[Trade]:
         """Load all trades from trades.json. Returns empty list if file missing."""
@@ -120,11 +146,12 @@ class StateStore:
 
     def append_order(self, order: Order) -> None:
         """Append *order* to orders.json."""
-        data = self._read_json('orders.json')
-        if not data:
-            data = {'orders': []}
-        data['orders'].append(serialize_order(order))
-        self._write_json_atomic('orders.json', data)
+        with self._write_lock:
+            data = self._read_json('orders.json')
+            if not data:
+                data = {'orders': []}
+            data['orders'].append(serialize_order(order))
+            self._write_json_atomic('orders.json', data)
 
     def load_orders(self) -> list[Order]:
         """Load all orders from orders.json. Returns empty list if file missing."""
@@ -145,10 +172,11 @@ class StateStore:
 
     def save_equity_curve(self, equity_curve: list) -> None:
         """Write the equity curve to equity_curve.json."""
-        data = {
-            'equity_curve': [serialize_equity_point(pt) for pt in equity_curve],
-        }
-        self._write_json_atomic('equity_curve.json', data)
+        with self._write_lock:
+            data = {
+                'equity_curve': [serialize_equity_point(pt) for pt in equity_curve],
+            }
+            self._write_json_atomic('equity_curve.json', data)
 
     def load_equity_curve(self) -> list:
         """Load equity curve from equity_curve.json. Returns empty list if missing."""
@@ -175,3 +203,32 @@ class StateStore:
         """
         self.save_positions(position_manager)
         self.save_equity_curve(perf.equity_curve)  # type: ignore[attr-defined]
+
+    # ------------------------------------------------------------------
+    # Consistency check
+    # ------------------------------------------------------------------
+
+    def validate_consistency(self) -> bool:
+        """Check that positions and trades are mutually consistent.
+
+        Logs a warning when trades exist but the positions file is empty,
+        which may indicate data loss.  Returns ``True`` when the state
+        looks consistent, ``False`` otherwise.
+        """
+        positions = self.load_positions()
+        trades = self.load_trades()
+
+        if trades and not positions:
+            logger.warning(
+                'Consistency check FAILED: %d trades recorded but positions '
+                'file is empty — possible data loss',
+                len(trades),
+            )
+            return False
+
+        logger.debug(
+            'Consistency check passed: %d positions, %d trades',
+            len(positions),
+            len(trades),
+        )
+        return True
