@@ -19,8 +19,11 @@ Usage::
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import math
+import time
+from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,37 @@ class AllocationCandidate:
 
     strategy_id: str
     backtest_pnl: float = 0.0  # positive = profitable
+    max_drawdown: Optional[float] = None  # max drawdown (negative or zero typically)
+    timestamp: Optional[float] = None  # epoch seconds when backtest was produced
+
+
+def _compute_score(candidate: AllocationCandidate) -> float:
+    """Compute risk-adjusted score for a candidate.
+
+    If max_drawdown is available, uses pnl / max(abs(max_drawdown), 0.01)
+    to produce a Sharpe-like risk-adjusted score.  Falls back to raw PnL
+    when max_drawdown is not provided.
+    """
+    if candidate.max_drawdown is not None:
+        return candidate.backtest_pnl / max(abs(candidate.max_drawdown), 0.01)
+    return candidate.backtest_pnl
+
+
+def _compute_decay_weight(
+    candidate: AllocationCandidate,
+    now: float,
+    half_life_days: float,
+) -> float:
+    """Exponential decay weight based on backtest age.
+
+    Returns ``exp(-0.693 * age_days / half_life_days)``.
+    If the candidate has no timestamp, returns 1.0 (no decay).
+    """
+    if candidate.timestamp is None:
+        return 1.0
+    age_seconds = max(now - candidate.timestamp, 0.0)
+    age_days = age_seconds / 86400.0
+    return math.exp(-0.693 * age_days / half_life_days)
 
 
 def allocate_capital(
@@ -40,11 +74,14 @@ def allocate_capital(
     min_budget: Decimal = Decimal('10'),
     max_budget_pct: Decimal = Decimal('0.4'),
     reserve_pct: Decimal = Decimal('0.1'),
+    decay_half_life_days: float = 30.0,
 ) -> dict[str, Decimal]:
-    """Allocate capital across strategy candidates weighted by backtest PnL.
+    """Allocate capital across strategy candidates weighted by risk-adjusted score.
 
-    Only candidates with positive backtest_pnl receive an allocation.
-    Candidates with zero/negative PnL get the minimum budget.
+    Profitable candidates are scored using a risk-adjusted metric when
+    ``max_drawdown`` is available (``pnl / max(abs(max_drawdown), 0.01)``),
+    falling back to raw PnL otherwise.  Each score is further weighted by an
+    exponential time-decay factor when a backtest ``timestamp`` is present.
 
     Args:
         total_capital: Total available capital to distribute.
@@ -52,9 +89,12 @@ def allocate_capital(
         min_budget: Minimum capital per strategy (floor).
         max_budget_pct: Maximum share any single strategy can receive.
         reserve_pct: Fraction of capital held in reserve (not allocated).
+        decay_half_life_days: Half-life in days for time-decay weighting of
+            backtest results.  Older backtests receive proportionally less
+            weight.  Ignored when candidates lack a ``timestamp``.
 
     Returns:
-        Dict mapping strategy_id → allocated capital (Decimal, rounded to int).
+        Dict mapping strategy_id -> allocated capital (Decimal, rounded to int).
     """
     if not candidates:
         return {}
@@ -82,10 +122,23 @@ def allocate_capital(
             budgets[c.strategy_id] = min_budget
         return budgets
 
-    # Weight by PnL (linear)
-    total_pnl = sum(c.backtest_pnl for c in profitable)
+    # Compute risk-adjusted, time-decayed scores
+    now = time.time()
+    weighted_scores: list[tuple[AllocationCandidate, float]] = []
     for c in profitable:
-        weight = Decimal(str(c.backtest_pnl)) / Decimal(str(total_pnl))
+        score = _compute_score(c)
+        decay = _compute_decay_weight(c, now, decay_half_life_days)
+        weighted_scores.append((c, score * decay))
+
+    total_score = sum(s for _, s in weighted_scores)
+    if total_score <= 0:
+        # All scores decayed to near-zero; give everyone minimum
+        for c in profitable:
+            budgets[c.strategy_id] = min_budget
+        return budgets
+
+    for c, score in weighted_scores:
+        weight = Decimal(str(score)) / Decimal(str(total_score))
         raw = remaining * weight
         clamped = min(max(raw, min_budget), max_per_strategy)
         budgets[c.strategy_id] = clamped.quantize(Decimal('1'))
