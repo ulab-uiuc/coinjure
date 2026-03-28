@@ -10,6 +10,11 @@ from coinjure.trading.llm_sizing import (
 )
 from coinjure.trading.position import PositionManager
 
+# Non-blocking LLM sizing state: caches last LLM result per strategy,
+# and tracks which strategies have a pending LLM call.
+_llm_size_cache: dict[str, Decimal] = {}
+_llm_pending: set[str] = set()
+
 
 def _dynamic_kelly(
     edge: Decimal,
@@ -115,7 +120,13 @@ async def compute_trade_size_with_llm(
     max_size: Decimal = Decimal('100'),
     leg_count: int = 1,
     leg_prices: list[Decimal] | None = None,
+    **kwargs: object,
 ) -> Decimal:
+    import asyncio
+    import logging
+
+    _logger = logging.getLogger(__name__)
+
     quant_size = compute_trade_size(
         position_manager,
         edge,
@@ -125,6 +136,15 @@ async def compute_trade_size_with_llm(
         max_size=max_size,
     )
     if not llm_trade_sizing:
+        return quant_size
+
+    # Return cached LLM size if available
+    if strategy_id in _llm_size_cache:
+        cached = _llm_size_cache[strategy_id]
+        return max(min_size, min(cached, max_size))
+
+    # If an LLM call is already in flight, return quant size immediately
+    if strategy_id in _llm_pending:
         return quant_size
 
     non_cash = position_manager.get_non_cash_positions()
@@ -150,11 +170,42 @@ async def compute_trade_size_with_llm(
         leg_count=leg_count,
         leg_prices=leg_prices or [],
     )
-    llm_size = await compute_opportunity_sizing_llm(
+
+    _llm_coro = compute_opportunity_sizing_llm(
         request,
         model=llm_model or 'gpt-4.1-mini',
         timeout=60.0,
     )
+
+    # Try to get LLM result within a short window. If the LLM responds
+    # quickly we use it directly; otherwise fire a background task and
+    # return the quant size so we never block the event loop.
+    _NON_BLOCKING_TIMEOUT = 0.3
+    try:
+        llm_size = await asyncio.wait_for(_llm_coro, timeout=_NON_BLOCKING_TIMEOUT)
+    except (asyncio.TimeoutError, Exception) as exc:
+        if isinstance(exc, asyncio.TimeoutError):
+            # LLM too slow — schedule background task for caching
+            async def _background_llm() -> None:
+                try:
+                    result = await compute_opportunity_sizing_llm(
+                        request,
+                        model=llm_model or 'gpt-4.1-mini',
+                        timeout=60.0,
+                    )
+                    if result is not None:
+                        _llm_size_cache[strategy_id] = result
+                except Exception as bg_exc:
+                    _logger.debug('Background LLM sizing failed: %s', bg_exc)
+                finally:
+                    _llm_pending.discard(strategy_id)
+
+            _llm_pending.add(strategy_id)
+            asyncio.create_task(_background_llm())
+        else:
+            _logger.debug('LLM sizing error: %s', exc)
+        return quant_size
+
     if llm_size is None:
         return quant_size
     if llm_size < min_size:

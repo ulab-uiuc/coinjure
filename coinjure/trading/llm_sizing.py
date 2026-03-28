@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """LLM-powered per-opportunity sizing advisor.
 
 Called inside the event loop when a strategy detects an arb opportunity.
@@ -26,6 +24,8 @@ Usage::
         )
     )
 """
+
+from __future__ import annotations
 
 import asyncio
 import importlib
@@ -55,7 +55,7 @@ class _ChatCompletionsLike(Protocol):
         model: str,
         messages: list[dict[str, str]],
         response_format: dict[str, str],
-    ) -> '_ChatResponseLike': ...
+    ) -> _ChatResponseLike: ...
 
 
 class _ChatNamespaceLike(Protocol):

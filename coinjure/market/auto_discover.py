@@ -271,7 +271,10 @@ def _llm_verify_exhaustive(markets: list[dict], event_title: str) -> bool | None
             max_tokens=5,
             temperature=0,
         )
-        answer = response.choices[0].message.content.strip().upper()
+        content = response.choices[0].message.content
+        if content is None:
+            return None
+        answer = content.strip().upper()
         verdict = answer.startswith('YES')
         logger.info(
             'LLM exhaustiveness check for "%s": %s → %s',
@@ -396,7 +399,7 @@ def discover_relations(
             poly_by_event.setdefault(eid, []).append(m)
 
     # Layer 1: Intra-event date nesting (Polymarket)
-    for eid, mkts in poly_by_event.items():
+    for _eid, mkts in poly_by_event.items():
         if len(mkts) < 2:
             continue
         rels = detect_date_nesting(mkts, mkts[0].get('event_title', ''), 'polymarket')
@@ -405,7 +408,7 @@ def discover_relations(
 
     # Layer 2: Intra-event exclusivity (Polymarket)
     if not skip_exclusivity:
-        for eid, mkts in poly_by_event.items():
+        for _eid, mkts in poly_by_event.items():
             rels = detect_exclusivity(
                 mkts, mkts[0].get('event_title', ''), 'polymarket'
             )
@@ -413,7 +416,7 @@ def discover_relations(
             all_rels.extend(rels)
 
     # Layer 3: Intra-event complementary outcomes (Polymarket)
-    for eid, mkts in poly_by_event.items():
+    for _eid, mkts in poly_by_event.items():
         if len(mkts) < 2:
             continue
         rels = detect_complementary(mkts, mkts[0].get('event_title', ''), 'polymarket')
@@ -427,7 +430,7 @@ def discover_relations(
         if eid:
             kalshi_by_event.setdefault(eid, []).append(m)
 
-    for eid, mkts in kalshi_by_event.items():
+    for _eid, mkts in kalshi_by_event.items():
         if len(mkts) < 2:
             continue
         rels = detect_date_nesting(mkts, mkts[0].get('title', ''), 'kalshi')
@@ -435,12 +438,12 @@ def discover_relations(
         all_rels.extend(rels)
 
     if not skip_exclusivity:
-        for eid, mkts in kalshi_by_event.items():
+        for _eid, mkts in kalshi_by_event.items():
             rels = detect_exclusivity(mkts, mkts[0].get('title', ''), 'kalshi')
             by_layer['exclusivity'] = by_layer.get('exclusivity', 0) + len(rels)
             all_rels.extend(rels)
 
-    for eid, mkts in kalshi_by_event.items():
+    for _eid, mkts in kalshi_by_event.items():
         if len(mkts) < 2:
             continue
         rels = detect_complementary(mkts, mkts[0].get('title', ''), 'kalshi')

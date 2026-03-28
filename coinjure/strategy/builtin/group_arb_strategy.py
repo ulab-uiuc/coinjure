@@ -162,7 +162,7 @@ class GroupArbStrategy(Strategy):
 
         # market_id → NO ticker for direct lookup in _check_arb
         self._market_no_ticker: dict[str, Ticker] = {}
-        for no_tid, no_t in self._no_tickers.items():
+        for _no_tid, no_t in self._no_tickers.items():
             if no_t.market_id:
                 self._market_no_ticker[no_t.market_id] = no_t
 
