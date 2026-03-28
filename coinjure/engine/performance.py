@@ -21,6 +21,8 @@ class TradeStats:
     total_pnl: Decimal = Decimal('0')
     max_consecutive_wins: int = 0
     max_consecutive_losses: int = 0
+    sortino_ratio: Decimal = Decimal('0')
+    max_drawdown_duration: int = 0
 
 
 @dataclass
@@ -143,6 +145,12 @@ class PerformanceAnalyzer:
         # Sharpe ratio
         sharpe_ratio = self._calculate_sharpe_ratio()
 
+        # Sortino ratio
+        sortino_ratio = self._calculate_sortino_ratio()
+
+        # Max drawdown duration
+        max_drawdown_duration = self._calculate_max_drawdown_duration()
+
         # Consecutive wins/losses
         max_consecutive_wins, max_consecutive_losses = (
             self._calculate_consecutive_streaks()
@@ -161,6 +169,8 @@ class PerformanceAnalyzer:
             total_pnl=total_pnl,
             max_consecutive_wins=max_consecutive_wins,
             max_consecutive_losses=max_consecutive_losses,
+            sortino_ratio=sortino_ratio,
+            max_drawdown_duration=max_drawdown_duration,
         )
 
     def _calculate_max_drawdown(self) -> Decimal:
@@ -222,6 +232,89 @@ class PerformanceAnalyzer:
         sharpe = (annualized_return - float(risk_free_rate)) / annualized_std
 
         return Decimal(str(round(sharpe, 4)))
+
+    def _calculate_sortino_ratio(
+        self, risk_free_rate: Decimal = Decimal('0.02')
+    ) -> Decimal:
+        """
+        Calculate the Sortino ratio.
+
+        Like the Sharpe ratio but uses only downside deviation (negative
+        returns) instead of total standard deviation, giving a better measure
+        of risk-adjusted returns when returns are asymmetric.
+
+        Args:
+            risk_free_rate: Annual risk-free rate (default 2%)
+
+        Returns:
+            Sortino ratio (annualized)
+        """
+        if len(self._pnl_per_trade) < 2:
+            return Decimal('0')
+
+        # Calculate returns
+        returns: list[float] = []
+        for i, point in enumerate(self.equity_curve[1:], 1):
+            prev_equity = self.equity_curve[i - 1].equity
+            if prev_equity > 0:
+                ret = (point.equity - prev_equity) / prev_equity
+                returns.append(float(ret))
+
+        if len(returns) < 2:
+            return Decimal('0')
+
+        mean_return = sum(returns) / len(returns)
+
+        # Downside deviation: std-dev of returns below zero only
+        downside_returns = [r for r in returns if r < 0]
+        if not downside_returns:
+            # No downside at all -> infinite Sortino; cap it like profit_factor
+            return Decimal('999.99') if mean_return > 0 else Decimal('0')
+
+        downside_variance = sum(r ** 2 for r in downside_returns) / len(returns)
+        downside_dev = math.sqrt(downside_variance) if downside_variance > 0 else 0
+
+        if downside_dev == 0:
+            return Decimal('0')
+
+        annualized_return = mean_return * 252
+        annualized_downside = downside_dev * math.sqrt(252)
+
+        sortino = (annualized_return - float(risk_free_rate)) / annualized_downside
+
+        return Decimal(str(round(sortino, 4)))
+
+    def _calculate_max_drawdown_duration(self) -> int:
+        """Calculate the maximum drawdown duration in number of trades.
+
+        Duration is measured as the number of equity-curve steps between the
+        start of a drawdown (when equity drops below a previous peak) and the
+        point where equity fully recovers to that peak level.  If the drawdown
+        has not been recovered by the end of the curve, the duration extends to
+        the last point.
+        """
+        if len(self.equity_curve) < 2:
+            return 0
+
+        peak = self.equity_curve[0].equity
+        peak_index = 0
+        max_duration = 0
+
+        for i, point in enumerate(self.equity_curve):
+            if point.equity >= peak:
+                # Recovered (or set new peak) – measure duration of this trough
+                duration = i - peak_index
+                if duration > max_duration:
+                    max_duration = duration
+                peak = point.equity
+                peak_index = i
+
+        # If we never recovered by the end, count the tail as well
+        tail_duration = len(self.equity_curve) - 1 - peak_index
+        if tail_duration > max_duration:
+            max_duration = tail_duration
+
+        return max_duration
 
     def _calculate_consecutive_streaks(self) -> tuple[int, int]:
         """Calculate max consecutive wins and losses."""
@@ -294,7 +387,9 @@ class PerformanceAnalyzer:
         print(f'Profit Factor:        {stats.profit_factor:.2f}')
         print('-' * 50)
         print(f'Max Drawdown:         {stats.max_drawdown * 100:.2f}%')
+        print(f'Max DD Duration:      {stats.max_drawdown_duration} trades')
         print(f'Sharpe Ratio:         {stats.sharpe_ratio:.4f}')
+        print(f'Sortino Ratio:        {stats.sortino_ratio:.4f}')
         print(f'Max Consecutive Wins: {stats.max_consecutive_wins}')
         print(f'Max Consecutive Losses: {stats.max_consecutive_losses}')
         print('=' * 50 + '\n')

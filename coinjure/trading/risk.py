@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from datetime import date
 from decimal import Decimal
 
 from coinjure.data.manager import DataManager
@@ -80,6 +81,7 @@ class StandardRiskManager(RiskManager):
         self._peak_portfolio_value: Decimal | None = None
         self._daily_starting_value: Decimal | None = None
         self._daily_pnl = Decimal('0')
+        self._daily_reset_date: date | None = None
 
     def _get_portfolio_value(self) -> Decimal:
         """Get the current total portfolio value."""
@@ -112,6 +114,20 @@ class StandardRiskManager(RiskManager):
         new_position_value = new_quantity * price
         return new_position_value <= self.max_position_size
 
+    def _get_market_exposure(self) -> Decimal:
+        """Compute total market exposure as sum of position.quantity * position.average_cost
+        for all non-cash positions.
+
+        This uses average_cost as a proxy for current market price because live
+        prices may not always be available.  The approximation is conservative
+        for positions whose market price is close to cost basis.
+        """
+        exposure = Decimal('0')
+        for pos in self.position_manager.get_non_cash_positions():
+            if pos.quantity > 0:
+                exposure += pos.quantity * pos.average_cost
+        return exposure
+
     def _check_total_exposure(
         self, side: TradeSide, quantity: Decimal, price: Decimal
     ) -> bool:
@@ -121,12 +137,7 @@ class StandardRiskManager(RiskManager):
             return True
 
         trade_value = quantity * price
-        current_exposure = self._get_portfolio_value()
-
-        # Subtract cash from exposure calculation (cash is not market exposure)
-        cash_positions = self.position_manager.get_cash_positions()
-        cash_value = sum(pos.quantity for pos in cash_positions)
-        market_exposure = current_exposure - cash_value
+        market_exposure = self._get_market_exposure()
 
         new_exposure = market_exposure + trade_value
         return new_exposure <= self.max_total_exposure
@@ -196,6 +207,12 @@ class StandardRiskManager(RiskManager):
         Returns:
             True if the trade is allowed, False otherwise
         """
+        # Auto-reset daily tracking when the calendar date changes
+        today = date.today()
+        if self._daily_reset_date is None or today != self._daily_reset_date:
+            self.reset_daily_tracking()
+            self._daily_reset_date = today
+
         # Skip risk checks for cash tickers
         if isinstance(ticker, CashTicker):
             return True
@@ -260,10 +277,7 @@ class StandardRiskManager(RiskManager):
             return False, 'drawdown_limit_breached'
         if not self._check_daily_loss():
             return False, 'daily_loss_limit_breached'
-        current_exposure = self._get_portfolio_value()
-        cash_positions = self.position_manager.get_cash_positions()
-        cash_value = sum(pos.quantity for pos in cash_positions)
-        market_exposure = current_exposure - cash_value
+        market_exposure = self._get_market_exposure()
         if market_exposure > self.max_total_exposure:
             return False, 'total_exposure_limit_breached'
         return True, ''
@@ -293,11 +307,7 @@ class StandardRiskManager(RiskManager):
 
     def get_remaining_exposure(self) -> Decimal:
         """Get the remaining exposure capacity."""
-        current_exposure = self._get_portfolio_value()
-        cash_positions = self.position_manager.get_cash_positions()
-        cash_value = sum(pos.quantity for pos in cash_positions)
-        market_exposure = current_exposure - cash_value
-
+        market_exposure = self._get_market_exposure()
         return self.max_total_exposure - market_exposure
 
 
