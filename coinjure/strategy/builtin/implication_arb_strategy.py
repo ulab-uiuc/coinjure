@@ -131,6 +131,7 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
             max_size=self.max_trade_size,
             leg_count=2,
             leg_prices=[Decimal('1') - (self._price_a or Decimal('0')), self._price_b or Decimal('0')],
+            **self._llm_sizing_kwargs(),
         )
         ticker_a_no = self._find_ticker(trader, self._ids[0], side='no')
         ticker_b = self._find_ticker(trader, self._ids[1], side='yes')
@@ -170,6 +171,7 @@ class ImplicationArbStrategy(RelationArbMixin, Strategy):
         """Close owned positions — constraint restored."""
         await self._close_owned(trader)
 
+        self._record_outcome(True)
         self._position_state = 'flat'
         self.record_decision(
             ticker_name=f'impl({self.relation_id[:20]})',

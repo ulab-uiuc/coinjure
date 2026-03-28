@@ -1,17 +1,17 @@
 import asyncio
+import base64
 import json
 import logging
 import os
+import time as _time
 from decimal import Decimal
 from typing import Any
-
-import base64
-import time as _time
 
 import requests as _requests
 from cryptography.hazmat.primitives import hashes as _hashes
 from cryptography.hazmat.primitives import serialization as _serialization
 from cryptography.hazmat.primitives.asymmetric import padding as _padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from coinjure.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import KalshiTicker
@@ -86,6 +86,7 @@ async def fetch_kalshi_price_history(
             msg = ts + 'GET' + path
             with open(pk_path, 'rb') as f:
                 pk = _serialization.load_pem_private_key(f.read(), password=None)
+            assert isinstance(pk, RSAPrivateKey)
             sig = base64.b64encode(
                 pk.sign(msg.encode(), _padding.PKCS1v15(), _hashes.SHA256())
             ).decode()
@@ -237,11 +238,13 @@ class LiveKalshiDataSource(DataSource):
 
         # Cache private key for raw HTTP signing
         self._key_id = key_id
-        self._private_key = None
+        self._private_key: RSAPrivateKey | None = None
         if pk_path and os.path.exists(pk_path):
             try:
                 with open(pk_path, 'rb') as f:
-                    self._private_key = _serialization.load_pem_private_key(f.read(), password=None)
+                    _loaded_key = _serialization.load_pem_private_key(f.read(), password=None)
+                assert isinstance(_loaded_key, RSAPrivateKey)
+                self._private_key = _loaded_key
             except Exception as e:
                 logger.warning('Could not load Kalshi private key for raw HTTP: %s', e)
 

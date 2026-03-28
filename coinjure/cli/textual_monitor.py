@@ -1072,7 +1072,7 @@ class SocketTradingMonitorApp(App[None]):
         # Filter out failed sockets
         states: list[tuple[Path, dict]] = [
             (sock, state)
-            for sock, state in zip(self._socket_paths, results)
+            for sock, state in zip(self._socket_paths, results, strict=False)
             if state is not None
         ]
 
@@ -1095,7 +1095,6 @@ class SocketTradingMonitorApp(App[None]):
         self._paused = any_paused
 
         # --- Merge decisions (label each with strategy id + type) ---
-        import re as _re
 
         merged_decisions: list[dict] = []
         multi = len(states) > 1
@@ -1105,7 +1104,6 @@ class SocketTradingMonitorApp(App[None]):
             for d in state.get('decisions', []):
                 d2 = dict(d)
                 d2['strategy_name'] = strategy_name
-                original = d2.get('ticker_name', '') or ''
                 if multi:
                     d2['ticker_name'] = tag[:18]
                 merged_decisions.append(d2)

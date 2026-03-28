@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from coinjure.market.relations import MarketRelation, RelationStore
@@ -12,6 +14,8 @@ from coinjure.trading.trader import Trader
 from coinjure.trading.types import TradeSide
 
 logger = logging.getLogger(__name__)
+
+_OUTCOME_WINDOW = 50
 
 
 class RelationArbMixin:
@@ -32,6 +36,9 @@ class RelationArbMixin:
         self._tokens = []
         self._match_sets = []
         self._owned_symbols = set()
+        self._trade_outcomes: deque[bool] = deque(maxlen=_OUTCOME_WINDOW)
+        self._consecutive_losses: int = 0
+        self._market_context: str = ''
         if relation_id:
             store = RelationStore()
             self._relation = store.get(relation_id)
@@ -55,6 +62,77 @@ class RelationArbMixin:
                     tid = token_ids[0] if token_ids else ''
                 self._tokens.append(tid)
                 self._match_sets.append({mid, tid} - {''})
+
+        self._build_market_context()
+
+    # ------------------------------------------------------------------
+    # Outcome tracking
+    # ------------------------------------------------------------------
+
+    def _record_outcome(self, win: bool) -> None:
+        """Record a trade outcome for win-rate tracking."""
+        self._trade_outcomes.append(win)
+        if win:
+            self._consecutive_losses = 0
+        else:
+            self._consecutive_losses += 1
+
+    @property
+    def _recent_win_rate(self) -> float | None:
+        """Rolling win rate over the last ``_OUTCOME_WINDOW`` trades."""
+        if not self._trade_outcomes:
+            return None
+        return sum(self._trade_outcomes) / len(self._trade_outcomes)
+
+    # ------------------------------------------------------------------
+    # Market context for LLM sizing
+    # ------------------------------------------------------------------
+
+    def _build_market_context(self) -> str:
+        """Build a short context string from the relation metadata."""
+        rel = self._relation
+        if rel is None:
+            self._market_context = ''
+            return ''
+
+        parts: list[str] = []
+
+        # Expiry info from first market with end_date
+        for m in rel.markets:
+            end_date = m.get('end_date', '')
+            if not end_date:
+                continue
+            try:
+                exp = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                delta = exp - datetime.now(timezone.utc)
+                if delta.total_seconds() < 0:
+                    parts.append('expired')
+                elif delta.days >= 1:
+                    parts.append(f'expires in {delta.days}d')
+                else:
+                    hours = int(delta.total_seconds() // 3600)
+                    parts.append(f'expires in {hours}h')
+            except (ValueError, TypeError):
+                pass
+            break
+
+        parts.append(f'type={rel.spread_type}')
+        parts.append(f'confidence={rel.confidence}')
+        ctx = '; '.join(parts)
+        self._market_context = ctx
+        return ctx
+
+    def _llm_sizing_kwargs(self) -> dict:
+        """Return extra kwargs to pass to LLM sizing calls."""
+        kw: dict = {}
+        wr = self._recent_win_rate
+        if wr is not None:
+            kw['recent_win_rate'] = wr
+        if self._consecutive_losses > 0:
+            kw['consecutive_losses'] = self._consecutive_losses
+        if self._market_context:
+            kw['market_context'] = self._market_context
+        return kw
 
     def watch_tokens(self) -> list[str]:
         """Return CLOB token IDs so the data source prioritizes these markets."""
