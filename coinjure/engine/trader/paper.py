@@ -33,8 +33,9 @@ class PaperTrader(Trader):
         position_manager: PositionManager,
         min_fill_rate: Decimal,
         max_fill_rate: Decimal,
-        commission_rate: Decimal,
+        commission_rate: Decimal = Decimal('0.02'),
         alerter: Alerter | None = None,
+        slippage_bps: int = 50,
     ):
         super().__init__(market_data, risk_manager, position_manager, alerter=alerter)
         self.orders: list[Order] = []
@@ -42,10 +43,17 @@ class PaperTrader(Trader):
         self.min_fill_rate = min_fill_rate
         self.max_fill_rate = max_fill_rate
         self.commission_rate = commission_rate
+        self.slippage_bps = slippage_bps
+        self._slippage_factor = Decimal(str(slippage_bps)) / Decimal('10000')
 
     def _random_fill_rate(self) -> Decimal:
+        fill_range = float(self.max_fill_rate) - float(self.min_fill_rate)
+        if fill_range <= 0:
+            return self.min_fill_rate
+        # Beta(5,1) distribution: most fills near 100%, rare low fills
+        beta_sample = random.betavariate(5, 1)
         return Decimal(
-            str(random.uniform(float(self.min_fill_rate), float(self.max_fill_rate)))
+            str(float(self.min_fill_rate) + beta_sample * fill_range)
         )
 
     def _available_liquidity(
@@ -97,13 +105,18 @@ class PaperTrader(Trader):
             order._created_at = time.monotonic()  # type: ignore[attr-defined]
             return order
 
-        # Pessimistic fill at the limit price
-        commission = filled_qty * limit_price * self.commission_rate
+        # Apply slippage: BUY fills worse (higher), SELL fills worse (lower)
+        if side == TradeSide.BUY:
+            fill_price = limit_price * (Decimal('1') + self._slippage_factor)
+        else:
+            fill_price = limit_price * (Decimal('1') - self._slippage_factor)
+
+        commission = filled_qty * fill_price * self.commission_rate
         trades: list[Trade] = [
             Trade(
                 side=side,
                 ticker=ticker,
-                price=limit_price,
+                price=fill_price,
                 quantity=filled_qty,
                 commission=commission,
             )
@@ -118,7 +131,7 @@ class PaperTrader(Trader):
             ticker=ticker,
             limit_price=limit_price,
             filled_quantity=filled_qty,
-            average_price=limit_price,
+            average_price=fill_price,
             trades=trades,
             remaining=remaining,
             commission=commission,
@@ -152,18 +165,23 @@ class PaperTrader(Trader):
                 still_resting.append(order)
                 continue
 
+            if order.side == TradeSide.BUY:
+                resting_fill_price = order.limit_price * (Decimal('1') + self._slippage_factor)
+            else:
+                resting_fill_price = order.limit_price * (Decimal('1') - self._slippage_factor)
+
             trade = Trade(
                 side=order.side,
                 ticker=order.ticker,
-                price=order.limit_price,
+                price=resting_fill_price,
                 quantity=filled_qty,
-                commission=filled_qty * order.limit_price * self.commission_rate,
+                commission=filled_qty * resting_fill_price * self.commission_rate,
             )
             self.position_manager.apply_trade(trade)
             order.trades.append(trade)
             order.filled_quantity += filled_qty
             order.remaining -= filled_qty
-            order.average_price = order.limit_price
+            order.average_price = resting_fill_price
             order.commission += trade.commission
             if order.remaining == Decimal('0'):
                 order.status = OrderStatus.FILLED
