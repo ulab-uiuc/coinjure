@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -311,43 +312,93 @@ class KalshiTrader(Trader):
                 failure_reason=OrderFailureReason.RISK_CHECK_FAILED,
             )
 
-        try:
-            # Convert internal price (0.01-0.99) to Kalshi cents (1-99)
-            price_cents = int(limit_price * 100)
-            count = int(quantity)
+        # Retry with jitter for transient errors.
+        _MAX_RETRIES = 3
+        _BASE_DELAY = 0.2
+        _RATE_LIMIT_BASE = 2.0
 
-            action = 'buy' if side == TradeSide.BUY else 'sell'
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                # Convert internal price (0.01-0.99) to Kalshi cents (1-99)
+                price_cents = int(limit_price * 100)
+                count = int(quantity)
 
-            # Determine Kalshi API side based on ticker
-            kalshi_side = ticker.side if isinstance(ticker, KalshiTicker) else 'yes'
+                action = 'buy' if side == TradeSide.BUY else 'sell'
 
-            response = await self._submit_order(
-                action=action,
-                side=kalshi_side,
-                ticker=ticker,
-                price_cents=price_cents,
-                count=count,
-            )
+                # Determine Kalshi API side based on ticker
+                kalshi_side = ticker.side if isinstance(ticker, KalshiTicker) else 'yes'
 
-            order = await self._process_order_response(
-                response, side, ticker, limit_price, quantity
-            )
+                response = await self._submit_order(
+                    action=action,
+                    side=kalshi_side,
+                    ticker=ticker,
+                    price_cents=price_cents,
+                    count=count,
+                )
 
-            # Update positions
-            for trade in order.trades:
-                self.position_manager.apply_trade(trade)
-            self._sync_usd_balance()
+                order = await self._process_order_response(
+                    response, side, ticker, limit_price, quantity
+                )
 
-            self.orders.append(order)
-            if order.status == OrderStatus.REJECTED:
-                failure_reason = OrderFailureReason.UNKNOWN
-                await self._alert_rejected(failure_reason, ticker)
-                return PlaceOrderResult(order=order, failure_reason=failure_reason)
-            return PlaceOrderResult(order=order)
+                # Update positions
+                for trade in order.trades:
+                    self.position_manager.apply_trade(trade)
+                self._sync_usd_balance()
 
-        except Exception as e:
-            logger.exception('Error placing Kalshi order for %s: %s', ticker.symbol, e)
-            return PlaceOrderResult(
-                order=None,
-                failure_reason=OrderFailureReason.UNKNOWN,
-            )
+                self.orders.append(order)
+                if order.status == OrderStatus.REJECTED:
+                    failure_reason = OrderFailureReason.UNKNOWN
+                    await self._alert_rejected(failure_reason, ticker)
+                    return PlaceOrderResult(order=order, failure_reason=failure_reason)
+                return PlaceOrderResult(order=order)
+
+            except Exception as e:
+                # Detect HTTP status from the exception if available.
+                status_code = getattr(e, 'status', None) or getattr(
+                    e, 'status_code', None
+                )
+
+                # Non-retryable: 400 bad input
+                if status_code == 400:
+                    logger.error(
+                        'Kalshi order rejected (400) for %s: %s', ticker.symbol, e
+                    )
+                    return PlaceOrderResult(
+                        order=None,
+                        failure_reason=OrderFailureReason.INVALID_ORDER,
+                    )
+
+                if attempt == _MAX_RETRIES:
+                    logger.exception(
+                        'Kalshi order failed after %d attempts for %s: %s',
+                        _MAX_RETRIES,
+                        ticker.symbol,
+                        e,
+                    )
+                    return PlaceOrderResult(
+                        order=None,
+                        failure_reason=OrderFailureReason.UNKNOWN,
+                    )
+
+                # 429 rate-limit → longer backoff; 5xx / network → normal
+                base = _RATE_LIMIT_BASE if status_code == 429 else _BASE_DELAY
+                delay = base * (2 ** (attempt - 1))
+                jitter = delay * random.uniform(-0.25, 0.25)
+                sleep_time = max(0, delay + jitter)
+                logger.warning(
+                    'Kalshi order attempt %d/%d failed for %s (status=%s), '
+                    'retrying in %.2fs: %s',
+                    attempt,
+                    _MAX_RETRIES,
+                    ticker.symbol,
+                    status_code,
+                    sleep_time,
+                    e,
+                )
+                await asyncio.sleep(sleep_time)
+
+        # Should not reach here, but satisfy the type checker.
+        return PlaceOrderResult(
+            order=None,
+            failure_reason=OrderFailureReason.UNKNOWN,
+        )
