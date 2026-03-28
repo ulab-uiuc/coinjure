@@ -42,42 +42,58 @@ class OrderBook:
         return self.bids[0] if self.bids else None
 
     @property
+    def best_bid_price(self) -> Decimal | None:
+        """Highest bid price, or ``None`` if there are no bids."""
+        best = self.best_bid
+        return best.price if best is not None else None
+
+    @property
+    def best_ask_price(self) -> Decimal | None:
+        """Lowest ask price, or ``None`` if there are no asks."""
+        best = self.best_ask
+        return best.price if best is not None else None
+
+    @property
     def spread(self) -> Decimal | None:
-        """Return the spread (best_ask.price - best_bid.price), or None if either side is empty."""
-        if self.best_ask is None or self.best_bid is None:
-            return None
-        return self.best_ask.price - self.best_bid.price
+        """Difference between best ask and best bid, or ``None``."""
+        ask = self.best_ask_price
+        bid = self.best_bid_price
+        if ask is not None and bid is not None:
+            return ask - bid
+        return None
+
+    @property
+    def mid_price(self) -> Decimal | None:
+        """Midpoint between best bid and best ask, or ``None``."""
+        ask = self.best_ask_price
+        bid = self.best_bid_price
+        if ask is not None and bid is not None:
+            return (bid + ask) / 2
+        return None
+
+    def depth(self, side: str, levels: int = 5) -> Decimal:
+        """Sum of sizes for the top *levels* on *side* ('bid' or 'ask')."""
+        book = self.bids if side == 'bid' else self.asks
+        return sum((lvl.size for lvl in book[:levels]), Decimal(0))
 
     def validate(self) -> bool:
-        """Check order book invariants.
-
-        Returns True if:
-        - All bid prices are sorted descending
-        - All ask prices are sorted ascending
-        - No negative prices or sizes
-        """
-        # Check no negative prices or sizes
+        """Check order book invariants: sorted, no negative prices/sizes."""
         for level in self.bids:
             if level.price < 0 or level.size < 0:
                 return False
         for level in self.asks:
             if level.price < 0 or level.size < 0:
                 return False
-        # Check bids sorted descending
         for i in range(len(self.bids) - 1):
             if self.bids[i].price < self.bids[i + 1].price:
                 return False
-        # Check asks sorted ascending
         for i in range(len(self.asks) - 1):
             if self.asks[i].price > self.asks[i + 1].price:
                 return False
         return True
 
     def cumulative_size(self, depth_levels: int = 5) -> tuple[Decimal, Decimal]:
-        """Return total size for top N bid and ask levels.
-
-        Returns a tuple of (bid_size, ask_size).
-        """
+        """Return total size for top N bid and ask levels."""
         bid_size = sum(
             (level.size for level in self.bids[:depth_levels]),
             Decimal('0'),
