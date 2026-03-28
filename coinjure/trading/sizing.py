@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Optional
 
 from coinjure.ticker import Ticker
 from coinjure.trading.llm_sizing import (
@@ -8,6 +9,33 @@ from coinjure.trading.llm_sizing import (
     compute_opportunity_sizing_llm,
 )
 from coinjure.trading.position import PositionManager
+
+
+def _dynamic_kelly(
+    edge: Decimal,
+    win_rate: float,
+    static_fraction: Decimal,
+) -> Decimal:
+    """Compute a conservative Kelly fraction from win rate and edge.
+
+    For prediction markets the average payoff is ``edge / (1 - edge)``.
+    The optimal Kelly fraction is then::
+
+        kelly = (win_rate * avg_payoff - (1 - win_rate)) / avg_payoff
+
+    We take the minimum of the computed Kelly and the static fraction to
+    stay conservative.  If the computed value is non-positive (no edge),
+    the static fraction is returned unchanged.
+    """
+    if edge >= Decimal('1'):
+        return static_fraction
+    avg_payoff = float(edge) / (1.0 - float(edge))
+    if avg_payoff <= 0:
+        return static_fraction
+    computed = (win_rate * avg_payoff - (1.0 - win_rate)) / avg_payoff
+    if computed <= 0:
+        return static_fraction
+    return min(Decimal(str(computed)), static_fraction)
 
 
 def compute_trade_size(
@@ -19,14 +47,19 @@ def compute_trade_size(
     edge_cap: Decimal = Decimal('0.10'),
     min_size: Decimal = Decimal('1'),
     max_size: Decimal = Decimal('100'),
+    win_rate: Optional[float] = None,
 ) -> Decimal:
     """Compute trade size weighted by edge relative to available capital.
+
+    When ``win_rate`` is provided, the effective Kelly fraction is computed
+    dynamically as the minimum of the optimal Kelly (derived from win_rate
+    and edge) and the static ``kelly_fraction``.
 
     Formula::
 
         available = sum(cash positions matching collateral)
         weight    = min(edge / edge_cap, 1)
-        raw       = available * kelly_fraction * weight
+        raw       = available * effective_kelly * weight
         result    = clamp(raw, min_size, max_size)
     """
     available = Decimal('0')
@@ -38,8 +71,12 @@ def compute_trade_size(
     if available <= 0 or edge <= 0:
         return min_size
 
+    effective_kelly = kelly_fraction
+    if win_rate is not None:
+        effective_kelly = _dynamic_kelly(edge, win_rate, kelly_fraction)
+
     weight = min(edge / edge_cap, Decimal('1'))
-    raw = available * kelly_fraction * weight
+    raw = available * effective_kelly * weight
 
     if raw < min_size:
         return min_size
