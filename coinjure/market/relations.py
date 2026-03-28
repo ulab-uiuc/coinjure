@@ -13,12 +13,19 @@ Relation types (8 types → 7 strategies):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +135,25 @@ class RelationStore:
     def __init__(self, path: Path = RELATIONS_PATH) -> None:
         self._path = path
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock_path = self._path.with_suffix('.lock')
+
+    @contextlib.contextmanager
+    def _file_lock(self):
+        """Acquire an exclusive file lock for the duration of the block.
+
+        Falls back to a no-op on platforms where ``fcntl`` is unavailable
+        (e.g. Windows).
+        """
+        if not _HAS_FCNTL:
+            yield
+            return
+        lock_fd = open(self._lock_path, 'w')
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
 
     def _load(self) -> list[dict]:
         if not self._path.exists():
@@ -160,47 +186,51 @@ class RelationStore:
         return None
 
     def add(self, relation: MarketRelation) -> None:
-        data = self._load()
-        # Deduplicate by relation_id
-        data = [d for d in data if d.get('relation_id') != relation.relation_id]
-        data.append(relation.to_dict())
-        self._save(data)
+        with self._file_lock():
+            data = self._load()
+            # Deduplicate by relation_id
+            data = [d for d in data if d.get('relation_id') != relation.relation_id]
+            data.append(relation.to_dict())
+            self._save(data)
 
     def update(self, relation: MarketRelation) -> None:
-        data = self._load()
-        for i, d in enumerate(data):
-            if d.get('relation_id') == relation.relation_id:
-                data[i] = relation.to_dict()
-                self._save(data)
-                return
-        # Not found — add
-        data.append(relation.to_dict())
-        self._save(data)
+        with self._file_lock():
+            data = self._load()
+            for i, d in enumerate(data):
+                if d.get('relation_id') == relation.relation_id:
+                    data[i] = relation.to_dict()
+                    self._save(data)
+                    return
+            # Not found — add
+            data.append(relation.to_dict())
+            self._save(data)
 
     def add_batch(self, relations: _List[MarketRelation]) -> int:
         """Add multiple relations at once (upsert semantics)."""
         if not relations:
             return 0
-        data = self._load()
-        existing_ids = {d.get('relation_id') for d in data}
-        added = 0
-        for rel in relations:
-            if rel.relation_id in existing_ids:
-                data = [d for d in data if d.get('relation_id') != rel.relation_id]
-            else:
-                added += 1
-            data.append(rel.to_dict())
-        self._save(data)
+        with self._file_lock():
+            data = self._load()
+            existing_ids = {d.get('relation_id') for d in data}
+            added = 0
+            for rel in relations:
+                if rel.relation_id in existing_ids:
+                    data = [d for d in data if d.get('relation_id') != rel.relation_id]
+                else:
+                    added += 1
+                data.append(rel.to_dict())
+            self._save(data)
         return added
 
     def remove(self, relation_id: str) -> bool:
-        data = self._load()
-        before = len(data)
-        data = [d for d in data if d.get('relation_id') != relation_id]
-        if len(data) < before:
-            self._save(data)
-            return True
-        return False
+        with self._file_lock():
+            data = self._load()
+            before = len(data)
+            data = [d for d in data if d.get('relation_id') != relation_id]
+            if len(data) < before:
+                self._save(data)
+                return True
+            return False
 
     # ── Graph queries ──────────────────────────────────────────────────
 

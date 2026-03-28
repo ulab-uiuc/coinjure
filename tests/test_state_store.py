@@ -228,6 +228,7 @@ def test_atomic_write_creates_no_tmp_file(tmp_store, sample_position):
     data = json.loads(positions_file.read_text())
     assert 'saved_at' in data
     assert 'positions' in data
+    assert data['_schema_version'] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -271,3 +272,86 @@ def test_roundtrip_order(sample_trade, poly_ticker):
     assert result.filled_quantity == Decimal('10')
     assert len(result.trades) == 1
     assert result.trades[0].price == Decimal('0.45')
+
+
+# ---------------------------------------------------------------------------
+# validate_consistency
+# ---------------------------------------------------------------------------
+
+
+def test_validate_consistency_empty_store(tmp_store):
+    assert tmp_store.validate_consistency() is True
+
+
+def test_validate_consistency_trades_without_positions(tmp_store, poly_ticker):
+    trade = Trade(TradeSide.BUY, poly_ticker, Decimal('0.5'), Decimal('3'), Decimal('0'))
+    tmp_store.append_trade(trade)
+    assert tmp_store.validate_consistency() is False
+
+
+def test_validate_consistency_with_both(tmp_store, sample_position, poly_ticker):
+    from coinjure.trading.position import PositionManager
+
+    pm = PositionManager()
+    pm.update_position(sample_position)
+    tmp_store.save_positions(pm)
+
+    trade = Trade(TradeSide.BUY, poly_ticker, Decimal('0.5'), Decimal('3'), Decimal('0'))
+    tmp_store.append_trade(trade)
+
+    assert tmp_store.validate_consistency() is True
+
+
+# ---------------------------------------------------------------------------
+# Schema versioning
+# ---------------------------------------------------------------------------
+
+
+def test_schema_version_written_to_file(tmp_store, sample_position):
+    from coinjure.trading.position import PositionManager
+
+    pm = PositionManager()
+    pm.update_position(sample_position)
+    tmp_store.save_positions(pm)
+
+    raw = json.loads((tmp_store.data_dir / 'positions.json').read_text())
+    assert raw['_schema_version'] == 1
+
+
+def test_schema_version_warning_on_missing(tmp_store, caplog):
+    """Loading a file without _schema_version logs a warning."""
+    path = tmp_store.data_dir / 'positions.json'
+    path.write_text(json.dumps({'positions': []}))
+
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        tmp_store.load_positions()
+    assert 'missing _schema_version' in caplog.text
+
+
+def test_schema_version_warning_on_mismatch(tmp_store, caplog):
+    """Loading a file with a different _schema_version logs a warning."""
+    path = tmp_store.data_dir / 'positions.json'
+    path.write_text(json.dumps({'positions': [], '_schema_version': 999}))
+
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        tmp_store.load_positions()
+    assert '_schema_version=999' in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Data directory permissions
+# ---------------------------------------------------------------------------
+
+
+def test_data_dir_created_with_restricted_permissions(tmp_path):
+    import os
+    import stat
+
+    data_dir = tmp_path / 'secure_data'
+    StateStore(data_dir)
+    mode = stat.S_IMODE(os.stat(data_dir).st_mode)
+    assert mode == 0o700
