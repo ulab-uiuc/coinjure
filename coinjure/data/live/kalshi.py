@@ -209,7 +209,7 @@ class LiveKalshiDataSource(DataSource):
         self._watch_events = watch_events or []
         self.event_cache_file = event_cache_file
         self.processed_event_tickers: set[str] = set()
-        self.event_queue: asyncio.Queue = asyncio.Queue()
+        self.event_queue: asyncio.Queue = asyncio.Queue(maxsize=5000)
         self.last_prices: dict[str, tuple[int, int]] = {}
         self._news_fetched_events: set[str] = set()
         self._poll_task: asyncio.Task | None = None
@@ -477,7 +477,14 @@ class LiveKalshiDataSource(DataSource):
                 event_id=event_ticker,
                 ticker=ticker,
             )
-            await self.event_queue.put(news_event)
+            try:
+                self.event_queue.put_nowait(news_event)
+            except asyncio.QueueFull:
+                logger.warning(
+                    'Event queue full (maxsize=%d), skipping news event for "%s"',
+                    self.event_queue.maxsize,
+                    market_question[:50],
+                )
         except Exception as e:
             logger.warning('News emit error for "%s": %s', market_question[:50], e)
 
@@ -517,12 +524,22 @@ class LiveKalshiDataSource(DataSource):
                                 )
                                 + '\n'
                             )
+                            f.flush()
+                            os.fsync(f.fileno())
 
                     # Use market-level bid/ask to create order book events
                     ob_events = self._market_to_order_book_events(market)
 
                     for ob_event in ob_events:
-                        await self.event_queue.put(ob_event)
+                        try:
+                            self.event_queue.put_nowait(ob_event)
+                        except asyncio.QueueFull:
+                            logger.warning(
+                                'Event queue full (maxsize=%d), skipping order book event for %s',
+                                self.event_queue.maxsize,
+                                market_ticker,
+                            )
+                            break
 
                     has_ask = _price_cents(market, 'yes_ask') > 0
 
