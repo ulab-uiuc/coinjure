@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from typing import Any
 
 from coinjure.strategy.strategy import Strategy, StrategyContext
+
+logger = logging.getLogger(__name__)
 
 
 def _import_agents_sdk():
@@ -26,6 +29,9 @@ class AgentStrategy(Strategy):
 
     strategy_type = 'agent'
 
+    #: Maximum quantity the agent is allowed to request per trade.
+    max_agent_trade_size: int = 100
+
     @classmethod
     def supports_auto_tune(cls) -> bool:
         return False
@@ -37,6 +43,57 @@ class AgentStrategy(Strategy):
         except RuntimeError:
             return False
         return True
+
+    # -- Hallucination guards ------------------------------------------------
+
+    def _validate_agent_action(
+        self,
+        *,
+        symbol: str,
+        quantity: float | int,
+        price: float,
+        context: StrategyContext | None = None,
+    ) -> str | None:
+        """Validate an action proposed by the LLM agent.
+
+        Returns ``None`` if the action is valid, or a string describing the
+        rejection reason.
+
+        Checks:
+        1. Ticker symbol exists in the data manager (if context is available).
+        2. Quantity is positive and <= ``max_agent_trade_size``.
+        3. Price is between 0 and 1 (prediction market constraint).
+        """
+        ctx = context or self.get_context()
+
+        # 1. Ticker existence
+        if ctx is not None:
+            resolved = ctx.resolve_ticker(symbol)
+            if resolved is None:
+                reason = f'Unknown ticker symbol: {symbol!r}'
+                logger.warning('Agent action rejected: %s', reason)
+                return reason
+
+        # 2. Quantity bounds
+        if quantity <= 0:
+            reason = f'Quantity must be positive, got {quantity}'
+            logger.warning('Agent action rejected: %s', reason)
+            return reason
+        if quantity > self.max_agent_trade_size:
+            reason = (
+                f'Quantity {quantity} exceeds max_agent_trade_size '
+                f'{self.max_agent_trade_size}'
+            )
+            logger.warning('Agent action rejected: %s', reason)
+            return reason
+
+        # 3. Price in valid prediction-market range (0, 1)
+        if price <= 0 or price >= 1:
+            reason = f'Price {price} outside valid range (0, 1)'
+            logger.warning('Agent action rejected: %s', reason)
+            return reason
+
+        return None
 
     def get_agent_name(self) -> str:
         return getattr(self, 'agent_name', self.__class__.__name__)

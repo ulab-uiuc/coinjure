@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from decimal import Decimal
 
@@ -107,11 +108,21 @@ class RelationArbMixin:
             unwound = False
             best_bid = trader.market_data.get_best_bid(ticker_1)
             if best_bid:
-                r_unwind = await trader.place_order(
-                    side=TradeSide.SELL, ticker=ticker_1,
-                    limit_price=best_bid.price, quantity=quantity,
-                )
-                unwound = not r_unwind.failure_reason
+                try:
+                    r_unwind = await asyncio.wait_for(
+                        trader.place_order(
+                            side=TradeSide.SELL, ticker=ticker_1,
+                            limit_price=best_bid.price, quantity=quantity,
+                        ),
+                        timeout=5.0,
+                    )
+                    unwound = not r_unwind.failure_reason
+                except asyncio.TimeoutError:
+                    logger.critical(
+                        'CRITICAL: Pair unwind timed out after 5s for %s — '
+                        'orphaned position requires manual intervention',
+                        ticker_1.symbol,
+                    )
             if not unwound:
                 # Unwind failed — track position so _close_owned can clean up later
                 logger.warning('Pair unwind failed, tracking orphaned leg1: %s', ticker_1.symbol)
