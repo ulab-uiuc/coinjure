@@ -141,6 +141,8 @@ class LivePolyMarketDataSource(DataSource):
             with open(self.event_cache_file, 'w') as f:
                 for line in unique_lines:
                     f.write(line + '\n')
+                f.flush()
+                os.fsync(f.fileno())
             self._cached_event_ids = seen_ids
 
         if not reprocess_on_start:
@@ -362,7 +364,18 @@ class LivePolyMarketDataSource(DataSource):
 
                             # Fetch order books for new events
                             for idx, token_id in enumerate(token_ids):
-                                order_book = await self._fetch_order_book(token_id)
+                                try:
+                                    order_book = await asyncio.wait_for(
+                                        self._fetch_order_book(token_id),
+                                        timeout=10.0,
+                                    )
+                                except asyncio.TimeoutError:
+                                    logger.warning(
+                                        'Order book fetch timed out for token %s (market %s), skipping',
+                                        token_id[:16],
+                                        market_id[:16],
+                                    )
+                                    continue
                                 order_book_events = self._process_order_book_to_events(
                                     token_id,
                                     market_title,
@@ -397,6 +410,8 @@ class LivePolyMarketDataSource(DataSource):
                         self.processed_event_ids.add(event_id)
                         with open(self.event_cache_file, 'a') as f:
                             f.write(json.dumps(enriched_event) + '\n')
+                            f.flush()
+                            os.fsync(f.fileno())
 
                 if self._first_poll:
                     self._first_poll = False
