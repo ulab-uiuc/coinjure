@@ -27,8 +27,9 @@ jobs:
           # Build MkDocs docs into site/docs/
           mkdocs build --site-dir site/docs
 
-          # Copy blog to site root
+          # Copy blog to site root (index + images)
           cp blog/index.html site/index.html
+          cp blog/*.png site/ 2>/dev/null || true
 
           # Add .nojekyll to prevent GitHub Pages from ignoring _files
           touch site/.nojekyll
