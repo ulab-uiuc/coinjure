@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "coinjure"
-version = "0.0.1"
+version = "0.1.0"
 description = "An intelligent trading agent for Polymarket prediction markets, powered by Social World Models and LLM-driven decision making."
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
 license = "Apache-2.0"
@@ -174,7 +174,7 @@ max-complexity = 10
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.0.1"
+version = "0.1.0"
 tag_format = "v$version"
 bump_message = "bump: version $current_version → $new_version"
 version_files = [
