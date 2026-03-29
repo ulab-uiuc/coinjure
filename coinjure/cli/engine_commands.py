@@ -477,12 +477,15 @@ def engine_paper_run(
     llm_model: str | None,
 ) -> None:
     """Run a paper trading engine instance."""
-    _audit_log('paper-run', {
-        'exchange': exchange,
-        'duration': duration,
-        'initial_capital': initial_capital,
-        'strategy_ref': strategy_ref,
-    })
+    _audit_log(
+        'paper-run',
+        {
+            'exchange': exchange,
+            'duration': duration,
+            'initial_capital': initial_capital,
+            'strategy_ref': strategy_ref,
+        },
+    )
     if all_relations and strategy_ref:
         raise click.ClickException(
             '--all-relations and --strategy-ref are mutually exclusive.'
@@ -716,12 +719,15 @@ def engine_live_run(
     llm_model: str | None,
 ) -> None:
     """Run a live trading engine instance (real orders, real funds)."""
-    _audit_log('live-run', {
-        'exchange': exchange,
-        'duration': duration,
-        'initial_capital': initial_capital,
-        'strategy_ref': strategy_ref,
-    })
+    _audit_log(
+        'live-run',
+        {
+            'exchange': exchange,
+            'duration': duration,
+            'initial_capital': initial_capital,
+            'strategy_ref': strategy_ref,
+        },
+    )
     if all_relations and strategy_ref:
         raise click.ClickException(
             '--all-relations and --strategy-ref are mutually exclusive.'
@@ -1254,6 +1260,7 @@ def engine_monitor(socket: str | None) -> None:
     if socket:
         socket_paths = [Path(socket)]
         socket_labels: dict = {}
+        auto_discover = False
     else:
         # Auto-discover all running engines from the registry
         registry = _load_registry()
@@ -1267,11 +1274,16 @@ def engine_monitor(socket: str | None) -> None:
         if not socket_paths:
             # Fallback: scan SOCKET_DIR for any live engine sockets (covers
             # foreground / non-registered engines that use PID-based paths)
-            socket_paths = sorted(SOCKET_DIR.glob('engine-*.sock')) or [SOCKET_PATH]
+            found = sorted(SOCKET_DIR.glob('engine-*.sock'))
+            if found:
+                socket_paths = found
+        auto_discover = True
 
     try:
         app = SocketTradingMonitorApp(
-            socket_paths=socket_paths, socket_labels=socket_labels
+            socket_paths=socket_paths,
+            socket_labels=socket_labels,
+            auto_discover=auto_discover,
         )
         app.run()
     except (KeyboardInterrupt, SystemExit):
@@ -1390,11 +1402,14 @@ def engine_backtest(
     Each relation's spread_type determines the strategy. Results update the
     relation lifecycle (backtest_passed / backtest_failed) in the store.
     """
-    _audit_log('backtest', {
-        'relation_ids': list(relation_ids),
-        'all_relations': all_relations,
-        'initial_capital': initial_capital,
-    })
+    _audit_log(
+        'backtest',
+        {
+            'relation_ids': list(relation_ids),
+            'all_relations': all_relations,
+            'initial_capital': initial_capital,
+        },
+    )
     from coinjure.engine.backtester import run_backtest_relation
     from coinjure.market.relations import RelationStore
 
@@ -1478,9 +1493,7 @@ def engine_backtest(
         ]
         if not as_json:
             click.echo('Running LLM portfolio allocation review...')
-        budgets = asyncio.run(
-            allocate_capital_llm(capital, candidates, **llm_kwargs)
-        )
+        budgets = asyncio.run(allocate_capital_llm(capital, candidates, **llm_kwargs))
         if not as_json:
             for sid, bgt in budgets.items():
                 click.echo(f'  LLM budget: {sid[:30]:30s}  ${bgt:.2f}')
@@ -1520,6 +1533,7 @@ def engine_backtest(
         return results
 
     from coinjure.engine.backtester import BacktestResult
+
     results: list[BacktestResult] = asyncio.run(_run_all())
 
     # Output results

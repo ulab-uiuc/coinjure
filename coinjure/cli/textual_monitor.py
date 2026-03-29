@@ -989,19 +989,22 @@ class SocketTradingMonitorApp(App[None]):
         socket_path: Path | None = None,
         socket_paths: list[Path] | None = None,
         socket_labels: dict[Path, str] | None = None,
+        *,
+        auto_discover: bool = False,
     ) -> None:
         from coinjure.engine.control import SOCKET_PATH
 
         super().__init__()
         # Accept either a single socket (legacy) or a list of sockets.
         if socket_paths:
-            self._socket_paths: list[Path] = socket_paths
+            self._socket_paths: list[Path] = list(socket_paths)
         elif socket_path:
             self._socket_paths = [socket_path]
         else:
             self._socket_paths = [SOCKET_PATH]
         # socket_labels maps socket path → human-readable strategy label
         self._socket_labels: dict[Path, str] = socket_labels or {}
+        self._auto_discover = auto_discover
         self._monitor_start = datetime.now()
         self._connected: bool = False
         self._paused: bool = False
@@ -1061,9 +1064,62 @@ class SocketTradingMonitorApp(App[None]):
         except Exception:
             return None
 
+    def _rediscover_sockets(self) -> None:
+        """Rescan registry and socket directory for newly started engines."""
+        from coinjure.engine.control import SOCKET_DIR, cleanup_stale_sockets
+        from coinjure.engine.registry import StrategyRegistry
+
+        cleanup_stale_sockets()
+
+        registry_path = Path.home() / '.coinjure' / 'portfolio.json'
+        known = set(self._socket_paths)
+        new_labels: dict[Path, str] = {}
+
+        # Scan registry for new sockets
+        if registry_path.exists():
+            try:
+                registry = StrategyRegistry(registry_path)
+                for entry in registry.list():
+                    if entry.socket_path:
+                        p = Path(entry.socket_path)
+                        if p.exists() and p not in known:
+                            new_labels[p] = entry.strategy_id
+            except Exception:
+                pass
+
+        # Scan socket directory for unregistered engines
+        for sock in sorted(SOCKET_DIR.glob('engine-*.sock')):
+            if sock not in known and sock not in new_labels:
+                new_labels[sock] = sock.stem
+
+        if new_labels:
+            self._socket_paths.extend(new_labels.keys())
+            self._socket_labels.update(new_labels)
+            n = len(self._socket_paths)
+            self.title = f'Coinjure — Monitor ({n} engine{"s" if n != 1 else ""})'
+
+        # Also prune sockets that no longer exist
+        self._socket_paths = [p for p in self._socket_paths if p.exists()]
+
     async def _poll_state(self) -> None:
         """Fetch state from all engines in parallel and merge into one view."""
         import asyncio
+
+        if self._auto_discover:
+            self._rediscover_sockets()
+
+        if not self._socket_paths:
+            self._connected = False
+            self.sub_title = (
+                '⚠  No engines reachable — start one with: coinjure engine paper-run'
+            )
+            try:
+                self.query_one('#ctrl-bar', ControlBar).update_state(
+                    False, connected=False
+                )
+            except Exception:
+                pass
+            return
 
         results: list[dict | None] = await asyncio.gather(
             *[self._fetch_one(s) for s in self._socket_paths]
