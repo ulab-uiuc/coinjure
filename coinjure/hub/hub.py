@@ -133,41 +133,13 @@ class MarketDataHub:
         dead: list[int] = []
         for sub_id, q in list(self._subscribers.items()):
             sub_filter = self._sub_filters.get(sub_id)
-            if sub_filter is not None and ticker_key not in sub_filter:
+            if sub_filter and ticker_key not in sub_filter:
                 continue
             if q.full():
-                # Track consecutive drops per subscriber.
-                self._drop_count[sub_id] = self._drop_count.get(sub_id, 0) + 1
-                drop_n = self._drop_count[sub_id]
-                logger.warning(
-                    'Hub: subscriber %d queue full (depth=%d), '
-                    'dropping oldest event (consecutive drops: %d)',
-                    sub_id,
-                    q.qsize(),
-                    drop_n,
-                )
-                if drop_n >= self._MAX_CONSECUTIVE_DROPS:
-                    logger.warning(
-                        'Hub: subscriber %d exceeded %d consecutive drops — '
-                        'disconnecting slow consumer',
-                        sub_id,
-                        self._MAX_CONSECUTIVE_DROPS,
-                    )
-                    writer = self._sub_writers.get(sub_id)
-                    if writer is not None:
-                        try:
-                            writer.close()
-                        except Exception:
-                            pass
-                    dead.append(sub_id)
-                    continue
                 try:
                     q.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
-            else:
-                # Queue is not full — reset drop counter for this subscriber.
-                self._drop_count.pop(sub_id, None)
             try:
                 q.put_nowait(encoded)
             except Exception:
