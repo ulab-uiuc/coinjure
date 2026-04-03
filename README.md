@@ -81,80 +81,45 @@ poetry install
 
 ## Quick Start
 
-### 1) Discover markets and relations
-
-````bash
-# Search markets across both exchanges
-coinjure market discover -q "election" -q "Trump" --exchange both --limit 50
-# Auto-discovers intra-event relations (implication, exclusivity, complementary)
-# and persists them to ~/.coinjure/relations.json
-
-# Fetch detailed info for a specific market
-coinjure market info --exchange polymarket --market-id <market_id>
-# Or by Polymarket event slug
-coinjure market info --slug fed-decision-in-april
-# Fetch news for context
-coinjure market news --source google --query "prediction market" --limit 10```
-
-### 2) Manage relations
+### 1) Discover — find markets and detect tradable relations
 
 ```bash
-# List discovered relations
-coinjure market relations list --type same_event
-# Manually add a relation
-coinjure market relations add -m <market_id_a> -m <market_id_b> \
-  --spread-type implication --exchange polymarket
-# Remove a relation
-coinjure market relations remove <relation_id>
-````
+coinjure market discover -q "election" --exchange both --limit 20
+```
 
-### 3) Backtest
+Searches Polymarket and Kalshi, then auto-detects structural relations (exclusivity, complementary, implication) within each event. Discovered relations are persisted to `~/.coinjure/relations.json`.
 
-````bash
-# Backtest a specific relation
-coinjure engine backtest --relation <relation_id>
-# Backtest all active relations at once
+### 2) Backtest — validate strategies against historical data
+
+```bash
 coinjure engine backtest --all-relations
-# With LLM-powered trade sizing
-coinjure engine backtest --all-relations --llm-trade-sizing```
+```
 
-### 4) Paper trading
+Each relation type auto-selects its matching strategy (see table above). Only relations with positive PnL advance to the next stage.
 
-```bash
-# Run a single strategy
-coinjure engine paper-run --exchange polymarket \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --monitor
-
-# Batch-run all backtest-passed relations
-coinjure engine paper-run --exchange polymarket --all-relations --detach
-
-# Promote successful paper strategies to deployed
-coinjure engine promote --all```
-
-### 5) Live trading
+### 3) Paper trade — simulate live execution
 
 ```bash
-coinjure engine live-run --exchange polymarket \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+coinjure engine paper-run --all-relations --detach
+```
 
-# Batch deploy all promoted relations
-coinjure engine live-run --exchange kalshi --all-relations --detach \
-  --kalshi-api-key-id "$KALSHI_API_KEY_ID" \
-  --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
-````
+Deploys all backtest-passed strategies as independent background processes. Use `coinjure engine monitor` to attach a live TUI dashboard.
 
-### 6) Runtime control (separate terminal)
+### 4) Live trade — execute with real funds
 
 ```bash
-coinjure engine status  --id my-strategy-001
-coinjure engine pause   --id my-strategy-001
-coinjure engine resume  --id my-strategy-001
-coinjure engine stop    --id my-strategy-001
-coinjure engine swap    --id my-strategy-001 --strategy-ref new_module:NewStrategy
-coinjure engine retire  --id my-strategy-001 --reason "market_closed"
-coinjure engine killswitch --on   # emergency halt all
+coinjure engine live-run --exchange polymarket --all-relations --detach
+```
+
+Requires exchange credentials (see [Environment Variables](#environment-variables)).
+
+### 5) Monitor and control
+
+```bash
+coinjure engine monitor         # live TUI across all engines
+coinjure engine pause  --all    # pause all strategies
+coinjure engine resume --all    # resume
+coinjure engine killswitch --on # emergency halt
 ```
 
 ![Coinjure Monitor](assets/coinjure_monitor.png)
