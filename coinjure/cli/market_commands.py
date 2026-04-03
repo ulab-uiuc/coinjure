@@ -529,10 +529,10 @@ def relations_remove(relation_id: str) -> None:
 @click.option(
     '--auto-discover/--no-auto-discover',
     'auto_discover',
-    default=True,
+    default=False,
     show_default=True,
     help='Auto-detect and persist intra-event structural relations '
-    '(implication, exclusivity, complementary). Use --no-auto-discover to disable.',
+    '(implication, exclusivity, complementary). Off by default; use --auto-discover to enable.',
 )
 def market_discover(
     exchange: str,
