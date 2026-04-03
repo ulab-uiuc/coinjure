@@ -11,7 +11,21 @@ Use this skill when the user asks to run paper trading.
 
 - At least one backtest result is acceptable
 
-## Start
+## Step 1: Start the Market Data Hub
+
+The hub **must** be running before launching paper-trade engines. Without it, engines either fail to get order book data (stuck retrying hub connection) or each engine polls the API independently (wasteful and rate-limited).
+
+```bash
+# Check if hub is already running
+coinjure hub status --json
+
+# If not running, start it (detached)
+coinjure hub start --detach --json
+```
+
+Wait for hub to be ready before proceeding.
+
+## Step 2: Launch paper-trade engines
 
 ```bash
 coinjure engine paper-run \
@@ -22,6 +36,14 @@ coinjure engine paper-run \
 ```
 
 Add `--monitor` to open the TUI monitor.
+
+To batch-deploy all backtest-passed relations:
+
+```bash
+coinjure engine paper-run --all-relations --detach --json
+```
+
+Use `--no-hub` **only** for quick single-engine debugging when hub is unavailable.
 
 ## Runtime Controls
 
@@ -36,5 +58,6 @@ coinjure engine stop   --id <strategy_id> --json
 
 ## Hard Rules
 
+- **Always start hub before paper-trade engines** (unless explicitly using `--no-hub` for debugging).
 - On anomaly, `pause` first; then `resume` or `stop` after assessment.
 - Paper phase must not use live credentials.

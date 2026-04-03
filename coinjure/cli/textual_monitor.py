@@ -1101,6 +1101,55 @@ class SocketTradingMonitorApp(App[None]):
         # Also prune sockets that no longer exist
         self._socket_paths = [p for p in self._socket_paths if p.exists()]
 
+    def _clear_all_panels(self) -> None:
+        """Reset all panels to empty state when no engines are reachable."""
+        try:
+            self.query_one('#ctrl-bar', ControlBar).update_state(False, connected=False)
+        except Exception:
+            pass
+
+        empty_state: dict = {
+            'paused': False,
+            'data_paused': False,
+            'runtime': '—',
+            'portfolio': {
+                'total': 0.0,
+                'realized_pnl': 0.0,
+                'unrealized_pnl': 0.0,
+                'cash_positions': [],
+            },
+            'positions': [],
+            'orders': [],
+            'order_books': [],
+            'news': [],
+            'activity_log': [],
+            'stats': {
+                'event_count': 0,
+                'order_books': 0,
+                'news_buffered': 0,
+                'orders_total': 0,
+                'orders_filled': 0,
+                'decision_stats': {'decisions': 0, 'executed': 0},
+            },
+        }
+
+        try:
+            self.query_one('#portfolio', PortfolioPanel).refresh_from_state(empty_state)
+            self.query_one('#stats', StatsPanel).refresh_from_state(empty_state)
+            self.query_one('#decisions', DecisionsTable).clear()
+            self.query_one('#positions', PositionsPanel).clear()
+            self.query_one('#orders', OrdersPanel).clear()
+            self.query_one('#orderbooks', OrderBooksTable).clear()
+            # RichLog panels: clear content and reset dedup state
+            activity = self.query_one('#activity', ActivityLog)
+            activity.clear()
+            activity._seen_keys = set()
+            news = self.query_one('#news', NewsLog)
+            news.clear()
+            news._seen_titles = set()
+        except Exception as exc:
+            logger.debug('Clear panels error: %s', exc)
+
     async def _poll_state(self) -> None:
         """Fetch state from all engines in parallel and merge into one view."""
         import asyncio
@@ -1113,12 +1162,7 @@ class SocketTradingMonitorApp(App[None]):
             self.sub_title = (
                 '⚠  No engines reachable — start one with: coinjure engine paper-run'
             )
-            try:
-                self.query_one('#ctrl-bar', ControlBar).update_state(
-                    False, connected=False
-                )
-            except Exception:
-                pass
+            self._clear_all_panels()
             return
 
         results: list[dict | None] = await asyncio.gather(
@@ -1138,12 +1182,7 @@ class SocketTradingMonitorApp(App[None]):
             self.sub_title = (
                 '⚠  No engines reachable — start one with: coinjure engine paper-run'
             )
-            try:
-                self.query_one('#ctrl-bar', ControlBar).update_state(
-                    False, connected=False
-                )
-            except Exception:
-                pass
+            self._clear_all_panels()
             return
 
         self._connected = True

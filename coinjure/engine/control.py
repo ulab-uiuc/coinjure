@@ -466,7 +466,10 @@ async def send_command(
             f'Start an engine first with:  python scripts/run_paper_trading.py -e polymarket'
         )
     payload = {'cmd': cmd, **kwargs}
-    reader, writer = await asyncio.open_unix_connection(str(socket_path))
+    reader, writer = await asyncio.open_unix_connection(
+        str(socket_path),
+        limit=1024 * 1024,  # 1 MB to handle large get_state responses
+    )
     try:
         writer.write((json.dumps(payload) + '\n').encode())
         await writer.drain()
