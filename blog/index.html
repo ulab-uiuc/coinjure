@@ -153,6 +153,16 @@
         text-align: center;
         padding: 72px 0 40px;
       }
+      .hero-mascot {
+        position: absolute;
+        right: -170px;
+        top: 50%;
+        transform: translateY(-55%);
+        width: 150px;
+        height: auto;
+        filter: drop-shadow(0 4px 12px rgba(0,0,0,0.08));
+        pointer-events: none;
+      }
       .hero h1 {
         font-family: var(--serif);
         font-size: clamp(34px, 5.5vw, 52px);
@@ -799,6 +809,9 @@
         .nav-link {
           display: none;
         }
+        .hero-mascot {
+          display: none;
+        }
         .hero h1 {
           font-size: 32px;
         }
@@ -860,11 +873,14 @@
     <!-- HERO -->
     <div class="hero-wrap">
       <header class="hero">
-        <h1>
-          <span style="color: #d4a017">Coin</span
-          ><span style="color: #2c5f8a">jure</span>: An Agent-Native Trading<br />System
-          for Prediction Markets
-        </h1>
+        <div style="position: relative; display: inline-block;">
+          <h1>
+            <span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span>: An Agent-Native Trading<br />System
+            for Prediction Markets
+          </h1>
+          <img src="../assets/coinjure_mascot.png" alt="Coinjure mascot" class="hero-mascot" />
+        </div>
         <p class="hero-date">March 2026</p>
 
         <div class="hero-authors">
