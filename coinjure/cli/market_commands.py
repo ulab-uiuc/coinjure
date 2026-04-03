@@ -23,6 +23,55 @@ from coinjure.data.fetcher import (
 # ---------------------------------------------------------------------------
 
 
+def _box_table(
+    headers: list[str],
+    rows: list[list[str]],
+    alignments: list[str] | None = None,
+    indent: int = 2,
+) -> str:
+    """Render a table with Unicode box-drawing borders.
+
+    *alignments* is a list of ``'<'`` (left) or ``'>'`` (right) per column.
+    Defaults to left-aligned.
+    """
+    n_cols = len(headers)
+    if alignments is None:
+        alignments = ['<'] * n_cols
+
+    # Compute column widths (header vs data)
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            if i < n_cols:
+                widths[i] = max(widths[i], len(cell))
+
+    pad = ' ' * indent
+
+    def _sep(left: str, mid: str, right: str, fill: str = '─') -> str:
+        return pad + left + mid.join(fill * (w + 2) for w in widths) + right
+
+    def _row(cells: list[str]) -> str:
+        parts: list[str] = []
+        for i, cell in enumerate(cells):
+            w = widths[i]
+            if alignments[i] == '>':
+                parts.append(f' {cell:>{w}} ')
+            else:
+                parts.append(f' {cell:<{w}} ')
+        return pad + '│' + '│'.join(parts) + '│'
+
+    lines: list[str] = []
+    lines.append(_sep('┌', '┬', '┐'))
+    lines.append(_row(headers))
+    lines.append(_sep('├', '┼', '┤'))
+    for row in rows:
+        # Pad row to n_cols if short
+        padded = list(row) + [''] * (n_cols - len(row))
+        lines.append(_row(padded))
+    lines.append(_sep('└', '┴', '┘'))
+    return '\n'.join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Click group + commands
 # ---------------------------------------------------------------------------
@@ -83,12 +132,34 @@ def market_info(
                 )
             )
             return
-        click.echo(f'\n[polymarket] Event slug: {slug}')
+        click.echo(f'\n  Polymarket Event: {slug}  ({len(markets)} market(s))\n')
+        rows: list[list[str]] = []
         for m in markets:
-            click.echo(
-                f'  ID: {m["id"]}  Bid: {m.get("best_bid","")}  Ask: {m.get("best_ask","")}'
+            mid = m.get('id', '')
+            bid = m.get('best_bid', '')
+            ask = m.get('best_ask', '')
+            vol = m.get('volume', '')
+            q = m.get('question', '')[:48]
+            try:
+                bid_s = f'{float(bid):.3f}' if bid not in (None, '') else '—'
+            except (ValueError, TypeError):
+                bid_s = '—'
+            try:
+                ask_s = f'{float(ask):.3f}' if ask not in (None, '') else '—'
+            except (ValueError, TypeError):
+                ask_s = '—'
+            try:
+                vol_s = f'{float(str(vol).replace(",", "")):.0f}'
+            except (ValueError, TypeError):
+                vol_s = '—'
+            rows.append([mid, bid_s, ask_s, vol_s, q])
+        click.echo(
+            _box_table(
+                ['ID', 'Bid', 'Ask', 'Volume', 'Question'],
+                rows,
+                ['>', '>', '>', '>', '<'],
             )
-            click.echo(f'    {m.get("question","")[:80]}')
+        )
         click.echo()
         return
 
@@ -116,24 +187,75 @@ def market_info(
         return
 
     question = info.get('question') or info.get('title') or '?'
-    click.echo(f'\n[{exchange}] {question}')
-    click.echo(f'  ID: {market_id}')
-    for key in (
-        'best_bid',
-        'best_ask',
-        'yes_bid',
-        'yes_ask',
-        'volume',
-        'end_date',
-        'token_ids',
-        'event_id',
-    ):
-        val = info.get(key)
-        if val not in (None, '', []):
-            click.echo(f'  {key}: {val}')
-    desc = info.get('description', '')
+    mid = market_id or info.get('id') or info.get('ticker', '')
+    bid = info.get('best_bid') or info.get('yes_bid', '')
+    ask = info.get('best_ask') or info.get('yes_ask', '')
+    vol = info.get('volume', '')
+    end = info.get('end_date') or info.get('close_time', '')
+    event = info.get('event_id') or info.get('event_ticker', '')
+    status = info.get('status', '')
+    active = info.get('active')
+    closed = info.get('closed')
+    tokens = info.get('token_ids', [])
+
+    click.echo(f'\n  {question}\n')
+
+    # Key-value info table
+    kv_rows: list[list[str]] = [
+        ['Exchange', exchange],
+        ['Market ID', str(mid)],
+    ]
+    if event:
+        kv_rows.append(['Event ID', str(event)])
+    click.echo(_box_table(['Field', 'Value'], kv_rows))
+    click.echo()
+
+    # Price / volume table
+    try:
+        bid_s = f'{float(bid):.4f}' if bid not in (None, '') else '—'
+    except (ValueError, TypeError):
+        bid_s = '—'
+    try:
+        ask_s = f'{float(ask):.4f}' if ask not in (None, '') else '—'
+    except (ValueError, TypeError):
+        ask_s = '—'
+    try:
+        vol_s = (
+            f'{float(str(vol).replace(",", "")):,.0f}' if vol not in (None, '') else '—'
+        )
+    except (ValueError, TypeError):
+        vol_s = '—'
+    click.echo(
+        _box_table(
+            ['Bid', 'Ask', 'Volume'],
+            [[bid_s, ask_s, vol_s]],
+            ['>', '>', '>'],
+        )
+    )
+    click.echo()
+
+    # Status details table
+    detail_rows: list[list[str]] = []
+    if end:
+        detail_rows.append(['End Date', str(end)])
+    if status:
+        detail_rows.append(['Status', str(status)])
+    if active is not None:
+        detail_rows.append(['Active', str(active)])
+    if closed is not None:
+        detail_rows.append(['Closed', str(closed)])
+    if tokens:
+        detail_rows.append(['Token IDs', ', '.join(str(t) for t in tokens)])
+    if detail_rows:
+        click.echo(_box_table(['Field', 'Value'], detail_rows))
+
+    desc = info.get('description') or info.get('rules_primary', '')
     if desc:
-        click.echo(f'  description: {desc[:200]}{"..." if len(desc) > 200 else ""}')
+        click.echo(f'\n  Description:')
+        for i in range(0, min(len(desc), 300), 76):
+            click.echo(f'    {desc[i:i + 76]}')
+        if len(desc) > 300:
+            click.echo('    ...')
     click.echo()
 
 
@@ -255,11 +377,16 @@ def relations_add(
         )
         return
 
-    click.echo(f'\nRelation created: {rid} ({len(infos)} markets)')
-    for i, info in enumerate(infos):
-        q = info.get('question', '')[:60]
-        click.echo(f'  [{i}] [{info.get("platform")}] {q}')
-    click.echo(f'  type={spread_type} hypothesis={hypothesis}')
+    click.echo(f'\n  Relation created: {rid}')
+    click.echo(f'  Type: {spread_type}  |  Markets: {len(infos)}')
+    if hypothesis:
+        click.echo(f'  Hypothesis: {hypothesis}')
+    click.echo()
+    rows = [
+        [str(i), info.get('platform', '?'), info.get('question', '')[:50]]
+        for i, info in enumerate(infos)
+    ]
+    click.echo(_box_table(['#', 'Platform', 'Question'], rows, ['>', '<', '<']))
     click.echo()
 
 
@@ -299,16 +426,43 @@ def relations_list(
         click.echo('No relations found.')
         return
 
-    click.echo(f'\n{len(relations)} market relation(s):\n')
-    for r in relations:
-        click.echo(
-            f'  [{r.relation_id}] {r.spread_type}  conf={r.confidence:.2f}  '
-            f'status={r.status}  markets={len(r.markets)}'
+    click.echo(f'\n  {len(relations)} market relation(s)')
+    filters = []
+    if spread_type:
+        filters.append(f'type={spread_type}')
+    if status:
+        filters.append(f'status={status}')
+    if filters:
+        click.echo(f'  Filters: {", ".join(filters)}')
+    click.echo()
+
+    # Summary table
+    summary_rows = [
+        [
+            r.relation_id,
+            r.spread_type,
+            r.status,
+            f'{r.confidence:.2f}',
+            str(len(r.markets)),
+        ]
+        for r in relations
+    ]
+    click.echo(
+        _box_table(
+            ['Relation ID', 'Type', 'Status', 'Conf', 'Mkts'],
+            summary_rows,
+            ['<', '<', '<', '>', '>'],
         )
+    )
+    click.echo()
+
+    # Detail section
+    for r in relations:
+        click.echo(f'  {r.relation_id}')
         for i, m in enumerate(r.markets):
-            click.echo(
-                f'    [{i}] [{m.get("platform", "?")}] {m.get("question", "?")[:60]}'
-            )
+            plat = m.get('platform', '?')
+            q = m.get('question', '?')[:60]
+            click.echo(f'    [{i}] {plat:<12} {q}')
         if r.hypothesis:
             click.echo(f'    Hypothesis: {r.hypothesis}')
         click.echo()
@@ -617,33 +771,34 @@ def market_discover(
     ) -> None:
         if not markets:
             return
-        click.echo(f'  [{platform}] {len(markets)} markets')
-        click.echo(f'  {"ID":>12}  {"Bid":>6}  {"Ask":>6}  {"Volume":>12}  Question')
-        click.echo(f'  {"─"*12}  {"─"*6}  {"─"*6}  {"─"*12}  {"─"*50}')
+        click.echo(f'  [{platform}] {len(markets)} markets\n')
+        rows: list[list[str]] = []
         for m in markets:
             mid = m.get('id') or m.get('ticker', '')
             bid = m.get('best_bid') or m.get('yes_bid', '')
             ask = m.get('best_ask') or m.get('yes_ask', '')
             vol = m.get('volume', 0)
-            q = m.get('question') or m.get('title', '')
+            q = (m.get('question') or m.get('title', ''))[:50]
             try:
-                bid_s = f'{float(bid):6.3f}' if bid not in (None, '') else '     —'
+                bid_s = f'{float(bid):.3f}' if bid not in (None, '') else '—'
             except (ValueError, TypeError):
-                bid_s = '     —'
+                bid_s = '—'
             try:
-                ask_s = f'{float(ask):6.3f}' if ask not in (None, '') else '     —'
+                ask_s = f'{float(ask):.3f}' if ask not in (None, '') else '—'
             except (ValueError, TypeError):
-                ask_s = '     —'
+                ask_s = '—'
             try:
-                vol_s = f'{float(str(vol).replace(",", "")):12.0f}'
+                vol_s = f'{float(str(vol).replace(",", "")):.0f}'
             except (ValueError, TypeError):
-                vol_s = '           0'
-            click.echo(f'  {mid:>12}  {bid_s}  {ask_s}  {vol_s}  {q[:55]}')
-            if with_rules:
-                desc = m.get('description') or m.get('rules_primary', '')
-                if desc:
-                    # Show first 120 chars of rules
-                    click.echo(f'  {"":>12}  Rules: {desc[:120]}...')
+                vol_s = '0'
+            rows.append([mid, bid_s, ask_s, vol_s, q])
+        click.echo(
+            _box_table(
+                ['ID', 'Bid', 'Ask', 'Volume', 'Question'],
+                rows,
+                ['>', '>', '>', '>', '<'],
+            )
+        )
         click.echo()
 
     _fmt_table(poly_out, 'Polymarket')
@@ -708,7 +863,6 @@ def market_news(
         fetch_google_news,
         fetch_rss,
         fetch_thenewsapi,
-        format_article,
     )
 
     token = api_token or os.environ.get('THENEWSAPI_TOKEN', '')
@@ -739,8 +893,34 @@ def market_news(
         click.echo('No articles found.')
         return
 
-    click.echo(f'Fetched {len(articles)} article(s) from {source}:\n')
+    click.echo(f'\n  {len(articles)} article(s) from {source}')
+    if query:
+        click.echo(f'  Query: "{query}"')
+    click.echo()
+    rows: list[list[str]] = []
     for i, article in enumerate(articles, 1):
-        click.echo(f'[{i}]')
-        click.echo(format_article(article))
-        click.echo()
+        title = article.get('title', '(no title)')[:50]
+        src = article.get('source', '—')[:16]
+        pub = article.get('published_at', '')[:19] or '—'
+        rows.append([str(i), pub, src, title])
+    click.echo(
+        _box_table(
+            ['#', 'Published', 'Source', 'Title'],
+            rows,
+            ['>', '<', '<', '<'],
+        )
+    )
+    click.echo()
+    # Detail section
+    for i, article in enumerate(articles, 1):
+        url = article.get('url', '')
+        desc = article.get('description', '')
+        if url or desc:
+            title = article.get('title', '(no title)')
+            click.echo(f'  [{i}] {title}')
+            if desc:
+                snippet = desc[:160] + ('...' if len(desc) > 160 else '')
+                click.echo(f'      {snippet}')
+            if url:
+                click.echo(f'      {url}')
+            click.echo()

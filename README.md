@@ -10,79 +10,59 @@
   <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
 </p>
 
-Coinjure is an agent-native trading stack for prediction markets.
+**Coinjure** is a full-stack, CLI-native trading framework designed for LLM agents in prediction markets. It empowers agents to drive the entire strategy lifecycle purely by interacting with a command-line interface. By simply issuing CLI commands, an agent can autonomously discover cross-market relations, compile executable strategies, run large-scale backtests, and deploy to live execution.
 
-The goal is simple: give an autonomous agent everything it needs to discover, test, and run strategies end-to-end — including managing a portfolio of ~50 parallel spread/arb strategies across Polymarket and Kalshi — while the human operator only does two things:
+Using Coinjure, agents like Claude Code or Codex can discover over 100 backtest-positive strategies in a single hour — a capability validated by deploying to live trading and generating real profit on prediction market exchanges.
 
-1. Monitor the system.
-2. Pause or emergency-stop when needed.
+## Why Agent-Native
 
-## 1-Minute Start
+Trading is entering an AI-native era. Prediction markets are fundamentally semantic and event-driven — success depends on interpreting political shifts, breaking news, and evolving public narratives. These are domains where LLM agents uniquely excel.
 
-```bash
-coinjure engine run --exchange polymarket \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --mode paper --monitor
+Most trading platforms today are built around visual dashboards. For an AI agent, however, a CLI is the natural environment. Coinjure is architected for agent-first access:
+
+- **Strategy is the primary interface.** Every exploitable opportunity stems from a _relation_ between markets, and every relation type maps 1-to-1 to a _strategy_ that trades it.
+- **The engine owns execution.** Risk checks, lifecycle management, and process isolation are handled automatically.
+- **Data, simulation, monitoring, and live controls are unified behind CLI commands** — letting agents iterate quickly, safely, and reproducibly.
+
+## System Overview
+
+The pipeline has four stages:
+
 ```
-
-![Coinjure Monitor](assets/coinjure_monitor.png)
-
-## Why Agent-First
-
-AI agents are now strong enough to self-discover alpha from messy, fast-moving market and news streams. The practical question is no longer "can an agent reason about trades," but:
-
-Can we build the tools, infrastructure, and environment that let an agent operate like a disciplined human trader, but through command-line APIs that are easy for agents to use?
-
-Coinjure is our answer:
-
-- Strategy is the primary interface.
-- The engine owns execution, risk checks, and lifecycle.
-- Data, simulation, monitoring, and live controls are unified behind CLI commands.
-
-This lets agents iterate quickly, safely, and reproducibly without rebuilding trading plumbing for every strategy or exchange.
-
-## System Structure
+LLM Agent + market data
+    → [1. Discovery]  — discover cross-market relations via CLI
+    → [2. Backtest]   — validate each relation against historical data
+    → [3. Execution]  — paper-trade or live-trade validated strategies
+    → [4. Monitoring]  — human operator monitors and intervenes when needed
+```
 
 Core runtime components:
 
-- `DataSource`: live market/news or historical replay.
-- `Strategy`: async decision logic (`process_event`).
-- `Trader`: execution adapter (`PaperTrader`, `PolymarketTrader`, `KalshiTrader`).
-- `RiskManager`: pre-trade constraints and safety checks.
-- `PositionManager`: positions, realized/unrealized PnL.
-- `TradingEngine`: event loop, orchestration, monitoring state.
-- `ControlServer`: pause/resume/status/stop via Unix socket.
-- `Monitor UI`: human visibility and emergency controls.
-- `StrategyRegistry`: persistent portfolio registry (`~/.coinjure/portfolio.json`).
-- `RelationStore`: persistent market relation graph (`~/.coinjure/relations.json`).
-
-```text
-Agent (Claude)
-     | bash calls (--json)
-     v
-CLI Layer (4 groups)
-  coinjure market    — discover, analyze, relations, news
-  coinjure strategy  — validate, backtest, batch, pipeline, gate
-  coinjure engine    — run, list, add, deploy, allocate, report, retire
-  coinjure memory    — add, list, best, summary
-     | reads/writes ~/.coinjure/
-     | spawns subprocesses
-     v
-[strategy-001]   [strategy-002]  ...  [strategy-050]
-engine run       engine run            engine run
-(paper process)  (paper process)       (live process)
-sock: 001.sock   sock: 002.sock        sock: 050.sock
-
-Each strategy process:
-TradingEngine
-  |- DataSource (market/news/backtest)
-  |- Strategy (agent logic)
-  |- Trader (paper/live exchange adapter)
-  |  |- RiskManager
-  |  |- PositionManager
-  |- ControlServer (per-strategy socket)
-  |- Monitor UI (operator)
 ```
+TradingEngine
+  ├── DataSource          (Live / Historical / Hub)
+  ├── Strategy            (Relation-based / LLM-powered / Custom)
+  └── Trader              (PaperTrader / PolymarketTrader / KalshiTrader)
+       ├── RiskManager    (Standard / Conservative / Aggressive)
+       └── PositionManager
+```
+
+Each engine instance runs as an independent OS process, allowing hundreds of strategies to execute in parallel without shared-state contention. A `ControlServer` (Unix socket) provides per-instance pause/resume/status/stop, while the `StrategyRegistry` persists portfolio state across sessions.
+
+## Relation-Strategy Mapping
+
+The LLM agent reads free-text market descriptions to discover relations; Coinjure automatically instantiates the corresponding strategy. Discovering a new relation immediately yields a ready-to-backtest strategy with no additional code.
+
+| Relation          | Constraint                        | Strategy                 |
+| ----------------- | --------------------------------- | ------------------------ |
+| **same_event**    | Identical market across platforms | `DirectArbStrategy`      |
+| **complementary** | Outcomes sum to 1                 | `GroupArbStrategy`       |
+| **implication**   | A ⇒ B price ordering              | `ImplicationArbStrategy` |
+| **exclusivity**   | Mutually exclusive                | `GroupArbStrategy`       |
+| **correlated**    | Cointegrated prices               | `CointSpreadStrategy`    |
+| **structural**    | Monotonic price nesting           | `StructuralArbStrategy`  |
+| **conditional**   | Conditional probability bounds    | `ConditionalArbStrategy` |
+| **temporal**      | Lead-lag information flow         | `LeadLagStrategy`        |
 
 ## Installation
 
@@ -101,126 +81,127 @@ poetry install
 
 ## Quick Start
 
-### 1) Explore markets
+### 1) Discover markets and relations
 
 ```bash
-coinjure market discover -q "election" --exchange both --limit 20 --json
-coinjure market analyze --exchange polymarket --market-id <market_id> --json
-coinjure market news --source google --query "prediction market" --limit 10
+# Search markets across both exchanges
+coinjure market discover -q "election" -q "Trump" --exchange both --limit 50 --json
+
+# Auto-discovers intra-event relations (implication, exclusivity, complementary)
+# and persists them to ~/.coinjure/relations.json
+
+# Fetch detailed info for a specific market
+coinjure market info --exchange polymarket --market-id <market_id> --json
+
+# Or by Polymarket event slug
+coinjure market info --slug fed-decision-in-april --json
+
+# Fetch news for context
+coinjure market news --source google --query "prediction market" --limit 10 --json
 ```
 
-### 2) Validate a strategy
+### 2) Manage relations
 
 ```bash
-coinjure strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+# List discovered relations
+coinjure market relations list --type same_event --json
 
-# Dry-run smoke check before backtest
-coinjure strategy validate \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --strategy-kwargs-json '{"trade_size": "25"}' \
-  --dry-run --events 10 --json
+# Manually add a relation
+coinjure market relations add -m <market_id_a> -m <market_id_b> \
+  --spread-type implication --exchange polymarket --json
+
+# Remove a relation
+coinjure market relations remove <relation_id>
 ```
 
 ### 3) Backtest
 
 ```bash
-coinjure strategy backtest \
-  --history-file ./data/events.jsonl \
-  --market-id M1 --event-id E1 \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy --json
+# Backtest a specific relation
+coinjure engine backtest --relation <relation_id> --json
+
+# Backtest all active relations at once
+coinjure engine backtest --all-relations --json
+
+# With LLM-powered trade sizing
+coinjure engine backtest --all-relations --llm-trade-sizing --json
 ```
 
 ### 4) Paper trading
 
 ```bash
-coinjure engine run \
-  --exchange polymarket --mode paper \
+# Run a single strategy
+coinjure engine paper-run --exchange polymarket \
   --strategy-ref ./strategies/my_strategy.py:MyStrategy \
-  --strategy-kwargs-json '{"trade_size": "25"}' \
   --monitor
+
+# Batch-run all backtest-passed relations
+coinjure engine paper-run --exchange polymarket --all-relations --detach
+
+# Promote successful paper strategies to deployed
+coinjure engine promote --all --json
 ```
 
-### 5) Runtime control (separate terminal)
+### 5) Live trading
 
 ```bash
-coinjure engine status --id my-strategy-001
-coinjure engine pause  --id my-strategy-001
-coinjure engine resume --id my-strategy-001
-coinjure engine stop   --id my-strategy-001
+coinjure engine live-run --exchange polymarket \
+  --strategy-ref ./strategies/my_strategy.py:MyStrategy \
+  --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+
+# Batch deploy all promoted relations
+coinjure engine live-run --exchange kalshi --all-relations --detach \
+  --kalshi-api-key-id "$KALSHI_API_KEY_ID" \
+  --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
 ```
 
-## Spread Trading System
-
-Coinjure includes a spread trading system that discovers, validates, and manages cross-market spread/arbitrage opportunities:
-
-1. **Market Discovery** (`market discover`) — multi-keyword search + structural pair detection (temporal implication, cross-platform match, complementary outcomes).
-2. **Quantitative Analysis** (`market analyze`) — single-market stats or pair analysis (correlation, cointegration, hedge ratio, half-life).
-3. **Relation Management** (`market relations`) — persistent graph of discovered pairs with lifecycle (active → validated → deployed → retired).
-4. **Live Maintenance** (`engine report --check-health`) — agent checks status and takes action via pause/retire.
-
-### Discover spread opportunities
+### 6) Runtime control (separate terminal)
 
 ```bash
-# Search markets and find structural spread pairs
-coinjure market discover -q "election" -q "Trump" --exchange both --limit 50 --json
-# -> persists discovered pairs to ~/.coinjure/relations.json
-
-# Quantitative analysis of a single market
-coinjure market analyze --exchange polymarket --market-id <id> --json
-
-# Pair analysis (correlation, cointegration, spread stats)
-coinjure market analyze --exchange polymarket --market-id <id_a> --compare <id_b> --json
+coinjure engine status  --id my-strategy-001
+coinjure engine pause   --id my-strategy-001
+coinjure engine resume  --id my-strategy-001
+coinjure engine stop    --id my-strategy-001
+coinjure engine swap    --id my-strategy-001 --strategy-ref new_module:NewStrategy
+coinjure engine retire  --id my-strategy-001 --reason "market_closed"
+coinjure engine killswitch --on   # emergency halt all
 ```
 
-### Manage discovered relations
+![Coinjure Monitor](assets/coinjure_monitor.png)
+
+## Custom Strategy
+
+```python
+from coinjure.strategy.strategy import Strategy
+from coinjure.events import Event
+from coinjure.trading.trader import Trader
+
+class MyStrategy(Strategy):
+    async def process_event(self, event: Event, trader: Trader) -> None:
+        # Your logic here
+        pass
+```
+
+## Market Data Hub
+
+For running many strategies against the same markets, the hub polls exchanges once and fans out data to all subscribers via Unix sockets:
 
 ```bash
-coinjure market relations list --type same_event --json
-coinjure market relations add --market-id-a <id_a> --market-id-b <id_b> --spread-type implication --json
-coinjure market relations remove <relation_id>
+coinjure hub start --detach
+coinjure hub status
+coinjure hub stop
 ```
 
-### Capital allocation
-
-```bash
-# Capital allocation across strategies
-coinjure engine allocate --method kelly --max-exposure 10000 --json
-```
-
-## Portfolio Management
-
-Manage ~50 parallel strategy instances through a single registry:
-
-```bash
-# Register a new strategy
-coinjure engine add \
-  --strategy-id arb-nba-001 \
-  --strategy-ref coinjure/strategy/builtin/direct_arb_strategy.py:DirectArbStrategy \
-  --kwargs-json '{"poly_market_id": "xxx", "kalshi_ticker": "NBANBA-GSW"}' --json
-
-# Deploy to paper trading
-# Portfolio report with health diagnostics
-coinjure engine report --check-health --json
-
-# Retire a stale strategy
-coinjure engine retire --id arb-nba-001 --reason "market_closed" --json
-
-# View all strategies
-coinjure engine list --json
-
-# Bulk operations
-coinjure engine pause --all --json
-coinjure engine stop --all --json
-coinjure engine retire --all --reason "end_of_season" --json
-```
+Engine instances auto-connect to the hub when it's running (disable with `--no-hub`).
 
 ## Human-in-the-Loop Model
 
 The operator is intentionally lightweight:
 
-- Use `coinjure engine monitor` for live visibility.
+- Use `coinjure engine monitor` for live TUI visibility across all running engines.
 - Use `coinjure engine pause|resume|stop` for intervention.
 - Use `coinjure engine killswitch --on` for emergency halt.
+- Use `coinjure engine swap` for hot-swapping strategy logic without restarting.
 
 The operator should not need to manually place/cancel orders in normal operation.
 
@@ -228,74 +209,47 @@ The operator should not need to manually place/cancel orders in normal operation
 
 ### `coinjure market` — Market discovery and analysis
 
-| Command                      | Description                                                        |
-| ---------------------------- | ------------------------------------------------------------------ |
-| `market analyze`             | Quantitative analysis of a market or pair of markets               |
-| `market discover`            | Multi-keyword search + structural spread pair discovery            |
-| `market news`                | Fetch news headlines                                               |
-| `market relations list`      | List stored market relations                                       |
-| `market relations add`       | Create a relation between two markets                              |
-| `market relations remove`    | Remove a relation                                                  |
+| Command                   | Description                                               |
+| ------------------------- | --------------------------------------------------------- |
+| `market info`             | Fetch detailed info for a market (by ID or slug)          |
+| `market discover`         | Multi-keyword search + auto structural relation discovery |
+| `market news`             | Fetch news headlines (Google, RSS, TheNewsAPI)            |
+| `market relations list`   | List stored market relations (filter by type/status)      |
+| `market relations add`    | Create a relation between 2+ markets                      |
+| `market relations remove` | Remove a relation by ID                                   |
 
-### `coinjure strategy` — Strategy development and testing
+### `coinjure engine` — Trading engine and portfolio management
 
-| Command             | Description                                  |
-| ------------------- | -------------------------------------------- |
-| `strategy validate` | Import-check and optionally feed mock events |
-| `strategy backtest` | Run a backtest against a local history file  |
+| Command             | Description                                                      |
+| ------------------- | ---------------------------------------------------------------- |
+| `engine paper-run`  | Start paper trading (single strategy or `--all-relations` batch) |
+| `engine live-run`   | Start live trading with real funds                               |
+| `engine backtest`   | Backtest relations against historical order book data            |
+| `engine list`       | Show all strategies in the portfolio registry                    |
+| `engine status`     | Show engine status: positions, PnL, decisions, trades            |
+| `engine pause`      | Pause decision-making (`--all` for all instances)                |
+| `engine resume`     | Resume after pause                                               |
+| `engine stop`       | Graceful shutdown (`--all` for all instances)                    |
+| `engine swap`       | Hot-swap strategy without restarting                             |
+| `engine retire`     | Stop and mark as retired (`--all` for all instances)             |
+| `engine promote`    | Promote relation(s) from paper to deployed                       |
+| `engine monitor`    | Attach live TUI dashboard to running engines                     |
+| `engine killswitch` | Toggle the global emergency kill-switch                          |
 
-### `coinjure engine` — Running instances and portfolio management
-
-| Command             | Description                                                        |
-| ------------------- | ------------------------------------------------------------------ |
-| `engine run`        | Start trading (`--mode paper\|live`)                               |
-| `engine list`       | Show all strategies with lifecycle and PnL                         |
-| `engine add`        | Register a new strategy                                            |
-| `engine status`     | Show engine status (`--full` for positions, PnL, order books)      |
-| `engine pause`      | Pause event ingestion (`--all` for all instances)                  |
-| `engine resume`     | Resume after pause                                                 |
-| `engine stop`       | Graceful shutdown (`--all` for all instances)                      |
-| `engine swap`       | Hot-swap strategy without restarting                               |
-| `engine retire`     | Stop and mark as retired (`--all` for all instances)               |
-| `engine report`     | Portfolio PnL report (`--check-health` for diagnostics)            |
-| `engine feedback`   | Record feedback on a strategy                                      |
-| `engine monitor`    | Attach Textual TUI to a running engine                             |
-| `engine killswitch` | Toggle the global kill-switch                                      |
-| `engine allocate`   | Capital allocation across strategies                               |
 ### `coinjure hub` — Shared Market Data Hub
 
-| Command      | Description                                |
-| ------------ | ------------------------------------------ |
-| `hub start`  | Start the shared Market Data Hub           |
-| `hub status` | Show hub status                            |
-| `hub stop`   | Stop the hub                               |
-
-### `coinjure memory` — Experiment memory
-
-| Command          | Description                              |
-| ---------------- | ---------------------------------------- |
-| `memory add`     | Persist run results to experiment memory |
-| `memory list`    | Query experiment memory                  |
-| `memory best`    | Show best runs                           |
-| `memory summary` | Summarize experiment history             |
-
-### `coinjure research` — Research tooling
-
-| Command                    | Description                         |
-| -------------------------- | ----------------------------------- |
-| `research strategy-gate`   | Promotion gate with thresholds      |
-| `research alpha-pipeline`  | Full alpha discovery pipeline       |
-| `research batch-markets`   | Run strategy across N markets       |
-| `research harvest`         | Harvest results from completed runs |
-| `research feedback-report` | Generate feedback report            |
-| `research market-snapshot` | Snapshot market state               |
+| Command      | Description                            |
+| ------------ | -------------------------------------- |
+| `hub start`  | Start the exchange data fan-out server |
+| `hub status` | Show hub status and subscriber count   |
+| `hub stop`   | Stop the hub                           |
 
 ## Environment Variables
 
 ```bash
-export POLYMARKET_PRIVATE_KEY="your_private_key"
-export KALSHI_API_KEY_ID="your_kalshi_key_id"
-export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"
+export POLYMARKET_PRIVATE_KEY="your_private_key"      # Polymarket live trading
+export KALSHI_API_KEY_ID="your_kalshi_key_id"         # Kalshi live trading
+export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"        # Kalshi live trading
 ```
 
 ## Development
@@ -304,8 +258,21 @@ export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"
 poetry install --with dev,test
 pre-commit install
 ruff check . && ruff format .
-mypy coinjure/
-pytest tests/ -v
+pytest tests/ -v -p no:nbmake
+```
+
+## Citation
+
+If you find Coinjure useful in your research or work, please cite:
+
+```bibtex
+@software{coinjure2026,
+  title   = {Coinjure: An Agent-Native Trading System for Prediction Markets},
+  author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
+  year    = {2026},
+  url     = {https://github.com/ulab-uiuc/prediction-market-cli},
+  note    = {University of Illinois Urbana-Champaign}
+}
 ```
 
 ## License

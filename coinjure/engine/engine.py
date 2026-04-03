@@ -415,11 +415,13 @@ class TradingEngine:
             # Got a real event — reset the silence counter.
             consecutive_none = 0
 
-            # [P1] Before processing a NewsEvent (slow, LLM call), drain all
-            # pending OrderBookEvents so market data is up-to-date. This
-            # prevents the scenario where order books stay empty for minutes
-            # while the engine processes a burst of news events one by one.
-            # Only in continuous (live) mode — backtesting preserves event order.
+            # [P1] Before processing a NewsEvent, drain all pending market
+            # data events so order books are up-to-date.  This prevents the
+            # scenario where order books stay empty while the engine
+            # processes a burst of news events one by one — especially
+            # important when using the Market Data Hub, where order book
+            # events arrive on a 5-second refresh cycle while RSS news
+            # streams continuously.
             if self._continuous and isinstance(event, NewsEvent):
                 drained = 0
                 while True:

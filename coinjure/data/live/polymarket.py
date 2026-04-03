@@ -594,7 +594,7 @@ class LivePolyMarketDataSource(DataSource):
             # --- Priority tokens: fetch first, separately ---
             # Sort by least-recently-refreshed so all tokens get attention
             # over multiple cycles.  Cap batch size to avoid API rate limits.
-            _PRIORITY_BATCH_SIZE = 20
+            _PRIORITY_BATCH_SIZE = 50
             all_priority: list[tuple[str, PolyMarketTicker]] = []
             for tid in list(self._priority_tokens):
                 ticker = self._known_tickers.get(tid)

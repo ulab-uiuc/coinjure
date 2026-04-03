@@ -104,14 +104,14 @@ def hub_start(
         event_cache_file='events_cache.jsonl',
         polling_interval=poly_interval,
         orderbook_refresh_interval=5.0,
-        reprocess_on_start=False,
+        reprocess_on_start=True,
     )
     kalshi = LiveKalshiDataSource(
         api_key_id=kalshi_api_key_id,
         private_key_path=kalshi_private_key_path,
         event_cache_file='kalshi_events_cache.jsonl',
         polling_interval=kalshi_interval,
-        reprocess_on_start=False,
+        reprocess_on_start=True,
     )
     source = CompositeDataSource([poly, kalshi])
     hub_obj = MarketDataHub(socket_path=socket, source=source)

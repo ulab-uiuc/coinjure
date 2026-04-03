@@ -81,9 +81,10 @@ class TestFanLoopFiltering:
         hub._fan_one(event)
         assert q.empty()
 
-    def test_subscriber_with_empty_filter_receives_nothing(
+    def test_subscriber_with_empty_filter_receives_all(
         self, hub: MarketDataHub
     ) -> None:
+        """Empty filter set means 'no restriction' — subscriber gets all events."""
         q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
         sub_id = 0
         hub._subscribers[sub_id] = q
@@ -97,7 +98,7 @@ class TestFanLoopFiltering:
             side='bid',
         )
         hub._fan_one(event)
-        assert q.empty()
+        assert not q.empty()
 
     def test_kalshi_ticker_filtered_by_symbol(self, hub: MarketDataHub) -> None:
         q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
