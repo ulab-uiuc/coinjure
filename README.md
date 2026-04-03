@@ -83,49 +83,40 @@ poetry install
 
 ### 1) Discover markets and relations
 
-```bash
+````bash
 # Search markets across both exchanges
-coinjure market discover -q "election" -q "Trump" --exchange both --limit 50 --json
-
+coinjure market discover -q "election" -q "Trump" --exchange both --limit 50
 # Auto-discovers intra-event relations (implication, exclusivity, complementary)
 # and persists them to ~/.coinjure/relations.json
 
 # Fetch detailed info for a specific market
-coinjure market info --exchange polymarket --market-id <market_id> --json
-
+coinjure market info --exchange polymarket --market-id <market_id>
 # Or by Polymarket event slug
-coinjure market info --slug fed-decision-in-april --json
-
+coinjure market info --slug fed-decision-in-april
 # Fetch news for context
-coinjure market news --source google --query "prediction market" --limit 10 --json
-```
+coinjure market news --source google --query "prediction market" --limit 10```
 
 ### 2) Manage relations
 
 ```bash
 # List discovered relations
-coinjure market relations list --type same_event --json
-
+coinjure market relations list --type same_event
 # Manually add a relation
 coinjure market relations add -m <market_id_a> -m <market_id_b> \
-  --spread-type implication --exchange polymarket --json
-
+  --spread-type implication --exchange polymarket
 # Remove a relation
 coinjure market relations remove <relation_id>
-```
+````
 
 ### 3) Backtest
 
-```bash
+````bash
 # Backtest a specific relation
-coinjure engine backtest --relation <relation_id> --json
-
+coinjure engine backtest --relation <relation_id>
 # Backtest all active relations at once
-coinjure engine backtest --all-relations --json
-
+coinjure engine backtest --all-relations
 # With LLM-powered trade sizing
-coinjure engine backtest --all-relations --llm-trade-sizing --json
-```
+coinjure engine backtest --all-relations --llm-trade-sizing```
 
 ### 4) Paper trading
 
@@ -139,8 +130,7 @@ coinjure engine paper-run --exchange polymarket \
 coinjure engine paper-run --exchange polymarket --all-relations --detach
 
 # Promote successful paper strategies to deployed
-coinjure engine promote --all --json
-```
+coinjure engine promote --all```
 
 ### 5) Live trading
 
@@ -153,7 +143,7 @@ coinjure engine live-run --exchange polymarket \
 coinjure engine live-run --exchange kalshi --all-relations --detach \
   --kalshi-api-key-id "$KALSHI_API_KEY_ID" \
   --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
-```
+````
 
 ### 6) Runtime control (separate terminal)
 
