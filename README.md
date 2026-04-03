@@ -8,6 +8,10 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="https://pypi.org/project/coinjure/"><img src="https://img.shields.io/pypi/v/coinjure.svg" alt="PyPI version"></a>
   <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <a href="https://join.slack.com/t/coinjure/shared_invite/zt-3uji79vht-thjQnb4LJtLrN13pifTIuw"><img src="https://img.shields.io/badge/Slack-Join%20Us-purple?logo=slack" alt="Slack"></a>
+  <a href="assets/coinjure_wechat_link.jpg"><img src="https://img.shields.io/badge/WeChat-Join%20Us-green?logo=wechat" alt="WeChat"></a>
+  <a href="https://ulab-uiuc.github.io/prediction-market-cli/"><img src="https://img.shields.io/badge/Blog-Read-orange" alt="Blog"></a>
+  <a href="https://ulab-uiuc.github.io/prediction-market-cli/docs/index.html"><img src="https://img.shields.io/badge/Docs-Read-blue" alt="Docs"></a>
 </p>
 
 **Coinjure** is a full-stack, CLI-native trading framework designed for LLM agents in prediction markets. It empowers agents to drive the entire strategy lifecycle purely by interacting with a command-line interface. By simply issuing CLI commands, an agent can autonomously discover cross-market relations, compile executable strategies, run large-scale backtests, and deploy to live execution.
