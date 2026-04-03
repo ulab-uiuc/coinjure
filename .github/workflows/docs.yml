@@ -27,9 +27,16 @@ jobs:
           # Build MkDocs docs into site/docs/
           mkdocs build --site-dir site/docs
 
-          # Copy blog to site root (index + images)
-          cp blog/index.html site/index.html
-          cp blog/*.png site/ 2>/dev/null || true
+          # Copy blog into site/blog/ (preserves local dev paths)
+          mkdir -p site/blog
+          cp blog/index.html site/blog/index.html
+          cp blog/*.png site/blog/ 2>/dev/null || true
+
+          # Redirect site root to blog
+          echo '<meta http-equiv="refresh" content="0;url=blog/index.html">' > site/index.html
+
+          # Copy assets so ../assets/ resolves from blog/
+          cp -r assets site/assets 2>/dev/null || true
 
           # Add .nojekyll to prevent GitHub Pages from ignoring _files
           touch site/.nojekyll
