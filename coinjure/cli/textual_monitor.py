@@ -851,6 +851,12 @@ class TradingMonitorApp(App[None]):
             logger.error('Engine worker error: %s', exc, exc_info=True)
             self.notify(f'Engine error: {exc}', severity='error', timeout=10)
         finally:
+            # Stop the engine first (data source cleanup, state save, alerter).
+            # Must run even when the worker is cancelled (E-Stop / quit).
+            try:
+                await self.engine.stop()
+            except Exception:
+                self.engine.request_stop()
             if self.control_server is not None:
                 await self.control_server.stop()
 
@@ -900,7 +906,8 @@ class TradingMonitorApp(App[None]):
             else:
                 self._stop_armed = False
                 self.notify('⏹  Stopping engine…', severity='error', timeout=5)
-                self.exit()  # worker cancels → engine.stop() called in finally
+                self.engine.request_stop()
+                self.exit()
 
     def _disarm_stop(self) -> None:
         self._stop_armed = False
@@ -955,6 +962,7 @@ class TradingMonitorApp(App[None]):
             return
         self._stop_armed = False
         self.notify('⏹  Stopping engine…', severity='error', timeout=5)
+        self.engine.request_stop()
         self.exit()
 
 
