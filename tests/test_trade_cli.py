@@ -173,7 +173,7 @@ def test_build_strategy_ref_for_relation_unknown():
 
 
 def test_paper_run_all_relations(monkeypatch, tmp_path):
-    """--all-relations spawns one detached process per backtest_passed relation."""
+    """--all-relations spawns ONE multi-engine process for all relations."""
     from coinjure.market.relations import MarketRelation
 
     spawned = []
@@ -210,6 +210,10 @@ def test_paper_run_all_relations(monkeypatch, tmp_path):
         'coinjure.cli.engine_commands._load_relations_for_batch',
         lambda status: fake_relations,
     )
+    monkeypatch.setattr(
+        'coinjure.cli.engine_commands.SOCKET_DIR',
+        tmp_path,
+    )
     # Pretend hub is already running
     monkeypatch.setattr(
         'coinjure.cli.engine_commands.HUB_SOCKET_PATH',
@@ -228,7 +232,15 @@ def test_paper_run_all_relations(monkeypatch, tmp_path):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert len(spawned) == 2
+    # Multi-engine: spawns ONE process for all relations (not N processes)
+    assert len(spawned) == 1
+    assert '_batch-run' in spawned[0]
+    # JSON output should report both relations
+    import json as json_mod
+
+    output = json_mod.loads(result.output)
+    assert output['mode'] == 'multi'
+    assert output['count'] == 2
 
 
 def test_paper_run_all_relations_mutually_exclusive_with_strategy_ref():

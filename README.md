@@ -18,6 +18,20 @@
 
 Using Coinjure, agents like Claude Code or Codex can discover over 100 backtest-positive strategies in a single hour — a capability validated by deploying to live trading and generating real profit on prediction market exchanges.
 
+## Demos
+
+### 1min Introduction of Coinjure
+
+[![1min Introduction of Coinjure](https://img.youtube.com/vi/u5PdMAVDqiM/maxresdefault.jpg)](https://youtu.be/u5PdMAVDqiM)
+
+### Basic Functionality Demo of Coinjure
+
+[![Basic Functionality Demo of Coinjure](https://img.youtube.com/vi/1Iro-NPfFnY/maxresdefault.jpg)](https://youtu.be/1Iro-NPfFnY)
+
+### Claude Code + Coinjure Demo
+
+[![Claude Code + Coinjure Demo](https://img.youtube.com/vi/2gxla8qlrDU/maxresdefault.jpg)](https://youtu.be/2gxla8qlrDU)
+
 ## Why Agent-Native
 
 Trading is entering an AI-native era. Prediction markets are fundamentally semantic and event-driven — success depends on interpreting political shifts, breaking news, and evolving public narratives. These are domains where LLM agents uniquely excel.

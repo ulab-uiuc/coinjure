@@ -167,7 +167,9 @@ class GroupArbStrategy(Strategy):
                 self._market_no_ticker[no_t.market_id] = no_t
 
         self._tickers: dict[str, Ticker] = {}
-        self._last_arb_time: float = float('-inf')  # no previous arb; first trade always allowed
+        self._last_arb_time: float = float(
+            '-inf'
+        )  # no previous arb; first trade always allowed
         # Position tracking: 'BUY_YES', 'BUY_NO', or None
         self._held_direction: str | None = None
 
@@ -256,7 +258,9 @@ class GroupArbStrategy(Strategy):
         if len(prices) < self.min_markets:
             return
         sum_yes = sum(prices.values())
-        sum_yes_bid = sum(bid_prices.values()) if len(bid_prices) == len(prices) else sum_yes
+        sum_yes_bid = (
+            sum(bid_prices.values()) if len(bid_prices) == len(prices) else sum_yes
+        )
         n = len(prices)
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -264,7 +268,9 @@ class GroupArbStrategy(Strategy):
                 bp = bid_prices.get(mid, Decimal('0'))
                 logger.debug(
                     '  _check_arb price: market=%s ask=%.4f bid=%.4f',
-                    mid[:16], float(p), float(bp),
+                    mid[:16],
+                    float(p),
+                    float(bp),
                 )
 
         fee_rate = _FEE_PER_SIDE_MAKER if self.use_maker_orders else _FEE_PER_SIDE
@@ -427,7 +433,9 @@ class GroupArbStrategy(Strategy):
             for mid, ask_price in prices.items():
                 leg = self._resolve_leg(trader, mid, ask_price, action)
                 if leg is None:
-                    logger.warning('GroupArb preflight ABORT: cannot resolve leg %s', mid[:16])
+                    logger.warning(
+                        'GroupArb preflight ABORT: cannot resolve leg %s', mid[:16]
+                    )
                     return 0
                 trade_ticker, leg_price = leg
                 total_cost += leg_price * size
@@ -438,12 +446,14 @@ class GroupArbStrategy(Strategy):
             if cash > 0 and total_cost > cash:
                 logger.warning(
                     'GroupArb preflight ABORT: cost %s > cash %s',
-                    total_cost, cash,
+                    total_cost,
+                    cash,
                 )
                 return 0
 
             # All checks pass — execute all legs
             for mid, trade_ticker, leg_price in resolved:
+                leg_name = getattr(trade_ticker, 'name', '') or mid[:25]
                 try:
                     result = await trader.place_order(
                         side=TradeSide.BUY,
@@ -454,13 +464,37 @@ class GroupArbStrategy(Strategy):
                     if result.failure_reason:
                         logger.warning('GroupArb leg failed: %s', result.failure_reason)
                         failed_legs += 1
+                        self.record_decision(
+                            ticker_name=leg_name[:40],
+                            action=action,
+                            executed=False,
+                            reasoning=f'LEG FAILED {result.failure_reason}',
+                            signal_values={**signal, 'leg_price': float(leg_price)},
+                        )
                     else:
                         executed_legs += 1
+                        self.record_decision(
+                            ticker_name=leg_name[:40],
+                            action=action,
+                            executed=True,
+                            reasoning=(
+                                f'LEG {executed_legs}/{n} price={float(leg_price):.4f} '
+                                f'edge={signal["best_edge"]:.4f}'
+                            ),
+                            signal_values={**signal, 'leg_price': float(leg_price)},
+                        )
                 except Exception:
                     logger.exception(
                         'GroupArb: exception placing leg for market %s', mid[:16]
                     )
                     failed_legs += 1
+                    self.record_decision(
+                        ticker_name=leg_name[:40],
+                        action=action,
+                        executed=False,
+                        reasoning=f'LEG EXCEPTION market={mid[:16]}',
+                        signal_values=signal,
+                    )
         else:
             # No preflight — original behavior
             for mid, ask_price in prices.items():
@@ -468,6 +502,7 @@ class GroupArbStrategy(Strategy):
                 if leg is None:
                     continue
                 trade_ticker, leg_price = leg
+                leg_name = getattr(trade_ticker, 'name', '') or mid[:25]
 
                 try:
                     result = await trader.place_order(
@@ -479,24 +514,38 @@ class GroupArbStrategy(Strategy):
                     if result.failure_reason:
                         logger.warning('GroupArb leg failed: %s', result.failure_reason)
                         failed_legs += 1
+                        self.record_decision(
+                            ticker_name=leg_name[:40],
+                            action=action,
+                            executed=False,
+                            reasoning=f'LEG FAILED {result.failure_reason}',
+                            signal_values={**signal, 'leg_price': float(leg_price)},
+                        )
                     else:
                         executed_legs += 1
+                        self.record_decision(
+                            ticker_name=leg_name[:40],
+                            action=action,
+                            executed=True,
+                            reasoning=(
+                                f'LEG {executed_legs}/{n} price={float(leg_price):.4f} '
+                                f'edge={signal["best_edge"]:.4f}'
+                            ),
+                            signal_values={**signal, 'leg_price': float(leg_price)},
+                        )
                 except Exception:
                     logger.exception(
                         'GroupArb: exception placing leg for market %s', mid[:16]
                     )
                     failed_legs += 1
+                    self.record_decision(
+                        ticker_name=leg_name[:40],
+                        action=action,
+                        executed=False,
+                        reasoning=f'LEG EXCEPTION market={mid[:16]}',
+                        signal_values=signal,
+                    )
 
-        self.record_decision(
-            ticker_name=label,
-            action=action,
-            executed=executed_legs > 0,
-            reasoning=(
-                f'OPEN sum_yes={signal["sum_yes"]:.4f} n={n} '
-                f'edge={signal["best_edge"]:.4f} legs={executed_legs}/{n}'
-            ),
-            signal_values={**signal, 'executed_legs': executed_legs},
-        )
         return executed_legs
 
     async def _close_positions(
@@ -513,6 +562,8 @@ class GroupArbStrategy(Strategy):
         direction = self._held_direction
 
         logger.info('GroupArb: CLOSE %s %s reason=%s', direction, label, reason)
+
+        close_action = f'CLOSE_{direction}' if direction else 'CLOSE'
 
         for mid in prices:
             ticker = self._tickers[mid]
@@ -538,6 +589,8 @@ class GroupArbStrategy(Strategy):
             if best_bid is None or best_bid.price <= 0:
                 continue
 
+            leg_name = getattr(sell_ticker, 'name', '') or mid[:25]
+
             try:
                 result = await trader.place_order(
                     side=TradeSide.SELL,
@@ -547,20 +600,35 @@ class GroupArbStrategy(Strategy):
                 )
                 if result.failure_reason:
                     failed_legs += 1
+                    self.record_decision(
+                        ticker_name=leg_name[:40],
+                        action=close_action,
+                        executed=False,
+                        reasoning=f'{reason} LEG FAILED {result.failure_reason}',
+                        signal_values=signal,
+                    )
                 else:
                     closed_legs += 1
+                    self.record_decision(
+                        ticker_name=leg_name[:40],
+                        action=close_action,
+                        executed=True,
+                        reasoning=(
+                            f'{reason} price={float(best_bid.price):.4f} '
+                            f'qty={float(pos.quantity):.1f}'
+                        ),
+                        signal_values=signal,
+                    )
             except Exception:
                 logger.exception('GroupArb: close leg failed for %s', mid[:16])
                 failed_legs += 1
-
-        close_action = f'CLOSE_{direction}' if direction else 'CLOSE'
-        self.record_decision(
-            ticker_name=label,
-            action=close_action,
-            executed=closed_legs > 0,
-            reasoning=f'{reason} closed={closed_legs} failed={failed_legs}',
-            signal_values=signal,
-        )
+                self.record_decision(
+                    ticker_name=leg_name[:40],
+                    action=close_action,
+                    executed=False,
+                    reasoning=f'{reason} LEG EXCEPTION market={mid[:16]}',
+                    signal_values=signal,
+                )
 
         if closed_legs > 0:
             self._held_direction = None

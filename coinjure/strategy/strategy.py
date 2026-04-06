@@ -362,6 +362,13 @@ class Strategy(ABC):
             if not self._check_position_limit():
                 executed = False
                 reasoning = f'[POSITION_LIMIT_EXCEEDED] {reasoning}'
+        stats = self._decision_stats_cache
+        stats['decisions'] += 1
+        action_key = action.upper()
+        if action_key == 'HOLD':
+            stats['holds'] += 1
+            return
+
         self._decisions.append(
             StrategyDecision(
                 timestamp=timestamp or datetime.now().strftime('%H:%M:%S'),
@@ -373,13 +380,6 @@ class Strategy(ABC):
                 signal_values=signal_payload,
             )
         )
-
-        stats = self._decision_stats_cache
-        stats['decisions'] += 1
-        action_key = action.upper()
-        if action_key == 'HOLD':
-            stats['holds'] += 1
-            return
 
         if not executed:
             return

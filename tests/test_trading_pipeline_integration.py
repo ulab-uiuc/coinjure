@@ -31,7 +31,6 @@ from coinjure.trading.types import (
     TradeSide,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper: MultiStrategy (fan-out composite)
 # ---------------------------------------------------------------------------
@@ -565,15 +564,11 @@ class TestMultiStrategyFanOut:
 
     @pytest.fixture
     def dummy_ticker(self) -> PolyMarketTicker:
-        return PolyMarketTicker(
-            symbol='MULTI_TEST', name='Multi Test', token_id='mt-1'
-        )
+        return PolyMarketTicker(symbol='MULTI_TEST', name='Multi Test', token_id='mt-1')
 
     @pytest.fixture
     def dummy_event(self, dummy_ticker) -> PriceChangeEvent:
-        return PriceChangeEvent(
-            ticker=dummy_ticker, price=Decimal('0.55')
-        )
+        return PriceChangeEvent(ticker=dummy_ticker, price=Decimal('0.55'))
 
     @pytest.fixture
     def dummy_trader(self, dummy_ticker) -> PaperTrader:
@@ -629,16 +624,11 @@ class TestMultiStrategyFanOut:
         await multi.process_event(dummy_event, dummy_trader)
 
         decisions = multi.get_decisions()
-        # StubA records 1 HOLD, StubB records 1 BUY_YES, StubC records none
-        assert len(decisions) == 2
+        # StubA records 1 HOLD (not in deque), StubB records 1 BUY_YES, StubC records none
+        assert len(decisions) == 1
 
-        actions = [d.action for d in decisions]
-        assert 'HOLD' in actions
-        assert 'BUY_YES' in actions
-
-        ticker_names = [d.ticker_name for d in decisions]
-        assert 'stub_a_ticker' in ticker_names
-        assert 'stub_b_ticker' in ticker_names
+        assert decisions[0].action == 'BUY_YES'
+        assert decisions[0].ticker_name == 'stub_b_ticker'
 
     @pytest.mark.asyncio
     async def test_get_decisions_accumulates_across_events(
@@ -649,8 +639,8 @@ class TestMultiStrategyFanOut:
         await multi.process_event(dummy_event, dummy_trader)
 
         decisions = multi.get_decisions()
-        # 2 events * (1 from A + 1 from B) = 4 decisions
-        assert len(decisions) == 4
+        # 2 events * (1 BUY_YES from B) = 2 decisions (HOLDs from A not in deque)
+        assert len(decisions) == 2
 
     def test_watch_tokens_aggregates_from_all(self, multi):
         """watch_tokens should aggregate unique tokens from all sub-strategies."""

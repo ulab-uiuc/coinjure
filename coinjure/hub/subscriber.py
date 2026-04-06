@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from coinjure.data.source import DataSource
-from coinjure.events import Event, OrderBookEvent, PriceChangeEvent
+from coinjure.events import Event, NewsEvent, OrderBookEvent, PriceChangeEvent
 from coinjure.ticker import KalshiTicker, PolyMarketTicker, Ticker
 
 logger = logging.getLogger(__name__)
@@ -192,7 +192,7 @@ class HubDataSource(DataSource):
         ticker_type = data.get('ticker_type', 'unknown')
         ticker_data = data.get('ticker', {})
 
-        ticker: Ticker
+        ticker: Ticker | None
         if ticker_type == 'polymarket':
             ticker = PolyMarketTicker(
                 symbol=ticker_data.get('symbol', ''),
@@ -211,6 +211,8 @@ class HubDataSource(DataSource):
                 series_ticker=ticker_data.get('series_ticker', ''),
                 side=ticker_data.get('side', 'yes'),
             )
+        elif ticker_type == 'none':
+            ticker = None
         else:
             return None
 
@@ -234,6 +236,21 @@ class HubDataSource(DataSource):
                     ticker=ticker,
                     price=Decimal(data['price']),
                     timestamp=ts,
+                )
+            except Exception:
+                return None
+
+        if event_type == 'NewsEvent':
+            try:
+                pa = data.get('published_at')
+                return NewsEvent(
+                    news=data.get('news', ''),
+                    title=data.get('title', ''),
+                    source=data.get('source', ''),
+                    url=data.get('url', ''),
+                    published_at=datetime.fromisoformat(pa) if pa else None,
+                    event_id=data.get('event_id', ''),
+                    ticker=ticker,
                 )
             except Exception:
                 return None

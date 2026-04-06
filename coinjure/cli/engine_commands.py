@@ -193,6 +193,26 @@ def _registry_upsert(reg: StrategyRegistry, entry: StrategyEntry) -> None:
         reg.update(entry)
 
 
+def _registry_prune_dead(reg: StrategyRegistry) -> int:
+    """Remove registry entries whose PID is no longer alive. Return count removed."""
+    import os
+
+    removed = 0
+    for e in reg.list():
+        if e.lifecycle in ('retired',):
+            continue
+        pid = e.pid
+        if not pid:
+            continue
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            # Process is dead — remove entry
+            reg.remove(e.strategy_id)
+            removed += 1
+    return removed
+
+
 def _broadcast_command(cmd: str, as_json: bool) -> None:
     """Send a control command to all active engine sockets."""
     reg = _load_registry()
@@ -251,7 +271,13 @@ def _run_batch(
     llm_trade_sizing: bool = False,
     llm_model: str | None = None,
 ) -> None:
-    """Spawn one detached engine process per matching relation."""
+    """Launch all matching relations in a single multi-engine process.
+
+    Instead of spawning N separate OS processes (one per relation), this
+    writes a batch config file and spawns ONE subprocess running the
+    internal ``_batch-run`` command, which uses :class:`MultiStrategyEngine` to
+    run all strategies in a single event loop with shared market data.
+    """
     from decimal import Decimal
 
     from coinjure.strategy.builtin import build_strategy_ref_for_relation
@@ -288,13 +314,14 @@ def _run_batch(
             candidates,
         )
 
-    reg = _load_registry()
-    results = []
+    # ── Build slot configs ────────────────────────────────────────────
+    slot_configs: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
 
     for rel in relations:
         ref, kwargs = build_strategy_ref_for_relation(rel)
         if ref is None:
-            results.append(
+            skipped.append(
                 {
                     'relation_id': rel.relation_id,
                     'ok': False,
@@ -313,64 +340,92 @@ def _run_batch(
                 kwargs['llm_model'] = llm_model
 
         budget = budgets.get(rel.relation_id, Decimal('10'))
-
-        cmd = shlex.split(_coinjure_cmd()) + [
-            'engine',
-            engine_cmd,
-            '--exchange',
-            exchange,
-            '--strategy-ref',
-            ref,
-            '--strategy-kwargs-json',
-            json.dumps(kwargs),
-            '--no-detach',
-        ]
-        if engine_cmd == 'paper-run':
-            cmd += ['--initial-capital', str(budget)]
-        if duration is not None:
-            cmd += ['--duration', str(duration)]
-        if no_hub:
-            cmd += ['--no-hub']
-
-        proc = subprocess.Popen(
-            cmd,
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        slot_configs.append(
+            {
+                'relation_id': rel.relation_id,
+                'strategy_ref': ref,
+                'strategy_kwargs': kwargs,
+                'budget': str(budget),
+            }
         )
 
-        socket = str(SOCKET_DIR / f'engine-{proc.pid}.sock')
+    if not slot_configs:
+        raise click.ClickException('No valid strategies to run.')
+
+    # ── Write batch config and spawn ONE process ──────────────────────
+    import uuid
+
+    config = {
+        'exchange': exchange,
+        'no_hub': no_hub,
+        'duration': duration,
+        'slot_configs': slot_configs,
+    }
+    config_path = SOCKET_DIR / f'batch-{uuid.uuid4().hex[:8]}.json'
+    SOCKET_DIR.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(config, default=str))
+
+    cmd = shlex.split(_coinjure_cmd()) + [
+        'engine',
+        '_batch-run',
+        '--config',
+        str(config_path),
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    socket = str(SOCKET_DIR / f'engine-{proc.pid}.sock')
+
+    # Register all strategies with the same PID / socket
+    reg = _load_registry()
+    results: list[dict[str, Any]] = list(skipped)
+    for sc in slot_configs:
         entry = StrategyEntry(
-            strategy_id=rel.relation_id,
-            strategy_ref=ref,
-            strategy_kwargs=kwargs,
-            relation_id=rel.relation_id,
+            strategy_id=sc['relation_id'],
+            strategy_ref=sc['strategy_ref'],
+            strategy_kwargs=sc['strategy_kwargs'],
+            relation_id=sc['relation_id'],
             lifecycle=lifecycle,
             exchange=exchange,
             pid=proc.pid,
             socket_path=socket,
         )
         _registry_upsert(reg, entry)
-
         results.append(
             {
-                'relation_id': rel.relation_id,
+                'relation_id': sc['relation_id'],
                 'ok': True,
                 'pid': proc.pid,
-                'strategy_ref': ref,
+                'strategy_ref': sc['strategy_ref'],
                 'socket': socket,
-                'budget': str(budget),
+                'budget': sc['budget'],
             }
         )
 
     if as_json:
-        _emit_json({'ok': True, 'launched': results, 'count': len(results)})
+        _emit_json(
+            {
+                'ok': True,
+                'mode': 'multi',
+                'pid': proc.pid,
+                'socket': socket,
+                'launched': results,
+                'count': len(slot_configs),
+            }
+        )
     else:
-        click.echo(f'\nLaunched {len(results)} {lifecycle} instances:\n')
+        click.echo(
+            f'\nLaunched multi-engine (pid={proc.pid}) '
+            f'with {len(slot_configs)} slots:\n'
+        )
         for r in results:
             if r.get('ok'):
                 click.echo(
-                    f'  {r["relation_id"]}  pid={r["pid"]}  '
+                    f'  {r["relation_id"]}  '
                     f'budget=${r["budget"]}  {r["strategy_ref"]}'
                 )
             else:
@@ -383,6 +438,80 @@ def _run_batch(
 @click.group()
 def engine() -> None:
     """Running engine instances — paper & live trading, management, batch ops."""
+
+
+# ── _batch-run (internal) ──────────────────────────────────────────────────────
+
+
+@engine.command('_batch-run', hidden=True)
+@click.option('--config', 'config_path', required=True, type=click.Path(exists=True))
+def engine_batch_run(config_path: str) -> None:
+    """Internal: run multi-engine from a batch config file.
+
+    Not intended for direct user invocation — called by ``_run_batch``
+    inside a detached subprocess.
+    """
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    )
+
+    config_data = json.loads(Path(config_path).read_text())
+    exchange = config_data['exchange']
+    no_hub = config_data.get('no_hub', False)
+    duration = config_data.get('duration')
+    slot_configs_raw = config_data['slot_configs']
+
+    # Build data source (shared)
+    hub_socket = HUB_SOCKET_PATH if (not no_hub and HUB_SOCKET_PATH.exists()) else None
+    if hub_socket:
+        from coinjure.data.live.polymarket import LiveRSSNewsDataSource
+        from coinjure.data.source import CompositeDataSource
+        from coinjure.hub.subscriber import HubDataSource
+
+        # Collect all watch tokens from all strategies
+        all_watch_tokens: list[str] = []
+        for sc in slot_configs_raw:
+            strategy_obj = _load_strategy(sc['strategy_ref'], sc['strategy_kwargs'])
+            all_watch_tokens.extend(strategy_obj.watch_tokens())
+
+        data_source = CompositeDataSource(
+            [
+                HubDataSource(hub_socket, tickers=all_watch_tokens),
+                LiveRSSNewsDataSource(),
+            ]
+        )
+    else:
+        data_source = _build_market_source(exchange)
+
+    from coinjure.engine.runner import SlotConfig, run_multi_paper_trading
+
+    configs = [
+        SlotConfig(
+            slot_id=sc['relation_id'],
+            strategy_ref=sc['strategy_ref'],
+            strategy_kwargs=sc['strategy_kwargs'],
+            initial_capital=Decimal(sc['budget']),
+        )
+        for sc in slot_configs_raw
+    ]
+
+    asyncio.run(
+        run_multi_paper_trading(
+            data_source=data_source,
+            slot_configs=configs,
+            duration=duration,
+            continuous=True,
+        )
+    )
+
+    # Clean up config file
+    try:
+        Path(config_path).unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 # ── paper-run ─────────────────────────────────────────────────────────────────
@@ -880,6 +1009,7 @@ def engine_live_run(
 def engine_list(lifecycle: str | None, as_json: bool) -> None:
     """Show all strategies in the portfolio registry."""
     reg = _load_registry()
+    _registry_prune_dead(reg)
     entries = reg.list()
     if lifecycle:
         entries = [e for e in entries if e.lifecycle == lifecycle]
@@ -950,7 +1080,11 @@ def engine_status(
     if strategy_id or socket:
         sock = _resolve_socket_for_id(strategy_id, socket)
         cmd = 'get_state' if full else 'status'
-        resp = run_command(cmd, socket_path=sock)
+        # Pass strategy_id so MultiControlServer can route to the right slot
+        extra: dict[str, Any] = {}
+        if strategy_id:
+            extra['strategy_id'] = strategy_id
+        resp = run_command(cmd, socket_path=sock, **extra)
         if full:
             _print_response(resp, as_json)
             if not resp.get('ok'):
@@ -1051,7 +1185,10 @@ def engine_pause(
         _broadcast_command('pause', as_json)
         return
     sock = _resolve_socket_for_id(strategy_id, socket)
-    resp = run_command('pause', socket_path=sock)
+    extra: dict[str, Any] = {}
+    if strategy_id:
+        extra['strategy_id'] = strategy_id
+    resp = run_command('pause', socket_path=sock, **extra)
     _print_response(resp, as_json)
     if not resp.get('ok'):
         raise SystemExit(1)
@@ -1068,7 +1205,10 @@ def engine_pause(
 def engine_resume(strategy_id: str | None, socket: str | None, as_json: bool) -> None:
     """Resume decision-making."""
     sock = _resolve_socket_for_id(strategy_id, socket)
-    resp = run_command('resume', socket_path=sock)
+    extra: dict[str, Any] = {}
+    if strategy_id:
+        extra['strategy_id'] = strategy_id
+    resp = run_command('resume', socket_path=sock, **extra)
     _print_response(resp, as_json)
     if not resp.get('ok'):
         raise SystemExit(1)
@@ -1096,7 +1236,10 @@ def engine_stop(
         _broadcast_command('stop', as_json)
         return
     sock = _resolve_socket_for_id(strategy_id, socket)
-    resp = run_command('stop', socket_path=sock)
+    extra: dict[str, Any] = {}
+    if strategy_id:
+        extra['strategy_id'] = strategy_id
+    resp = run_command('stop', socket_path=sock, **extra)
     _print_response(resp, as_json)
     if not resp.get('ok'):
         raise SystemExit(1)
@@ -1317,7 +1460,18 @@ def engine_killswitch(
 
     if enable:
         kill_file.write_text('1\n')
-        resp = {'ok': True, 'status': 'enabled', 'path': str(kill_file)}
+        # Give engines a moment to exit, then prune dead entries
+        import time
+
+        time.sleep(1.0)
+        reg = _load_registry()
+        pruned = _registry_prune_dead(reg)
+        resp = {
+            'ok': True,
+            'status': 'enabled',
+            'path': str(kill_file),
+            'pruned': pruned,
+        }
     elif disable:
         kill_file.unlink(missing_ok=True)
         resp = {'ok': True, 'status': 'disabled', 'path': str(kill_file)}
