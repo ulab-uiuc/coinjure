@@ -50,6 +50,12 @@ def hub() -> None:
     help='Run as a detached background process (default: foreground).',
 )
 @click.option('--json', 'as_json', is_flag=True, default=False)
+@click.option(
+    '--demo',
+    is_flag=True,
+    default=False,
+    help='Use DemoHub with synthetic random-walk prices (no exchange connection).',
+)
 def hub_start(
     socket_path: str,
     poly_interval: float,
@@ -58,6 +64,7 @@ def hub_start(
     kalshi_private_key_path: str | None,
     detach: bool,
     as_json: bool,
+    demo: bool,
 ) -> None:
     """Start the shared Market Data Hub (exchange poller)."""
     socket = Path(socket_path).expanduser()
@@ -82,6 +89,8 @@ def hub_start(
             cmd += ['--kalshi-api-key-id', kalshi_api_key_id]
         if kalshi_private_key_path:
             cmd += ['--kalshi-private-key-path', kalshi_private_key_path]
+        if demo:
+            cmd += ['--demo']
 
         proc = subprocess.Popen(
             cmd,
@@ -92,7 +101,23 @@ def hub_start(
         HUB_PID_PATH.parent.mkdir(parents=True, exist_ok=True)
         HUB_PID_PATH.write_text(str(proc.pid))
 
-        _emit({'ok': True, 'pid': proc.pid, 'socket': str(socket)}, as_json=as_json)
+        _emit(
+            {'ok': True, 'pid': proc.pid, 'socket': str(socket), 'demo': demo},
+            as_json=as_json,
+        )
+        return
+
+    if demo:
+        from coinjure.hub.demo_hub import DemoHub
+
+        hub_obj = DemoHub(socket_path=socket)
+        if not as_json:
+            click.echo(f'Starting DemoHub on {socket}  (Ctrl-C to stop)')
+        try:
+            asyncio.run(hub_obj.start())
+        except KeyboardInterrupt:
+            if not as_json:
+                click.echo('\nDemoHub stopped.')
         return
 
     from coinjure.data.live.kalshi import LiveKalshiDataSource

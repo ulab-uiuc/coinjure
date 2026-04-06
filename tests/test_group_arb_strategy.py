@@ -17,16 +17,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from coinjure.data.order_book import Level
 from coinjure.data.manager import DataManager
+from coinjure.data.order_book import Level
 from coinjure.market.relations import MarketRelation, RelationStore
 from coinjure.strategy.builtin.group_arb_strategy import (
-    GroupArbStrategy,
     _FEE_PER_SIDE,
+    GroupArbStrategy,
 )
 from coinjure.ticker import PolyMarketTicker
 from coinjure.trading.types import PlaceOrderResult
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -39,12 +38,14 @@ def _make_relation(
     """Build a MarketRelation with *n_markets* markets, each with YES+NO token IDs."""
     markets = []
     for i in range(n_markets):
-        markets.append({
-            'id': f'market-{i}',
-            'event_id': 'event-1',
-            'question': f'Outcome {i}?',
-            'token_ids': [f'yes-tok-{i}', f'no-tok-{i}'],
-        })
+        markets.append(
+            {
+                'id': f'market-{i}',
+                'event_id': 'event-1',
+                'question': f'Outcome {i}?',
+                'token_ids': [f'yes-tok-{i}', f'no-tok-{i}'],
+            }
+        )
     return MarketRelation(
         relation_id=relation_id,
         markets=markets,
@@ -123,9 +124,9 @@ class TestPartialDataProtection:
     def test_min_markets_equals_relation_size(self):
         rel = _make_relation(5)
         strat = _build_strategy(rel)
-        assert strat.min_markets == 5, (
-            f'Expected min_markets=5 for a 5-market relation, got {strat.min_markets}'
-        )
+        assert (
+            strat.min_markets == 5
+        ), f'Expected min_markets=5 for a 5-market relation, got {strat.min_markets}'
 
     @pytest.mark.asyncio
     async def test_check_arb_blocks_with_partial_prices(self):
@@ -139,9 +140,7 @@ class TestPartialDataProtection:
             strat._tickers[f'market-{i}'] = t
 
         # But only provide prices for 3 markets
-        partial_prices = {
-            f'market-{i}': Decimal('0.15') for i in range(3)
-        }
+        partial_prices = {f'market-{i}': Decimal('0.15') for i in range(3)}
         trader = _mock_trader(partial_prices)
 
         await strat._check_arb(trader)
@@ -321,12 +320,15 @@ class TestFeeCalculation:
 
         assert strat._held_direction == 'BUY_YES'
 
-        # Verify the recorded decision signal has the correct edge
+        # Verify per-leg decisions recorded (one per market)
         decisions = strat.get_decisions()
-        assert len(decisions) == 1
-        sig = decisions[0].signal_values
-        assert abs(sig['edge_buy_yes'] - 0.085) < 1e-9
-        assert abs(sig['edge_buy_no'] - (-0.115)) < 1e-9
+        assert len(decisions) == 3  # one decision per leg
+        for d in decisions:
+            assert d.action == 'BUY_YES'
+            assert d.executed is True
+            sig = d.signal_values
+            assert abs(sig['edge_buy_yes'] - 0.085) < 1e-9
+            assert abs(sig['edge_buy_no'] - (-0.115)) < 1e-9
 
 
 # ── Test 5: Cooldown enforcement ─────────────────────────────────────
@@ -432,9 +434,9 @@ class TestNoTickerResolution:
         # The tickers passed to place_order should be NO-side tickers
         for call in trader.place_order.call_args_list:
             ticker_arg = call.kwargs.get('ticker') or call.args[1]
-            assert ticker_arg.side == 'no', (
-                f'Expected NO-side ticker but got side={ticker_arg.side}'
-            )
+            assert (
+                ticker_arg.side == 'no'
+            ), f'Expected NO-side ticker but got side={ticker_arg.side}'
 
     def test_no_tickers_dict_separate_from_yes(self):
         """_no_tickers and _yes_tickers should have same count but different token IDs."""

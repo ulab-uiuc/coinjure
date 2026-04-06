@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -408,7 +409,9 @@ async def run_live_kalshi_trading(
             if kpos.total_cost is not None and abs_count > 0:
                 # total_cost is in cents
                 avg_cost = (
-                    Decimal(str(abs(kpos.total_cost))) / Decimal('100') / Decimal(str(abs_count))
+                    Decimal(str(abs(kpos.total_cost)))
+                    / Decimal('100')
+                    / Decimal(str(abs_count))
                 )
             position_manager.update_position(
                 Position(
@@ -446,3 +449,115 @@ async def run_live_kalshi_trading(
     logger.info('Cash positions: %s', position_manager.get_cash_positions())
     logger.info('Non-cash positions: %s', position_manager.get_non_cash_positions())
     logger.info('Total realized PnL: %s', position_manager.get_total_realized_pnl())
+
+
+# ── Multi-strategy runner ──────────────────────────────────────────────
+
+
+@dataclass
+class SlotConfig:
+    """Configuration for one slot in a MultiStrategyEngine."""
+
+    slot_id: str
+    strategy_ref: str
+    strategy_kwargs: dict
+    initial_capital: Decimal
+
+
+async def run_multi_paper_trading(
+    data_source: DataSource,
+    slot_configs: list[SlotConfig],
+    *,
+    duration: float | None = None,
+    continuous: bool = True,
+    socket_path: Path | None = None,
+) -> None:
+    """Run multiple strategies in a single process against shared market data.
+
+    Creates one DataManager shared by all PaperTraders, builds an EngineSlot
+    per config, and runs a single MultiStrategyEngine event loop.
+    """
+    from coinjure.engine.multi_strategy_engine import (
+        EngineSlot,
+        MultiControlServer,
+        MultiStrategyEngine,
+    )
+    from coinjure.strategy.loader import load_strategy
+
+    market_data = DataManager()
+    slots: list[EngineSlot] = []
+
+    for cfg in slot_configs:
+        strategy_obj = load_strategy(cfg.strategy_ref, cfg.strategy_kwargs)
+
+        position_manager = PositionManager()
+        _fund_position(
+            position_manager, CashTicker.POLYMARKET_USDC, cfg.initial_capital
+        )
+        _fund_position(position_manager, CashTicker.KALSHI_USD, cfg.initial_capital)
+
+        risk_manager = StandardRiskManager(
+            position_manager=position_manager,
+            market_data=market_data,
+            max_position_size=cfg.initial_capital,
+            max_total_exposure=cfg.initial_capital * Decimal('2'),
+            max_single_trade_size=cfg.initial_capital / Decimal('2'),
+            max_drawdown_pct=Decimal('0.2'),
+        )
+
+        from coinjure.engine.trader.paper import PaperTrader
+
+        trader = PaperTrader(
+            market_data=market_data,
+            risk_manager=risk_manager,
+            position_manager=position_manager,
+            min_fill_rate=Decimal('0.5'),
+            max_fill_rate=Decimal('1.0'),
+            commission_rate=Decimal('0.0'),
+        )
+
+        from coinjure.engine.performance import PerformanceAnalyzer
+
+        slots.append(
+            EngineSlot(
+                slot_id=cfg.slot_id,
+                strategy=strategy_obj,
+                trader=trader,
+                perf=PerformanceAnalyzer(initial_capital=cfg.initial_capital),
+            )
+        )
+
+    engine = MultiStrategyEngine(
+        data_source=data_source,
+        market_data=market_data,
+        slots=slots,
+        continuous=continuous,
+    )
+
+    ctrl = MultiControlServer(engine, socket_path=socket_path)
+
+    async def _run() -> None:
+        await ctrl.start()
+        try:
+            if duration:
+                await asyncio.wait_for(engine.start(), timeout=duration)
+            else:
+                await engine.start()
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            await engine.stop()
+            await ctrl.stop()
+
+    await _run()
+
+    logger.info('--- Multi Paper Trading Summary ---')
+    for slot in slots:
+        pm = slot.trader.position_manager
+        logger.info(
+            '[%s] realized_pnl=%s orders=%d events=%d',
+            slot.slot_id,
+            pm.get_total_realized_pnl(),
+            len(slot.trader.orders),
+            slot.event_count,
+        )

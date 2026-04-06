@@ -14,10 +14,10 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from coinjure.ticker import CashTicker
 from coinjure.trading.position import PositionManager
 from coinjure.trading.trader import Trader
 from coinjure.trading.types import OrderStatus
-from coinjure.ticker import CashTicker
 
 
 class TradingMonitor:
@@ -497,7 +497,7 @@ class TradingMonitor:
         """Create news headlines panel."""
         news: list = getattr(self, 'news_headlines', [])
 
-        border_style = 'bold bright_white' if is_focused else 'bright_yellow'
+        border_style = 'bold bright_white' if is_focused else '#ff8c00'
         focus_tag = ' [●]' if is_focused else ''
         scroll_tag = f' ↑{scroll_offset}' if scroll_offset > 0 else ''
 
@@ -718,8 +718,8 @@ def monitor(socket: str | None) -> None:
     """
     from pathlib import Path
 
-    from coinjure.engine.control import SOCKET_PATH
     from coinjure.cli.textual_monitor import SocketTradingMonitorApp
+    from coinjure.engine.control import SOCKET_PATH
 
     sock = Path(socket) if socket else SOCKET_PATH
 

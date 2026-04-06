@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -120,26 +120,43 @@ class PortfolioPanel(Static):
         self.border_title = 'Portfolio'
 
     @staticmethod
-    def _cash_line(cash_positions: list) -> str:
-        """Format cash positions into a single compact line."""
-        parts = []
+    def _cash_lines(cash_positions: list) -> list[str]:
+        """Format cash positions: header then one line per exchange."""
+        lines = ['[bold]Cash[/bold]']
+        if not cash_positions:
+            lines.append('  —')
+            return lines
         for cp in cash_positions:
             sym = cp['symbol'].replace('USDC_', '').replace('USD_', '')
-            parts.append(f'{sym} ${cp["qty"]:.0f}')
-        return '  '.join(parts) if parts else '—'
+            lines.append(f'  {sym:<10} ${cp["qty"]:.0f}')
+        return lines
+
+    @staticmethod
+    def _fmt_return(pnl: Decimal, total: Decimal | float) -> str:
+        """Format return percentage."""
+        t = float(total) if not isinstance(total, float) else total
+        if t <= 0:
+            return ''
+        pct = float(pnl) / t * 100
+        if pct > 0:
+            return f'  [green]({pct:+.2f}%)[/green]'
+        if pct < 0:
+            return f'  [red]({pct:+.2f}%)[/red]'
+        return f'  (0.00%)'
 
     def refresh_from_state(self, state: dict) -> None:
         p = state.get('portfolio', {})
         total = p.get('total', 0.0)
         realized = Decimal(str(p.get('realized_pnl', 0.0)))
         unrealized = Decimal(str(p.get('unrealized_pnl', 0.0)))
-        cash = self._cash_line(p.get('cash_positions', []))
+        net_pnl = realized + unrealized
+        ret = self._fmt_return(net_pnl, total)
         lines = [
-            '[bold blue]Portfolio[/bold blue]',
-            f'Total:  [bold]${total:>10.2f}[/bold]',
-            f'Cash:   {cash}',
-            f'R P&L:  {_fmt_pnl(realized)}  U: {_fmt_pnl(unrealized)}',
-            f'Total:  {_fmt_pnl(realized + unrealized)}',
+            f'[bold]Value[/bold]     ${total:>10.2f}',
+            *self._cash_lines(p.get('cash_positions', [])),
+            f'Realized   {_fmt_pnl(realized)}',
+            f'Unrealized {_fmt_pnl(unrealized)}',
+            f'[bold]Net P&L[/bold]   {_fmt_pnl(net_pnl)}{ret}',
         ]
         self.update('\n'.join(lines))
 
@@ -150,19 +167,20 @@ class PortfolioPanel(Static):
             total = sum(pv.values(), Decimal('0'))
             realized = position_manager.get_total_realized_pnl()
             unrealized = position_manager.get_total_unrealized_pnl(md)
+            net_pnl = realized + unrealized
 
-            cash_parts = []
+            cash_positions = []
             for p in position_manager.get_cash_positions():
                 sym = p.ticker.symbol.replace('USDC_', '').replace('USD_', '')
-                cash_parts.append(f'{sym} ${p.quantity:.0f}')
-            cash = '  '.join(cash_parts) if cash_parts else '—'
+                cash_positions.append({'symbol': sym, 'qty': float(p.quantity)})
+            ret = self._fmt_return(net_pnl, total)
 
             lines = [
-                '[bold blue]Portfolio[/bold blue]',
-                f'Total:  [bold]${total:>10.2f}[/bold]',
-                f'Cash:   {cash}',
-                f'R P&L:  {_fmt_pnl(realized)}  U: {_fmt_pnl(unrealized)}',
-                f'Total:  {_fmt_pnl(realized + unrealized)}',
+                f'[bold]Value[/bold]     ${total:>10.2f}',
+                *self._cash_lines(cash_positions),
+                f'Realized   {_fmt_pnl(realized)}',
+                f'Unrealized {_fmt_pnl(unrealized)}',
+                f'[bold]Net P&L[/bold]   {_fmt_pnl(net_pnl)}{ret}',
             ]
             self.update('\n'.join(lines))
         except Exception:
@@ -245,6 +263,7 @@ class DecisionsTable(DataTable):
     """
 
     _last_len: int = 0
+    _last_ts: str = ''
 
     def on_mount(self) -> None:
         self.border_title = 'Strategy Decisions'
@@ -254,76 +273,154 @@ class DecisionsTable(DataTable):
         self._current_signal_keys: list[str] = []
         self._set_columns([])
 
-    def _set_columns(self, signal_keys: list[str], multi: bool = False) -> None:
+    # Short action labels for display
+    _ACTION_DISPLAY: ClassVar[dict[str, tuple[str, str]]] = {
+        # action -> (short_label, style)
+        'BUY_YES': ('BUY Y', 'bold green'),
+        'BUY_NO': ('BUY N', 'bold red'),
+        'SELL_YES': ('SELL Y', 'bold red'),
+        'SELL_NO': ('SELL N', 'bold green'),
+        'ENTER_ARB': ('ENTER', 'bold green'),
+        'EXIT_ARB': ('EXIT', 'bold yellow'),
+        'BUY_SPREAD': ('BUY SP', 'bold green'),
+        'SELL_SPREAD': ('SELL SP', 'bold red'),
+        'CLOSE_SPREAD': ('CLS SP', 'bold yellow'),
+        'CLOSE_BUY_YES': ('CLS Y', 'bold yellow'),
+        'CLOSE_BUY_NO': ('CLS N', 'bold yellow'),
+        'CLOSE_EDGE_TP': ('CLS TP', 'bold yellow'),
+        'CLOSE_EDGE_REV': ('CLS REV', 'bold red'),
+        'CLOSE_REEVAL': ('CLS RE', 'bold magenta'),
+        'CLOSE_TIMEOUT': ('CLS TO', 'yellow'),
+        'LONG_A': ('LONG', 'bold green'),
+        'SHORT_A': ('SHORT', 'bold red'),
+        'CLOSE_LONG_A': ('CLS LG', 'bold yellow'),
+        'CLOSE_SHORT_A': ('CLS SH', 'bold yellow'),
+        'BUY_FOLLOWER': ('BUY FL', 'bold green'),
+        'SELL_FOLLOWER': ('SELL FL', 'bold red'),
+        'EXIT_LONG': ('EXIT L', 'bold yellow'),
+        'EXIT_SHORT': ('EXIT S', 'bold yellow'),
+        'HOLD': ('HOLD', 'dim'),
+    }
+
+    @staticmethod
+    def _fmt_signal(strategy_name: str, sig: dict) -> str:
+        """Format signals compactly based on strategy type."""
+        if not sig:
+            return ''
+        sn = strategy_name.lower()
+        if 'implication' in sn:
+            pa = sig.get('price_a')
+            pb = sig.get('price_b')
+            v = sig.get('violation')
+            parts = []
+            if pa is not None and pb is not None:
+                parts.append(f'A={pa:.2f} B={pb:.2f}')
+            if v is not None:
+                parts.append(f'viol={v:+.3f}')
+            return '  '.join(parts)
+        if 'group' in sn:
+            s = sig.get('sum_yes')
+            e = sig.get('best_edge')
+            parts = []
+            if s is not None:
+                parts.append(f'\u03a3={s:.2f}')
+            if e is not None:
+                parts.append(f'edge={e:+.3f}')
+            lp = sig.get('leg_price')
+            if lp is not None:
+                parts.append(f'px={lp:.3f}')
+            return '  '.join(parts)
+        if 'coint' in sn or 'spread' in sn:
+            sp = sig.get('spread')
+            dv = sig.get('deviation')
+            parts = []
+            if sp is not None:
+                parts.append(f'sprd={sp:.3f}')
+            if dv is not None:
+                parts.append(f'dev={dv:+.3f}')
+            return '  '.join(parts)
+        if 'conditional' in sn:
+            pa = sig.get('price_a')
+            lo = sig.get('lower')
+            up = sig.get('upper')
+            parts = []
+            if pa is not None:
+                parts.append(f'A={pa:.3f}')
+            if lo is not None and up is not None:
+                parts.append(f'[{lo:.2f},{up:.2f}]')
+            return '  '.join(parts)
+        if 'structural' in sn:
+            r = sig.get('residual')
+            pa = sig.get('price_a')
+            parts = []
+            if pa is not None:
+                parts.append(f'A={pa:.3f}')
+            if r is not None:
+                parts.append(f'res={r:+.3f}')
+            return '  '.join(parts)
+        if 'lead_lag' in sn or 'lag' in sn:
+            lm = sig.get('leader_move')
+            parts = []
+            if lm is not None:
+                parts.append(f'move={lm:+.3f}')
+            return '  '.join(parts)
+        # Fallback: first 2 signal values
+        items = list(sig.items())[:2]
+        return '  '.join(
+            f'{k[:6]}={v:.3f}' for k, v in items if isinstance(v, (int, float))
+        )
+
+    def _set_columns(self, multi: bool = False) -> None:
         self.clear(columns=True)
         mid_col = 'Relation' if multi else 'Market'
-        self.add_columns(
-            'Time',
-            'Type',
-            'Action',
-            *[k[:6] for k in signal_keys],
-            mid_col,
-            'Reasoning',
-            '✓',
-        )
-        self._current_signal_keys = list(signal_keys)
+        self.add_columns('Time', 'Type', 'Action', mid_col, 'Reason')
         self._multi_engine = multi
 
-    def _get_signal_keys(self, decisions: list) -> list[str]:
-        keys: list[str] = []
-        for d in decisions[-40:]:
-            sig = (
-                d.get('signal_values', {})
-                if isinstance(d, dict)
-                else getattr(d, 'signal_values', {}) or {}
-            )
-            for k in sig:
-                if k not in keys:
-                    keys.append(k)
-                if len(keys) >= 3:
-                    break
-            if len(keys) >= 3:
-                break
-        return keys
+    @staticmethod
+    def _build_reason(strategy_name: str, d: dict) -> str:
+        """Build a compact reason string from signals + reasoning."""
+        sig = d.get('signal_values', {}) or {}
+        reason = d.get('reasoning', '') or ''
+        sig_str = DecisionsTable._fmt_signal(strategy_name, sig)
+        if sig_str and reason:
+            return f'{sig_str} | {reason}'
+        return sig_str or reason
 
     def refresh_from_state(self, decisions: list, multi: bool = False) -> None:
-        signal_keys = self._get_signal_keys(decisions)
         multi_changed = multi != getattr(self, '_multi_engine', False)
-        keys_changed = signal_keys != self._current_signal_keys
-        if len(decisions) == self._last_len and not keys_changed and not multi_changed:
+        latest_ts = decisions[-1].get('timestamp', '') if decisions else ''
+        if (
+            latest_ts == self._last_ts
+            and len(decisions) == self._last_len
+            and not multi_changed
+        ):
             return
-        if keys_changed or multi_changed:
-            self._set_columns(signal_keys, multi=multi)
+        if multi_changed or not hasattr(self, '_multi_engine'):
+            self._set_columns(multi=multi)
         saved_row = self.cursor_row
         self.clear()
-        for d in reversed(decisions[-40:]):
+        # Show executed decisions first, then fill remaining slots with HOLDs
+        executed = [d for d in decisions if d.get('executed')]
+        holds = [d for d in decisions if not d.get('executed')]
+        # Show up to 30 executed + up to 10 recent HOLDs
+        to_show = executed[-30:] + holds[-10:]
+        to_show.sort(key=lambda d: d.get('timestamp', ''))
+        for d in reversed(to_show[-40:]):
             action = d.get('action', '')
-            action_style = {
-                'BUY_YES': 'bold green',
-                'BUY_NO': 'bold red',
-                'HOLD': 'dim',
-                'CLOSE_EDGE_TP': 'bold yellow',
-                'CLOSE_EDGE_REV': 'bold red',
-                'CLOSE_REEVAL': 'bold magenta',
-                'CLOSE_TIMEOUT': 'yellow',
-            }.get(action, 'white')
-            sig = d.get('signal_values', {}) or {}
-            signal_cells: list[str] = []
-            for key in self._current_signal_keys:
-                val = sig.get(key)
-                signal_cells.append(f'{float(val):.3f}' if val is not None else '—')
+            label, style = self._ACTION_DISPLAY.get(action, (action[:8], 'white'))
+            sname = d.get('strategy_name', '')
+            reason = self._build_reason(sname, d)
+            ex = d.get('executed')
+            reason_style = 'dim' if not ex else ''
             self.add_row(
                 d.get('timestamp', ''),
-                Text(d.get('strategy_name', '')[:10], style='dim cyan'),
-                Text(action, style=action_style),
-                *signal_cells,
-                d.get('ticker_name', '')[:18],
-                Text(d.get('reasoning', '')[:35], style='dim'),
-                Text('✓', style='bold green')
-                if d.get('executed')
-                else Text('—', style='dim'),
+                Text(sname[:10], style='dim cyan'),
+                Text(label, style=style if ex else 'dim'),
+                d.get('ticker_name', '')[:22],
+                Text(reason[:50], style=reason_style),
             )
         self._last_len = len(decisions)
+        self._last_ts = latest_ts
         try:
             self.move_cursor(row=min(saved_row, self.row_count - 1))
         except Exception:
@@ -332,39 +429,34 @@ class DecisionsTable(DataTable):
     def refresh_data(self, strategy) -> None:
         decisions = list(strategy.get_decisions())
         strategy_name = getattr(strategy, 'name', '') or ''
-        signal_keys = self._get_signal_keys(decisions)
-        keys_changed = signal_keys != self._current_signal_keys
-        if signal_keys != self._current_signal_keys:
-            self._set_columns(signal_keys)
-        if len(decisions) == self._last_len and not keys_changed:
-            return  # Nothing new and no schema change
+        if len(decisions) == self._last_len:
+            return
+        if not hasattr(self, '_multi_engine'):
+            self._set_columns()
 
-        # Save cursor position and restore after re-render
         saved_row = self.cursor_row
         self.clear()
-        for d in reversed(decisions[-40:]):
-            action_style = {
-                'BUY_YES': 'bold green',
-                'BUY_NO': 'bold red',
-                'HOLD': 'dim',
-                'CLOSE_EDGE_TP': 'bold yellow',
-                'CLOSE_EDGE_REV': 'bold red',
-                'CLOSE_REEVAL': 'bold magenta',
-                'CLOSE_TIMEOUT': 'yellow',
-            }.get(d.action, 'white')
+        # Prioritize executed decisions over HOLDs
+        executed = [d for d in decisions if d.executed]
+        holds = [d for d in decisions if not d.executed]
+        to_show = executed[-30:] + holds[-10:]
+        to_show.sort(key=lambda d: d.timestamp or '')
+        for d in reversed(to_show[-40:]):
+            label, style = self._ACTION_DISPLAY.get(d.action, (d.action[:8], 'white'))
             sig = getattr(d, 'signal_values', {}) or {}
-            signal_cells: list[str] = []
-            for key in self._current_signal_keys:
-                val = sig.get(key)
-                signal_cells.append(f'{float(val):.3f}' if val is not None else '—')
+            sig_str = self._fmt_signal(strategy_name, sig)
+            reason = getattr(d, 'reasoning', '') or ''
+            if sig_str and reason:
+                full_reason = f'{sig_str} | {reason}'
+            else:
+                full_reason = sig_str or reason
+            reason_style = 'dim' if not d.executed else ''
             self.add_row(
                 d.timestamp,
                 Text(strategy_name[:10], style='dim cyan'),
-                Text(d.action, style=action_style),
-                *signal_cells,
-                (d.ticker_name or '')[:18],
-                Text((getattr(d, 'reasoning', '') or '')[:35], style='dim'),
-                Text('✓', style='bold green') if d.executed else Text('—', style='dim'),
+                Text(label, style=style if d.executed else 'dim'),
+                (d.ticker_name or '')[:22],
+                Text(full_reason[:50], style=reason_style),
             )
 
         self._last_len = len(decisions)
@@ -391,7 +483,7 @@ class PositionsPanel(DataTable):
         self.border_title = 'Current Positions'
         self.cursor_type = 'row'
         self.zebra_stripes = True
-        self.add_columns('Market', 'Qty', 'Avg', 'Bid', 'uPnL')
+        self.add_columns('Side', 'Market', 'Qty', 'Cost', 'Mark', 'P&L')
 
     @staticmethod
     def _fmt_qty(value: object) -> str:
@@ -416,15 +508,18 @@ class PositionsPanel(DataTable):
                 except Exception:
                     pnl_val = 0.0
                 style = 'green' if pnl_val >= 0 else 'red'
+                yn = p.get('side', '') or p.get('yn', '')
+                yn_style = 'green' if yn == 'YES' else 'red' if yn == 'NO' else 'dim'
                 self.add_row(
+                    Text(yn, style=yn_style),
                     str(p.get('name', ''))[:30],
                     self._fmt_qty(p.get('qty', '')),
                     f"${str(p.get('avg_cost', '0'))[:7]}",
-                    f"${str(p.get('bid', '0'))[:7]}",
+                    f"${str(p.get('mark', p.get('bid', '0')))[:7]}",
                     Text(pnl_raw, style=style),
                 )
         else:
-            self.add_row(Text('No positions yet', style='dim'), '—', '—', '—', '—')
+            self.add_row('—', Text('No positions yet', style='dim'), '—', '—', '—', '—')
         try:
             self.move_cursor(row=min(saved_row, self.row_count - 1))
         except Exception:
@@ -446,8 +541,13 @@ class PositionsPanel(DataTable):
                         (cur - p.average_cost) * p.quantity if cur > 0 else Decimal('0')
                     )
                     style = 'green' if pnl >= 0 else 'red'
+                    yn = (getattr(p.ticker, 'side', '') or '').upper()
+                    yn_style = (
+                        'green' if yn == 'YES' else 'red' if yn == 'NO' else 'dim'
+                    )
                     name = (getattr(p.ticker, 'name', '') or p.ticker.symbol)[:30]
                     self.add_row(
+                        Text(yn, style=yn_style),
                         name,
                         self._fmt_qty(p.quantity),
                         f'${p.average_cost:.4f}',
@@ -483,29 +583,52 @@ class OrdersPanel(DataTable):
     }
     """
 
+    _last_max_idx: int = -1
+
     def on_mount(self) -> None:
-        self.border_title = 'Current Orders'
+        self.border_title = 'Orders'
         self.cursor_type = 'row'
         self.zebra_stripes = True
-        self.add_columns('Side', 'Market', 'Px', 'Status')
+        self.add_columns('#', 'Side', 'Y/N', 'Market', 'Px', 'Status')
 
     def refresh_from_state(self, state: dict) -> None:
+        orders = state.get('orders', [])
+        max_idx = max((o.get('idx', 0) for o in orders), default=-1)
+        if max_idx == self._last_max_idx:
+            return
+        self._last_max_idx = max_idx
         saved_row = self.cursor_row
         self.clear()
-        orders = state.get('orders', [])
         if orders:
             for o in reversed(orders):
                 side = str(o.get('side', '')).lower()
                 side_c = 'green' if side == 'buy' else 'red'
+                yn = o.get('yn', '')
+                yn_style = 'green' if yn == 'YES' else 'red' if yn == 'NO' else 'dim'
+                st = str(o.get('status', '')).upper()
+                st_style = (
+                    'green'
+                    if st == 'FILLED'
+                    else 'yellow'
+                    if st == 'PENDING'
+                    else 'red'
+                )
                 self.add_row(
+                    Text(str(o.get('idx', '')), style='dim'),
                     Text(side.upper(), style=side_c),
-                    str(o.get('name', ''))[:30],
+                    Text(yn, style=yn_style),
+                    str(o.get('name', ''))[:28],
                     f"${o.get('limit_price', '-')}",
-                    str(o.get('status', '')).upper(),
+                    Text(st, style=st_style),
                 )
         else:
             self.add_row(
-                Text('—', style='dim'), Text('No orders yet', style='dim'), '—', '—'
+                '—',
+                Text('—', style='dim'),
+                '—',
+                Text('No orders yet', style='dim'),
+                '—',
+                '—',
             )
         try:
             self.move_cursor(row=min(saved_row, self.row_count - 1))
@@ -518,19 +641,39 @@ class OrdersPanel(DataTable):
             self.clear()
             orders = list(getattr(trader, 'orders', []))
             if orders:
-                for o in reversed(orders):
+                total = len(orders)
+                for i, o in enumerate(reversed(orders[-8:])):
+                    idx = total - i
                     side = o.side.value.lower()
                     side_c = 'green' if side == 'buy' else 'red'
-                    name = (getattr(o.ticker, 'name', '') or o.ticker.symbol)[:30]
+                    yn = (getattr(o.ticker, 'side', '') or '').upper()
+                    yn_style = (
+                        'green' if yn == 'YES' else 'red' if yn == 'NO' else 'dim'
+                    )
+                    name = (getattr(o.ticker, 'name', '') or o.ticker.symbol)[:28]
+                    st = o.status.value.upper()
+                    st_style = (
+                        'green'
+                        if st == 'FILLED'
+                        else 'yellow'
+                        if st == 'PENDING'
+                        else 'red'
+                    )
                     self.add_row(
+                        Text(str(idx), style='dim'),
                         Text(side.upper(), style=side_c),
+                        Text(yn, style=yn_style),
                         name,
                         f'${o.limit_price:.4f}',
-                        o.status.value.upper(),
+                        Text(st, style=st_style),
                     )
             else:
                 self.add_row(
-                    Text('—', style='dim'), Text('No orders yet', style='dim'), '—', '—'
+                    Text('—', style='dim'),
+                    '—',
+                    Text('No orders yet', style='dim'),
+                    '—',
+                    '—',
                 )
             try:
                 self.move_cursor(row=min(saved_row, self.row_count - 1))
@@ -622,20 +765,23 @@ class OrderBooksTable(DataTable):
         self.cursor_type = 'row'
         self._socket_mode = False  # set True by SocketTradingMonitorApp
         self.zebra_stripes = True
-        self.add_columns('Market', 'Bid', 'Ask', 'Sprd', 'Mid')
+        self.add_columns('Y/N', 'Market', 'Bid', 'Ask', 'Sprd', 'Mid')
 
     def refresh_from_state(self, books: list) -> None:
         saved_row = self.cursor_row
         self.clear()
         if not books:
-            self.add_row('(no order books yet)', '-', '-', '-', '-')
+            self.add_row('—', '(no order books yet)', '-', '-', '-', '-')
             return
         for b in books:
             spread = float(b['spread'])
             sp_style = (
                 'green' if spread <= 0.02 else 'yellow' if spread <= 0.05 else 'red'
             )
+            yn = b.get('yn', '')
+            yn_style = 'green' if yn == 'YES' else 'red' if yn == 'NO' else 'dim'
             self.add_row(
+                Text(yn, style=yn_style),
                 b['name'],
                 f"${b['bid']}",
                 f"${b['ask']}",
@@ -670,10 +816,12 @@ class OrderBooksTable(DataTable):
         saved_row = self.cursor_row
         self.clear()
         if not active:
-            self.add_row('(no order books yet)', '-', '-', '-', '-')
+            self.add_row('—', '(no order books yet)', '-', '-', '-', '-')
             return
         for ticker, bid, ask, spread, mid in active[:40]:
-            name = (getattr(ticker, 'name', '') or ticker.symbol)[:32]
+            yn = (getattr(ticker, 'side', '') or '').upper()
+            yn_style = 'green' if yn == 'YES' else 'red' if yn == 'NO' else 'dim'
+            name = (getattr(ticker, 'name', '') or ticker.symbol)[:30]
             sp_style = (
                 'green'
                 if spread <= Decimal('0.02')
@@ -682,6 +830,7 @@ class OrderBooksTable(DataTable):
                 else 'red'
             )
             self.add_row(
+                Text(yn, style=yn_style),
                 name,
                 f'${bid.price:.4f}',
                 f'${ask.price:.4f}',
@@ -699,8 +848,8 @@ class NewsLog(RichLog):
 
     DEFAULT_CSS = """
     NewsLog {
-        border: solid yellow;
-        border-title-color: yellow;
+        border: solid #ff8c00;
+        border-title-color: #ff8c00;
         height: 1fr;
     }
     """
@@ -897,11 +1046,11 @@ class TradingMonitorApp(App[None]):
         elif btn_id == 'btn-stop':
             if not self._stop_armed:
                 self._stop_armed = True
-                self.notify(
-                    '⚠  Click ⏹ E-Stop again within 3 s to confirm',
-                    severity='warning',
-                    timeout=3,
-                )
+                try:
+                    self.query_one('#btn-stop', Button).label = '⚠  Confirm?'
+                except Exception:
+                    pass
+                self.sub_title = '⚠  Click ⏹ E-Stop AGAIN to confirm — 3 s to cancel'
                 self.set_timer(3.0, self._disarm_stop)
             else:
                 self._stop_armed = False
@@ -911,6 +1060,10 @@ class TradingMonitorApp(App[None]):
 
     def _disarm_stop(self) -> None:
         self._stop_armed = False
+        try:
+            self.query_one('#btn-stop', Button).label = '⏹  E-Stop'
+        except Exception:
+            pass
 
     def _refresh_all(self) -> None:
         """Sync data from the trading engine into all widgets."""
@@ -953,10 +1106,12 @@ class TradingMonitorApp(App[None]):
         """s — keyboard emergency stop (same two-step guard as button)."""
         if not self._stop_armed:
             self._stop_armed = True
-            self.notify(
-                '⚠  Press s again within 3 s to confirm emergency stop',
-                severity='warning',
-                timeout=3,
+            try:
+                self.query_one('#btn-stop', Button).label = '⚠  Confirm?'
+            except Exception:
+                pass
+            self.sub_title = (
+                '⚠  Press s AGAIN to confirm emergency stop — 3 s to cancel'
             )
             self.set_timer(3.0, self._disarm_stop)
             return
@@ -1044,6 +1199,7 @@ class SocketTradingMonitorApp(App[None]):
         n = len(self._socket_paths)
         self.title = f'Coinjure — Monitor ({n} engine{"s" if n != 1 else ""})'
         self.sub_title = 'Waiting for engines…'
+        self._strategy_count: int = 0  # updated after first poll
         self.call_after_refresh(self._set_initial_disconnected_state)
         self.set_interval(2.0, self._poll_state)
 
@@ -1206,7 +1362,10 @@ class SocketTradingMonitorApp(App[None]):
             strategy_name = state.get('strategy_name', '')
             for d in state.get('decisions', []):
                 d2 = dict(d)
-                d2['strategy_name'] = strategy_name
+                # Preserve per-decision strategy_name from multi-engine aggregation;
+                # only fall back to the engine-level name if missing.
+                if not d2.get('strategy_name'):
+                    d2['strategy_name'] = strategy_name
                 if multi:
                     d2['ticker_name'] = tag[:18]
                 merged_decisions.append(d2)
@@ -1302,11 +1461,29 @@ class SocketTradingMonitorApp(App[None]):
             },
         }
 
-        # --- Update subtitle ---
-        n = len(self._socket_paths)
+        # --- Update title & subtitle ---
+        # Count strategies: multi-engine states report comma-separated strategy names
+        strategy_count = 0
+        for _, state in states:
+            sname = state.get('strategy_name', '')
+            if state.get('mode') == 'multi' and sname:
+                strategy_count += len(sname.split(', '))
+            elif sname:
+                strategy_count += 1
+            else:
+                strategy_count += 1
+        self._strategy_count = strategy_count
+
+        n_engines = len(self._socket_paths)
+        self.title = (
+            f'Coinjure — Monitor ({strategy_count} '
+            f'strateg{"ies" if strategy_count != 1 else "y"}'
+            f', {n_engines} engine{"s" if n_engines != 1 else ""})'
+        )
         status = '⏸  PAUSED' if any_paused else '▶  Running'
         self.sub_title = (
-            f'{status}  |  {connected_count}/{n} engines  |  '
+            f'{status}  |  {strategy_count} strategies across '
+            f'{connected_count}/{n_engines} engines  |  '
             f'decisions={total_decisions_count}  executed={total_executed}  |  E-Stop: s'
         )
 
@@ -1373,14 +1550,18 @@ class SocketTradingMonitorApp(App[None]):
         elif btn_id == 'btn-stop':
             if not self._stop_armed:
                 self._stop_armed = True
-                self.notify(
-                    '⚠  Click ⏹ E-Stop again within 3 s to confirm emergency stop',
-                    severity='warning',
-                    timeout=3,
-                )
+                try:
+                    self.query_one('#btn-stop', Button).label = '⚠  Confirm?'
+                except Exception:
+                    pass
+                self.sub_title = '⚠  Click ⏹ E-Stop AGAIN to confirm — 3 s to cancel'
                 self.set_timer(3.0, self._disarm_stop)
             else:
                 self._stop_armed = False
+                try:
+                    self.query_one('#btn-stop', Button).label = '⏹  E-Stop'
+                except Exception:
+                    pass
                 try:
                     await asyncio.gather(
                         *[
@@ -1399,6 +1580,10 @@ class SocketTradingMonitorApp(App[None]):
 
     def _disarm_stop(self) -> None:
         self._stop_armed = False
+        try:
+            self.query_one('#btn-stop', Button).label = '⏹  E-Stop'
+        except Exception:
+            pass
 
     def action_scroll_down_panel(self) -> None:
         focused = self.focused
@@ -1418,15 +1603,21 @@ class SocketTradingMonitorApp(App[None]):
 
         if not self._stop_armed:
             self._stop_armed = True
-            self.notify(
-                '⚠  Press s again within 3 s to confirm emergency stop',
-                severity='warning',
-                timeout=3,
+            try:
+                self.query_one('#btn-stop', Button).label = '⚠  Confirm?'
+            except Exception:
+                pass
+            self.sub_title = (
+                '⚠  Press s AGAIN to confirm emergency stop — 3 s to cancel'
             )
             self.set_timer(3.0, self._disarm_stop)
             return
 
         self._stop_armed = False
+        try:
+            self.query_one('#btn-stop', Button).label = '⏹  E-Stop'
+        except Exception:
+            pass
         try:
             await asyncio.gather(
                 *[send_command('stop', socket_path=s) for s in self._socket_paths],

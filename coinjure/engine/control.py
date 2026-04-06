@@ -35,11 +35,12 @@ SOCKET_PATH = SOCKET_DIR / 'engine.sock'
 
 
 def _ticker_display_name(ticker: Ticker) -> str:
-    """Build a display name with exchange prefix for positions/orders."""
+    """Build a display name with exchange prefix and YES/NO side."""
     from coinjure.ticker import KalshiTicker, PolyMarketTicker
 
     name = getattr(ticker, 'name', '') or ''
     symbol = getattr(ticker, 'symbol', '') or ''
+    side = getattr(ticker, 'side', '') or ''
 
     if isinstance(ticker, PolyMarketTicker):
         prefix = '[P]'
@@ -50,7 +51,7 @@ def _ticker_display_name(ticker: Ticker) -> str:
     if not name:
         name = ticker.identifier or symbol
 
-    return f'{prefix} {name}'[:30]
+    return f'{prefix} {name}'.strip()[:30]
 
 
 def default_engine_socket_path() -> Path:
@@ -356,14 +357,18 @@ class ControlServer:
 
         # ── Recent orders ────────────────────────────────────────────
         try:
+            recent = orders_list[-8:]
+            start_idx = len(orders_list) - len(recent)
             state['orders'] = [
                 {
+                    'idx': start_idx + i,
                     'side': o.side.value,
                     'name': _ticker_display_name(o.ticker),
+                    'yn': (getattr(o.ticker, 'side', '') or '').upper(),
                     'limit_price': str(o.limit_price),
                     'status': o.status.value,
                 }
-                for o in orders_list[-8:]
+                for i, o in enumerate(orders_list[-8:])
             ]
         except Exception:
             state['orders'] = []

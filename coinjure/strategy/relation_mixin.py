@@ -34,6 +34,7 @@ class RelationArbMixin:
         self._relation = None
         self._ids = []
         self._tokens = []
+        self._no_tokens: list[str] = []
         self._match_sets = []
         self._owned_symbols = set()
         self._trade_outcomes: deque[bool] = deque(maxlen=_OUTCOME_WINDOW)
@@ -61,6 +62,10 @@ class RelationArbMixin:
                     token_ids = m.get('token_ids', [])
                     tid = token_ids[0] if token_ids else ''
                 self._tokens.append(tid)
+                # Track NO token for watch_tokens
+                token_ids = m.get('token_ids', [])
+                no_tid = token_ids[1] if len(token_ids) > 1 else ''
+                self._no_tokens.append(no_tid)
                 self._match_sets.append({mid, tid} - {''})
 
         self._build_market_context()
@@ -135,8 +140,12 @@ class RelationArbMixin:
         return kw
 
     def watch_tokens(self) -> list[str]:
-        """Return CLOB token IDs so the data source prioritizes these markets."""
-        return [t for t in self._tokens if t]
+        """Return CLOB token IDs (YES + NO) so the data source streams all sides."""
+        tokens = [t for t in self._tokens if t]
+        for t in self._no_tokens:
+            if t and t not in tokens:
+                tokens.append(t)
+        return tokens
 
     def _slot_matches(self, ticker: Ticker, slot: int) -> bool:
         """Check if a ticker's identifier matches a relation slot."""
@@ -165,20 +174,24 @@ class RelationArbMixin:
         Returns True if both legs executed successfully.
         """
         if not ticker_1 or not ticker_2 or price_1 <= 0 or price_2 <= 0:
-            logger.warning('Pair trade skipped: missing ticker or invalid price')
+            logger.debug('Pair trade skipped: missing ticker or invalid price')
             return False
 
         r1 = await trader.place_order(
-            side=TradeSide.BUY, ticker=ticker_1,
-            limit_price=price_1, quantity=quantity,
+            side=TradeSide.BUY,
+            ticker=ticker_1,
+            limit_price=price_1,
+            quantity=quantity,
         )
         if r1.failure_reason:
             logger.warning('Pair leg1 rejected: %s', r1.failure_reason)
             return False
 
         r2 = await trader.place_order(
-            side=TradeSide.BUY, ticker=ticker_2,
-            limit_price=price_2, quantity=quantity,
+            side=TradeSide.BUY,
+            ticker=ticker_2,
+            limit_price=price_2,
+            quantity=quantity,
         )
         if r2.failure_reason:
             # Leg1 succeeded but leg2 failed — unwind leg1
@@ -189,8 +202,10 @@ class RelationArbMixin:
                 try:
                     r_unwind = await asyncio.wait_for(
                         trader.place_order(
-                            side=TradeSide.SELL, ticker=ticker_1,
-                            limit_price=best_bid.price, quantity=quantity,
+                            side=TradeSide.SELL,
+                            ticker=ticker_1,
+                            limit_price=best_bid.price,
+                            quantity=quantity,
                         ),
                         timeout=5.0,
                     )
@@ -203,7 +218,9 @@ class RelationArbMixin:
                     )
             if not unwound:
                 # Unwind failed — track position so _close_owned can clean up later
-                logger.warning('Pair unwind failed, tracking orphaned leg1: %s', ticker_1.symbol)
+                logger.warning(
+                    'Pair unwind failed, tracking orphaned leg1: %s', ticker_1.symbol
+                )
                 self._owned_symbols.add(ticker_1.symbol)
             return False
 
@@ -222,8 +239,10 @@ class RelationArbMixin:
             best_bid = trader.market_data.get_best_bid(pos.ticker)
             if best_bid:
                 result = await trader.place_order(
-                    side=TradeSide.SELL, ticker=pos.ticker,
-                    limit_price=best_bid.price, quantity=pos.quantity,
+                    side=TradeSide.SELL,
+                    ticker=pos.ticker,
+                    limit_price=best_bid.price,
+                    quantity=pos.quantity,
                 )
                 if not result.failure_reason:
                     closed.append(sym)

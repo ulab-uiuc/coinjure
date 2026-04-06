@@ -172,6 +172,19 @@ Exchange is auto-detected per market ID (numeric → polymarket, else → kalshi
 coinjure market relations list --json
 ```
 
+### Step 5b: Remove relations
+
+```bash
+# Remove a single relation
+coinjure market relations remove <relation_id>
+
+# Remove ALL relations (no --all flag exists, so loop)
+coinjure market relations list 2>&1 \
+  | grep '│' \
+  | awk -F'│' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 != "" && $2 != "Relation ID") print $2}' \
+  | while read id; do coinjure market relations remove "$id"; done
+```
+
 ### Step 6: Backtest all relations
 
 Only after accumulating a substantial pool of relations (20+):

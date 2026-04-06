@@ -113,7 +113,9 @@ class DirectArbStrategy(Strategy):
         self._poly_ticker: PolyMarketTicker | None = None
         self._kalshi_ticker_obj: KalshiTicker | None = None
 
-        self._last_arb_time: float = float('-inf')  # no previous arb; first trade always allowed
+        self._last_arb_time: float = float(
+            '-inf'
+        )  # no previous arb; first trade always allowed
         self._poll_task: asyncio.Task | None = None
         self._initialized: bool = False
         # Position tracking: 'poly_cheap' or 'kalshi_cheap' or None
@@ -435,7 +437,10 @@ class DirectArbStrategy(Strategy):
             kelly_fraction=self.kelly_fraction,
             max_size=self.max_trade_size,
             leg_count=2,
-            leg_prices=[poly_yes, Decimal('1') - kalshi_yes],  # both non-None after guard above
+            leg_prices=[
+                poly_yes,
+                Decimal('1') - kalshi_yes,
+            ],  # both non-None after guard above
         )
 
         if edge_poly_cheap >= edge_kalshi_cheap:
@@ -464,12 +469,15 @@ class DirectArbStrategy(Strategy):
 
         logger.info('DirectArb: CLOSE %s %s reason=%s', direction, label, reason)
 
+        close_action = f'CLOSE_{direction}'
+
         for pos in trader.position_manager.get_non_cash_positions():
             if pos.quantity <= 0:
                 continue
             best_bid = trader.market_data.get_best_bid(pos.ticker)
             if best_bid is None or best_bid.price <= 0:
                 continue
+            leg_name = getattr(pos.ticker, 'name', '') or pos.ticker.symbol[:25]
             try:
                 result = await trader.place_order(
                     side=TradeSide.SELL,
@@ -479,18 +487,35 @@ class DirectArbStrategy(Strategy):
                 )
                 if not result.failure_reason:
                     closed += 1
+                    self.record_decision(
+                        ticker_name=leg_name[:40],
+                        action=close_action,
+                        executed=True,
+                        reasoning=(
+                            f'{reason} price={float(best_bid.price):.4f} '
+                            f'qty={float(pos.quantity):.1f}'
+                        ),
+                        signal_values=signal,
+                    )
+                else:
+                    self.record_decision(
+                        ticker_name=leg_name[:40],
+                        action=close_action,
+                        executed=False,
+                        reasoning=f'{reason} LEG FAILED {result.failure_reason}',
+                        signal_values=signal,
+                    )
             except Exception:
                 logger.exception(
                     'DirectArb: close failed for %s', pos.ticker.symbol[:20]
                 )
-
-        self.record_decision(
-            ticker_name=label,
-            action=f'CLOSE_{direction}',
-            executed=closed > 0,
-            reasoning=f'{reason} closed={closed}',
-            signal_values=signal,
-        )
+                self.record_decision(
+                    ticker_name=leg_name[:40],
+                    action=close_action,
+                    executed=False,
+                    reasoning=f'{reason} LEG EXCEPTION',
+                    signal_values=signal,
+                )
         if closed > 0:
             self._held_direction = None
             self._last_arb_time = time.monotonic()

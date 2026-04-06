@@ -55,3 +55,4 @@ nav:
       - Engine: api/engine.md
   - Architecture:
       - Project Specification: PROJECT_SPECIFICATION.md
+  - Blog: blog/index.md

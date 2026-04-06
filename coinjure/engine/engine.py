@@ -422,6 +422,7 @@ class TradingEngine:
             # important when using the Market Data Hub, where order book
             # events arrive on a 5-second refresh cycle while RSS news
             # streams continuously.
+            _news_drain_extra: list[object] = []
             if self._continuous and isinstance(event, NewsEvent):
                 drained = 0
                 while True:
@@ -440,6 +441,7 @@ class TradingEngine:
                         drained += 1
                     elif isinstance(peek, PriceChangeEvent):
                         self.market_data.process_price_change_event(peek)
+                        _news_drain_extra.append(peek)
                         drained += 1
                     elif isinstance(peek, NewsEvent):
                         # Put non-market events into a buffer to process later
@@ -448,6 +450,8 @@ class TradingEngine:
                     logger.debug('Drained %d market events before NewsEvent', drained)
 
             batch = self._drain_backtest_timestamp_batch(event)
+            if _news_drain_extra:
+                batch.extend(_news_drain_extra)
             batch_has_prefetched_market_updates = len(batch) > 1
             if batch_has_prefetched_market_updates:
                 for batch_event in batch:
