@@ -1,3 +1,5 @@
+![Coinjure Mascot](../../assets/coinjure_mascot.png)
+
 # Blog
 
 ## Demonstration
