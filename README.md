@@ -14,65 +14,15 @@
   <a href="https://ulab-uiuc.github.io/prediction-market-cli/docs/index.html"><img src="https://img.shields.io/badge/Docs-Read-blue" alt="Docs"></a>
 </p>
 
-**Coinjure** is a full-stack, CLI-native trading framework designed for LLM agents in prediction markets. It empowers agents to drive the entire strategy lifecycle purely by interacting with a command-line interface. By simply issuing CLI commands, an agent can autonomously discover cross-market relations, compile executable strategies, run large-scale backtests, and deploy to live execution.
+**Coinjure** is an agent-native trading framework for prediction markets. It empowers LLM agents to drive the entire strategy lifecycle purely through CLI commands — autonomously discovering cross-market relations, building executable strategies, running large-scale backtests, and deploying to live execution.
 
-Using Coinjure, agents like Claude Code or Codex can discover over 100 backtest-positive strategies in a single hour — a capability validated by deploying to live trading and generating real profit on prediction market exchanges.
+Using Coinjure, LLM agents can discover over 100 backtest-positive strategies in a single hour — a capability validated by deploying to live trading and generating real profit on prediction market exchanges.
 
 ## Demos
 
 - [1min Introduction of Coinjure](https://youtu.be/u5PdMAVDqiM)
 - [Basic Functionality Demo of Coinjure](https://youtu.be/1Iro-NPfFnY)
 - [Claude Code + Coinjure Demo](https://youtu.be/2gxla8qlrDU)
-
-## Why Agent-Native
-
-Trading is entering an AI-native era. Prediction markets are fundamentally semantic and event-driven — success depends on interpreting political shifts, breaking news, and evolving public narratives. These are domains where LLM agents uniquely excel.
-
-Most trading platforms today are built around visual dashboards. For an AI agent, however, a CLI is the natural environment. Coinjure is architected for agent-first access:
-
-- **Strategy is the primary interface.** Every exploitable opportunity stems from a _relation_ between markets, and every relation type maps 1-to-1 to a _strategy_ that trades it.
-- **The engine owns execution.** Risk checks, lifecycle management, and process isolation are handled automatically.
-- **Data, simulation, monitoring, and live controls are unified behind CLI commands** — letting agents iterate quickly, safely, and reproducibly.
-
-## System Overview
-
-The pipeline has four stages:
-
-```
-LLM Agent + market data
-    → [1. Discovery]  — discover cross-market relations via CLI
-    → [2. Backtest]   — validate each relation against historical data
-    → [3. Execution]  — paper-trade or live-trade validated strategies
-    → [4. Monitoring]  — human operator monitors and intervenes when needed
-```
-
-Core runtime components:
-
-```
-TradingEngine
-  ├── DataSource          (Live / Historical / Hub)
-  ├── Strategy            (Relation-based / LLM-powered / Custom)
-  └── Trader              (PaperTrader / PolymarketTrader / KalshiTrader)
-       ├── RiskManager    (Standard / Conservative / Aggressive)
-       └── PositionManager
-```
-
-Each engine instance runs as an independent OS process, allowing hundreds of strategies to execute in parallel without shared-state contention. A `ControlServer` (Unix socket) provides per-instance pause/resume/status/stop, while the `StrategyRegistry` persists portfolio state across sessions.
-
-## Relation-Strategy Mapping
-
-The LLM agent reads free-text market descriptions to discover relations; Coinjure automatically instantiates the corresponding strategy. Discovering a new relation immediately yields a ready-to-backtest strategy with no additional code.
-
-| Relation          | Constraint                        | Strategy                 |
-| ----------------- | --------------------------------- | ------------------------ |
-| **same_event**    | Identical market across platforms | `DirectArbStrategy`      |
-| **complementary** | Outcomes sum to 1                 | `GroupArbStrategy`       |
-| **implication**   | A ⇒ B price ordering              | `ImplicationArbStrategy` |
-| **exclusivity**   | Mutually exclusive                | `GroupArbStrategy`       |
-| **correlated**    | Cointegrated prices               | `CointSpreadStrategy`    |
-| **structural**    | Monotonic price nesting           | `StructuralArbStrategy`  |
-| **conditional**   | Conditional probability bounds    | `ConditionalArbStrategy` |
-| **temporal**      | Lead-lag information flow         | `LeadLagStrategy`        |
 
 ## Installation
 
@@ -134,30 +84,30 @@ coinjure engine killswitch --on # emergency halt
 
 ![Coinjure Monitor](assets/coinjure_monitor.png)
 
-## Custom Strategy
+## System Overview
 
-```python
-from coinjure.strategy.strategy import Strategy
-from coinjure.events import Event
-from coinjure.trading.trader import Trader
+The pipeline has four stages:
 
-class MyStrategy(Strategy):
-    async def process_event(self, event: Event, trader: Trader) -> None:
-        # Your logic here
-        pass
+```
+LLM Agent + market data
+    → [1. Discovery]  — discover cross-market relations via CLI
+    → [2. Backtest]   — validate each relation against historical data
+    → [3. Execution]  — paper-trade or live-trade validated strategies
+    → [4. Monitoring]  — human operator monitors and intervenes when needed
 ```
 
-## Market Data Hub
+Core runtime components:
 
-For running many strategies against the same markets, the hub polls exchanges once and fans out data to all subscribers via Unix sockets:
-
-```bash
-coinjure hub start --detach
-coinjure hub status
-coinjure hub stop
+```
+TradingEngine
+  ├── DataSource          (Live / Historical / Hub)
+  ├── Strategy            (Relation-based / LLM-powered / Custom)
+  └── Trader              (PaperTrader / PolymarketTrader / KalshiTrader)
+       ├── RiskManager    (Standard / Conservative / Aggressive)
+       └── PositionManager
 ```
 
-Engine instances auto-connect to the hub when it's running (disable with `--no-hub`).
+Each engine instance runs as an independent OS process, allowing hundreds of strategies to execute in parallel without shared-state contention. A `ControlServer` (Unix socket) provides per-instance pause/resume/status/stop, while the `StrategyRegistry` persists portfolio state across sessions.
 
 ## Human-in-the-Loop Model
 
@@ -201,29 +151,12 @@ The operator should not need to manually place/cancel orders in normal operation
 | `engine monitor`    | Attach live TUI dashboard to running engines                     |
 | `engine killswitch` | Toggle the global emergency kill-switch                          |
 
-### `coinjure hub` — Shared Market Data Hub
-
-| Command      | Description                            |
-| ------------ | -------------------------------------- |
-| `hub start`  | Start the exchange data fan-out server |
-| `hub status` | Show hub status and subscriber count   |
-| `hub stop`   | Stop the hub                           |
-
 ## Environment Variables
 
 ```bash
 export POLYMARKET_PRIVATE_KEY="your_private_key"      # Polymarket live trading
 export KALSHI_API_KEY_ID="your_kalshi_key_id"         # Kalshi live trading
 export KALSHI_PRIVATE_KEY_PATH="/path/key.pem"        # Kalshi live trading
-```
-
-## Development
-
-```bash
-poetry install --with dev,test
-pre-commit install
-ruff check . && ruff format .
-pytest tests/ -v -p no:nbmake
 ```
 
 ## Citation

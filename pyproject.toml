@@ -1,18 +1,18 @@
 [tool.poetry]
 name = "coinjure"
-version = "0.1.0"
-description = "An intelligent trading agent for Polymarket prediction markets, powered by Social World Models and LLM-driven decision making."
+version = "0.1.1"
+description = "An agent-native trading system for prediction markets"
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
-license = "Apache-2.0"
+license = "MIT"
 readme = "README.md"
-repository = "https://github.com/ulab-uiuc/coinjure"
-homepage = "https://github.com/ulab-uiuc/coinjure"
+repository = "https://github.com/ulab-uiuc/prediction-market-cli"
+homepage = "https://ulab-uiuc.github.io/prediction-market-cli"
 keywords = [
     "polymarket",
+    "kalshi",
     "trading",
     "prediction-market",
     "llm",
-    "social-world-model",
     "backtesting",
     "algorithmic-trading",
 ]
@@ -21,10 +21,11 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
@@ -174,7 +175,7 @@ max-complexity = 10
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version = "0.1.1"
 tag_format = "v$version"
 bump_message = "bump: version $current_version → $new_version"
 version_files = [
