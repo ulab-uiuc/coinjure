@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "coinjure"
 version = "0.1.1"
-description = "An agent-native trading harness for prediction markets"
+description = "A trading agent harness for prediction markets"
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
 license = "MIT"
 readme = "README.md"
