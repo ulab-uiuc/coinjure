@@ -20,7 +20,7 @@ Using Coinjure, LLM agents can discover over 100 backtest-positive strategies in
 
 ## Demos
 
-- [1min Introduction of Coinjure](https://youtu.be/NvRhYB-yWLM?si=MBsaeMYKePFFAWBK)
+- [1min Introduction of Coinjure](https://youtu.be/TbHq0bI6hvo?si=PPoIEvU4bLQP1j-W)
 - [Basic Functionality Demo of Coinjure](https://youtu.be/1Iro-NPfFnY)
 - [Claude Code + Coinjure Demo](https://youtu.be/2gxla8qlrDU)
 
