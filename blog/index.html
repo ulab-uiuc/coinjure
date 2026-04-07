@@ -1,0 +1,4241 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coinjure: A Trading Agent Harness for Prediction Markets</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap");
+
+      :root {
+        --sans: "DM Sans", -apple-system, sans-serif;
+        --serif: "Source Serif 4", Georgia, serif;
+        --mono: "DM Mono", "SF Mono", Consolas, monospace;
+        --r: 14px;
+        --r-sm: 10px;
+        --r-pill: 20px;
+        --nav-h: 52px;
+        --toc-w: 180px;
+      }
+      [data-theme="light"] {
+        --bg: #f3f6fb;
+        --card: #e8edf6;
+        --elevated: #dde4f0;
+        --deep: #d2daea;
+        --code-bg: #1a1e24;
+        --border: #bec8d8;
+        --line: #aab4c6;
+        --t1: #18222e;
+        --t2: #26323f;
+        --t3: #415060;
+        --t4: #647585;
+        --t5: #8e9eae;
+        --code-t: #ced4dc;
+        --badge-bg: #18222e;
+        --badge-t: #f3f6fb;
+        --link: #2a5282;
+        --link-h: #18222e;
+      }
+
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: calc(var(--nav-h) + 24px);
+      }
+      body {
+        font-family: var(--sans);
+        background: var(--bg);
+        color: var(--t2);
+        font-size: 17px;
+        line-height: 1.75;
+        -webkit-font-smoothing: antialiased;
+        transition:
+          background 0.2s,
+          color 0.2s;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+      a:hover {
+        color: var(--link-h);
+      }
+      ::selection {
+        background: var(--badge-bg);
+        color: var(--badge-t);
+      }
+
+      /* NAV */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        height: var(--nav-h);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 28px;
+        background: var(--bg);
+        border-bottom: 0.7px solid var(--border);
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .nav-logo {
+        font-family: var(--sans);
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--t1);
+        display: flex;
+        align-items: center;
+        letter-spacing: 0.02em;
+        transition: color 0.2s;
+      }
+      .nav-r {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .nav-link {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--t4);
+        padding: 5px 10px;
+        border-radius: var(--r-sm);
+        transition: all 0.15s;
+      }
+      .nav-link:hover {
+        color: var(--t2);
+        background: var(--card);
+      }
+      .gh-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: var(--r-pill);
+        background: var(--badge-bg);
+        color: #f3f6fb;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        transition: opacity 0.15s;
+      }
+      .gh-pill,
+      .gh-pill:visited,
+      .gh-pill:link {
+        color: #f3f6fb;
+      }
+      .gh-pill:hover {
+        opacity: 0.85;
+        color: #f3f6fb;
+      }
+      .gh-pill svg {
+        flex-shrink: 0;
+      }
+
+      /* HERO */
+      .hero-wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 28px;
+      }
+      .hero {
+        text-align: center;
+        padding: 72px 0 40px;
+      }
+      .hero-mascot {
+        position: absolute;
+        right: -170px;
+        top: 50%;
+        transform: translateY(-55%);
+        width: 150px;
+        height: auto;
+        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.08));
+        pointer-events: none;
+      }
+      .hero h1 {
+        font-family: var(--serif);
+        font-size: clamp(34px, 5.5vw, 52px);
+        font-weight: 700;
+        color: var(--t1);
+        letter-spacing: -0.04em;
+        line-height: 1.08;
+        margin-bottom: 18px;
+        transition: color 0.2s;
+      }
+      .hero-sub {
+        font-size: 16px;
+        color: var(--t3);
+        max-width: 640px;
+        margin: 0 auto 20px;
+        line-height: 1.6;
+      }
+      .hero-date {
+        font-size: 12.5px;
+        color: var(--t4);
+        margin-bottom: 16px;
+      }
+      .hero-authors {
+        margin: 0 auto 24px;
+        max-width: 760px;
+        text-align: center;
+      }
+      .author-row {
+        font-size: 17px;
+        color: var(--t2);
+        margin-bottom: 6px;
+        line-height: 1.8;
+      }
+      .author-name {
+        display: inline;
+        white-space: nowrap;
+      }
+      .author-core {
+        font-weight: 600;
+        color: var(--t1);
+      }
+      .author-sep {
+        color: var(--t5);
+        margin: 0 2px;
+      }
+      .author-affil {
+        font-size: 17px;
+        color: var(--t4);
+        margin-top: 12px;
+        line-height: 2;
+      }
+      .author-affil sup {
+        font-size: 11px;
+      }
+      .hero-btns {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 7px 16px;
+        border-radius: var(--r-pill);
+        font-family: var(--sans);
+        font-size: 12.5px;
+        font-weight: 500;
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .btn-dark {
+        background: var(--badge-bg);
+        color: var(--badge-t);
+      }
+      .btn-dark:hover {
+        opacity: 0.85;
+        color: var(--badge-t);
+      }
+      .btn-ghost {
+        background: transparent;
+        border: 0.7px solid var(--border);
+        color: var(--t2);
+      }
+      .btn-ghost:hover {
+        background: var(--card);
+        color: var(--t1);
+      }
+
+      /* TLDR */
+      .tldr {
+        background: var(--card);
+        border-radius: 0 12px 12px 0;
+        border-left: 3px solid var(--t1);
+        padding: 16px 22px;
+        margin: 0 auto 32px;
+        max-width: 760px;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      .tldr-body {
+        font-size: 17px;
+        line-height: 1.75;
+        color: var(--t2);
+      }
+      .tldr-body strong {
+        color: var(--t1);
+      }
+
+      /* LAYOUT */
+      .layout {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 0 28px 80px;
+        position: relative;
+      }
+
+      /* Sticky left TOC */
+      .toc {
+        position: fixed;
+        top: calc(var(--nav-h) + 24px);
+        width: 180px;
+        right: calc(50% + 410px);
+        max-height: calc(100vh - var(--nav-h) - 48px);
+        overflow-y: auto;
+        padding: 4px 0;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 0.35s ease,
+          transform 0.35s ease;
+      }
+      .toc.visible {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+      .toc-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--t4);
+        margin-bottom: 10px;
+        transition: color 0.2s;
+      }
+      .toc a {
+        display: block;
+        font-size: 12.5px;
+        color: var(--t4);
+        padding: 4px 0 4px 12px;
+        border-left: 2px solid transparent;
+        transition: all 0.15s;
+        line-height: 1.45;
+      }
+      .toc a:hover {
+        color: var(--t2);
+      }
+      .toc a.active {
+        color: var(--t1);
+        border-left-color: var(--t1);
+        font-weight: 500;
+      }
+      .toc a.sub {
+        padding-left: 24px;
+        font-size: 12px;
+      }
+
+      /* ARTICLE */
+      .article {
+        max-width: 100%;
+        min-width: 0;
+      }
+      .article h2 {
+        font-family: var(--serif);
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--t1);
+        letter-spacing: -0.3px;
+        line-height: 1.3;
+        margin: 48px 0 14px;
+        padding-top: 20px;
+        border-top: none;
+        transition: color 0.2s;
+      }
+      .article h2:first-child {
+        margin-top: 0;
+        border-top: none;
+        padding-top: 0;
+      }
+      .article h3 {
+        font-family: var(--serif);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--t1);
+        letter-spacing: -0.2px;
+        margin: 32px 0 10px;
+        transition: color 0.2s;
+      }
+      .article h4 {
+        font-family: var(--serif);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--t1);
+        letter-spacing: -0.1px;
+        margin: 24px 0 8px;
+        transition: color 0.2s;
+      }
+      .article p {
+        margin-bottom: 14px;
+      }
+      .article strong {
+        color: var(--t1);
+        font-weight: 600;
+        transition: color 0.2s;
+      }
+      .article ul,
+      .article ol {
+        margin: 0 0 14px 22px;
+      }
+      .article li {
+        margin-bottom: 5px;
+      }
+      .article code {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        background: var(--card);
+        padding: 2px 6px;
+        border-radius: 5px;
+        color: var(--t1);
+        transition: all 0.2s;
+      }
+      .article a {
+        color: var(--link);
+      }
+      .article a:hover {
+        color: var(--link-h);
+        text-decoration: underline;
+      }
+      .article a.btn {
+        color: unset;
+        text-decoration: none;
+      }
+      .article a.btn-dark {
+        color: var(--badge-t);
+      }
+      .article a.btn-dark:hover {
+        color: var(--badge-t);
+      }
+      .article a.btn-ghost {
+        color: var(--t2);
+      }
+      .article a.btn-ghost:hover {
+        color: var(--t1);
+        text-decoration: none;
+      }
+
+      /* Code block */
+      .cb {
+        background: var(--card);
+        border-radius: var(--r);
+        margin: 16px 0 20px;
+        overflow: hidden;
+        border: 0.7px solid var(--border);
+      }
+      .cb-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        border-bottom: 0.7px solid var(--border);
+      }
+      .cb-lang {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--t4);
+        letter-spacing: 0.04em;
+      }
+      .cb pre {
+        padding: 14px 18px;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--t1);
+      }
+      .cb .kw {
+        color: #2a5282;
+      }
+      .cb .str {
+        color: #4a7c59;
+      }
+      .cb .cmt {
+        color: #8e9eae;
+        font-style: italic;
+      }
+      .cb .fn {
+        color: #18222e;
+      }
+      .cb .num {
+        color: #8b5e3c;
+      }
+
+      /* Table */
+      .article table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0 20px;
+        font-size: 13.5px;
+      }
+      .article th {
+        text-align: left;
+        padding: 10px 14px;
+        font-weight: 600;
+        font-size: 11.5px;
+        color: var(--t1);
+        background: var(--card);
+        border-bottom: 0.7px solid var(--border);
+        transition: all 0.2s;
+      }
+      .article td {
+        padding: 10px 14px;
+        border-bottom: 0.7px solid var(--border);
+        color: var(--t2);
+        transition: all 0.2s;
+      }
+
+      /* Callout */
+      .callout {
+        border: 0.7px dashed var(--border);
+        border-radius: var(--r);
+        padding: 14px 18px;
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+        transition: border-color 0.2s;
+      }
+      .callout-icon {
+        font-size: 15px;
+        flex-shrink: 0;
+        line-height: 1.75;
+      }
+      .callout-body {
+        font-size: 13.5px;
+        line-height: 1.7;
+      }
+
+      /* Result highlight */
+      .result-hl {
+        background: var(--deep);
+        border-radius: var(--r);
+        padding: 24px;
+        text-align: center;
+        margin: 20px 0;
+        transition: background 0.2s;
+      }
+      .result-val {
+        font-family: var(--serif);
+        font-size: 36px;
+        font-weight: 700;
+        color: var(--t1);
+        letter-spacing: -0.02em;
+        transition: color 0.2s;
+      }
+      .result-sub {
+        font-size: 13px;
+        color: var(--t3);
+        margin-top: 4px;
+        transition: color 0.2s;
+      }
+
+      /* Pipeline diagram */
+      .pipeline-box {
+        margin: 24px 0;
+        border-radius: var(--r);
+        overflow: hidden;
+        border: 0.7px solid var(--border);
+        background: var(--bg);
+        transition: all 0.2s;
+      }
+      .p-canvas {
+        width: 100%;
+        max-width: 700px;
+        margin: 0 auto;
+        padding: 28px 40px;
+      }
+      .p-row {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        align-items: stretch;
+        margin-bottom: 0;
+      }
+      .p-card {
+        background: var(--card);
+        border-radius: 12px;
+        padding: 14px 18px;
+        text-align: center;
+        flex: 1;
+        min-width: 0;
+        transition: background 0.2s;
+      }
+      .p-card-title {
+        font-family: var(--serif);
+        font-size: 15px;
+        color: var(--t1);
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+      .p-card-sub {
+        font-size: 11px;
+        color: var(--t3);
+        margin-top: 3px;
+      }
+      .p-hline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 0;
+      }
+      .p-hline-bar {
+        flex: 1;
+        height: 1px;
+        background: var(--line);
+      }
+      .p-hline-label {
+        font-size: 11px;
+        color: var(--t4);
+        white-space: nowrap;
+      }
+
+      /* Placeholder section */
+      .placeholder {
+        background: var(--card);
+        border-radius: var(--r);
+        padding: 32px;
+        text-align: center;
+        margin: 20px 0;
+        color: var(--t4);
+        font-size: 14px;
+        font-style: italic;
+      }
+
+      /* Relation example cards */
+      .rel-card {
+        background: var(--card);
+        border: 0.7px solid var(--border);
+        border-radius: var(--r);
+        margin: 16px 0 20px;
+        overflow: hidden;
+        transition: all 0.2s;
+      }
+      .rel-card-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 18px;
+        border-bottom: 0.7px solid var(--border);
+        background: var(--elevated);
+      }
+      .rel-type-badge {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        padding: 2px 10px;
+        border-radius: var(--r-pill);
+        background: var(--badge-bg);
+        color: var(--badge-t);
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+      .rel-card-title {
+        font-family: var(--serif);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--t1);
+        flex: 1;
+        min-width: 0;
+      }
+      .rel-card-body {
+        padding: 14px 18px;
+      }
+      .rel-market-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .rel-market-list li {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 6px 0;
+        margin: 0;
+        font-size: 13.5px;
+        line-height: 1.5;
+        border-bottom: 0.7px dashed var(--border);
+      }
+      .rel-market-list li:last-child {
+        border-bottom: none;
+      }
+      .rel-platform {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        font-weight: 500;
+        padding: 1px 7px;
+        border-radius: var(--r-sm);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .rel-platform.poly {
+        background: #e8dff0;
+        color: #5b3a8c;
+      }
+      .rel-platform.kalshi {
+        background: #dde9f3;
+        color: #2a5282;
+      }
+      .rel-market-q {
+        color: var(--t2);
+      }
+      .rel-market-q a {
+        color: var(--t2);
+        text-decoration: none;
+        border-bottom: 1px dashed var(--line);
+        transition: all 0.15s;
+      }
+      .rel-market-q a:hover {
+        color: var(--link);
+        border-bottom-color: var(--link);
+        text-decoration: none;
+      }
+      .rel-connector {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 2px 0 2px 8px;
+        margin: 0;
+        border-bottom: 0.7px dashed var(--border);
+      }
+      .rel-connector-sym {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--t4);
+        background: var(--elevated);
+        padding: 0 8px;
+        border-radius: var(--r-sm);
+      }
+      .rel-card-footer {
+        padding: 8px 18px 12px;
+        font-size: 12.5px;
+        color: var(--t3);
+        line-height: 1.6;
+      }
+      .rel-card-footer code {
+        font-family: var(--mono);
+        font-size: 11px;
+        background: var(--deep);
+        padding: 1px 5px;
+        border-radius: 4px;
+        color: var(--t1);
+      }
+      .rel-stat {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--t3);
+        margin-left: 6px;
+      }
+      .rel-examples-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 16px 0 20px;
+      }
+      .rel-examples-grid .rel-card {
+        margin: 0;
+      }
+      @media (max-width: 768px) {
+        .rel-examples-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* BibTeX */
+      .bibtex-block {
+        background: var(--card);
+        border: 0.7px solid var(--border);
+        border-radius: var(--r);
+        padding: 18px 22px;
+        margin: 16px 0 20px;
+        overflow-x: auto;
+      }
+      .bibtex-block pre {
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--t1);
+        margin: 0;
+        white-space: pre;
+      }
+
+      /* Footer */
+      .footer {
+        border-top: 0.7px solid var(--border);
+        padding: 28px;
+        text-align: center;
+        font-size: 12px;
+        color: var(--t4);
+        transition: all 0.2s;
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 8px;
+      }
+      .footer-links a {
+        color: var(--t2);
+        font-weight: 500;
+      }
+
+      /* Responsive */
+      @media (max-width: 1100px) {
+        .toc {
+          display: none;
+        }
+      }
+      @media (max-width: 768px) {
+        .hero-wrap {
+          padding: 0 16px;
+        }
+        .layout {
+          padding: 0 16px 56px;
+        }
+        .nav {
+          padding: 0 16px;
+        }
+        .nav-link {
+          display: none;
+        }
+        .hero-mascot {
+          display: none;
+        }
+        .hero h1 {
+          font-size: 32px;
+        }
+        .hero {
+          padding: 48px 0 28px;
+        }
+        .article h2 {
+          font-size: 20px;
+          margin: 36px 0 12px;
+          padding-top: 16px;
+        }
+        .article h3 {
+          font-size: 16px;
+          margin: 24px 0 8px;
+        }
+        .article {
+          font-size: 14px;
+        }
+        .cb pre {
+          font-size: 11.5px;
+          padding: 12px 14px;
+        }
+        .p-row {
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .p-card {
+          flex: 1 1 120px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- NAV -->
+    <nav class="nav">
+      <a href="/coinjure/docs/index.html" class="nav-logo"
+        ><span style="color: #d4a017">Coin</span
+        ><span style="color: #2c5f8a">jure</span></a
+      >
+      <div class="nav-r">
+        <a href="/coinjure/docs/index.html" class="nav-link">Docs</a>
+        <a href="#" class="nav-link" style="color: var(--t1)">Blog</a>
+        <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </nav>
+
+    <!-- HERO -->
+    <div class="hero-wrap">
+      <header class="hero">
+        <div style="position: relative; display: inline-block">
+          <h1>
+            <span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span>: A Trading Agent
+            Harness<br />for Prediction Markets
+          </h1>
+          <img
+            src="../assets/coinjure_mascot.png"
+            alt="Coinjure mascot"
+            class="hero-mascot"
+          />
+        </div>
+        <p class="hero-date">March 2026</p>
+
+        <div class="hero-authors">
+          <div class="author-row">
+            <a
+              href="https://haofeiyu.me/"
+              target="_blank"
+              class="author-name author-core"
+              style="color: #1a73e8"
+              >Haofei Yu</a
+            ><span class="author-sep">&nbsp;&nbsp;</span>
+            <span class="author-name author-core">Yicheng Yang</span
+            ><span class="author-sep">&nbsp;&nbsp;</span>
+            <span class="author-name author-core">Yuxiang Liu</span
+            ><span class="author-sep">&nbsp;&nbsp;</span>
+            <span class="author-name author-core">Jiaxuan You</span>
+          </div>
+          <div class="author-affil">
+            University of Illinois Urbana-Champaign
+          </div>
+          <div style="font-size: 13px; color: var(--t3); margin-top: 4px">
+            <a href="mailto:haofeiy2@illinois.edu" style="color: var(--link)"
+              >haofeiy2@illinois.edu</a
+            >&nbsp;&nbsp;
+            <a href="mailto:jiaxuan@illinois.edu" style="color: var(--link)"
+              >jiaxuan@illinois.edu</a
+            >
+          </div>
+        </div>
+
+        <div class="hero-btns">
+          <a href="https://github.com/ulab-uiuc/coinjure" class="btn btn-dark"
+            >Code</a
+          >
+          <a href="/coinjure/docs/index.html" class="btn btn-ghost">Docs</a>
+        </div>
+      </header>
+
+      <!-- TL;DR -->
+      <div class="tldr">
+        <div class="tldr-body">
+          <strong>TL;DR</strong> &mdash; <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> is a CLI-based harness for
+          trading agents in prediction markets. It empowers agents to drive the
+          entire strategy lifecycle purely by interacting with a command-line
+          interface. By simply issuing CLI commands, an agent can autonomously
+          discover cross-market relations, compile executable strategies, run
+          large-scale backtests, and deploy to live execution. Using
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span>, agents like Claude Code or
+          Codex can discover over 100 backtest-positive strategies in a single
+          hour&mdash;a capability we have validated by deploying to live trading
+          and generating real profit on prediction market exchanges.
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-COL: STICKY TOC + ARTICLE -->
+    <div class="layout">
+      <!-- LEFT STICKY TOC -->
+      <aside class="toc" id="toc">
+        <div class="toc-label">On this page</div>
+        <a href="#demonstration" data-section="demonstration">Demonstration</a>
+        <a href="#introduction" data-section="introduction">Introduction</a>
+        <a href="#coinjure-solution" data-section="coinjure-solution"
+          >The Coinjure Solution</a
+        >
+        <a href="#harness-overview" data-section="harness-overview"
+          >Harness Overview</a
+        >
+        <a
+          href="#strategy-discovery"
+          data-section="strategy-discovery"
+          class="sub"
+          >Strategy Discovery</a
+        >
+        <a href="#backtesting" data-section="backtesting" class="sub"
+          >Backtesting</a
+        >
+        <a href="#trade-execution" data-section="trade-execution" class="sub"
+          >Trade Execution</a
+        >
+        <a href="#human-monitoring" data-section="human-monitoring" class="sub"
+          >Human Monitoring</a
+        >
+        <a href="#experiments" data-section="experiments">Experiments</a>
+        <a href="#exp-discovery" data-section="exp-discovery" class="sub"
+          >Strategy Discovery</a
+        >
+        <a href="#exp-backtest" data-section="exp-backtest" class="sub"
+          >Backtesting</a
+        >
+        <a href="#exp-live" data-section="exp-live" class="sub">Live Trading</a>
+        <a href="#citation" data-section="citation">Citation</a>
+      </aside>
+
+      <!-- ARTICLE -->
+      <article class="article">
+        <h2 id="demonstration">Demonstration</h2>
+
+        <h3>1min Introduction of Coinjure</h3>
+        <div
+          style="
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            margin-bottom: 32px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 0.7px solid var(--border);
+          "
+        >
+          <iframe
+            style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              border: none;
+            "
+            src="https://www.youtube.com/embed/TbHq0bI6hvo"
+            title="1min Introduction of Coinjure"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+
+        <h3>Basic Functionality Demo of Coinjure</h3>
+        <div
+          style="
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            margin-bottom: 32px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 0.7px solid var(--border);
+          "
+        >
+          <iframe
+            style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              border: none;
+            "
+            src="https://www.youtube.com/embed/1Iro-NPfFnY"
+            title="Basic Functionality Demo of Coinjure"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+
+        <h3>Claude Code + Coinjure Demo</h3>
+        <div
+          style="
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            margin-bottom: 32px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 0.7px solid var(--border);
+          "
+        >
+          <iframe
+            style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              border: none;
+            "
+            src="https://www.youtube.com/embed/2gxla8qlrDU"
+            title="Claude Code + Coinjure Demo"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+
+        <h2 id="introduction">Introduction</h2>
+
+        <div id="fig1" class="pipeline-box" style="padding: 0">
+          <img
+            src="trading_loop.png"
+            alt="Quant Trading vs Agent-Native Trading"
+            style="width: 100%; display: block"
+          />
+          <div
+            style="
+              text-align: left;
+              padding: 8px 18px 14px;
+              font-size: 12.5px;
+              color: var(--t3);
+              line-height: 1.5;
+            "
+          >
+            <strong style="color: var(--t2)">Figure 1.</strong>
+            Trading is moving into an agent-native era. In algorithmic trading
+            (left), humans design, validate, and manage strategies while
+            algorithms execute. In agent-native trading (right), the LLM agent
+            drives the full management cycle; humans only monitor.
+          </div>
+        </div>
+
+        <p>
+          <strong>Trading is entering an AI-native era.</strong>
+          Modern quantitative infrastructure has largely automated low-level
+          execution, yet the higher-order loop&mdash;spanning strategy
+          discovery, capital allocation, and adaptive
+          repositioning&mdash;remains stubbornly human-driven and
+          intuition-based (<a href="#fig1">Figure 1</a>). As LLM agents become
+          increasingly capable, fully automating this loop is now a plausible
+          reality. This evolution raises a critical systems question:
+          <em
+            >what scaffold does an LLM agent actually require to discover,
+            validate, deploy, and manage trading strategies effectively?</em
+          >
+        </p>
+
+        <p>
+          <strong
+            >Prediction markets are a natural benchmark for LLM agents.</strong
+          >
+          Prediction markets are a natural benchmark for LLM agents. Unlike
+          traditional financial exchanges, where alpha is typically extracted
+          through low-latency execution or microstructure optimization,
+          prediction markets are fundamentally semantic and event-driven. Price
+          discovery here relies not on pure numerical data, but on interpreting
+          political shifts, breaking news, and evolving public narratives.
+          Consequently, success in these markets depends heavily on social
+          understanding, information synthesis, and probabilistic
+          reasoning—domains where LLM agents uniquely excel. In this sense,
+          prediction markets are not merely an alternative trading venue; they
+          provide a dynamic environment where an agent must continuously
+          interpret society, adapt to unstructured information, and autonomously
+          self-evolve.
+        </p>
+
+        <p>
+          <strong
+            >Existing trading systems are human-native, not
+            agent-native.</strong
+          >
+          Most platforms today are still built around visual dashboards and UI
+          workflows optimized for human perception. For an AI agent, however, a
+          command-line interface (CLI) is the natural environment. Agents
+          operate through text, programmatic commands, and structured
+          outputs&mdash;not visual screens. A well-designed CLI exposes exactly
+          the primitives an agent requires: market discovery, position
+          management, and order execution, all formatted to be seamlessly
+          composed within a reasoning loop. Therefore, the core challenge is not
+          making graphical UIs more agent-friendly, but architecting systems
+          that are natively accessible through an agent-first interface.
+        </p>
+
+        <p>
+          <strong
+            >What AI-native trading needs is not better Claude skills, but a
+            trading agent harness.</strong
+          >
+          There are two fundamental reasons for this. First, generic
+          tool-calling skills do not make strategy discovery scalable. While
+          they teach an agent how to invoke APIs, they cannot elevate the
+          abstraction level of the underlying harness. If trading actions remain
+          bound to raw, low-level endpoints, the agent squanders its context
+          budget on execution boilerplate instead of strategic market reasoning,
+          rendering large-scale strategy search slow, brittle, and inefficient.
+          Second, even if discovery becomes scalable, the harder operational
+          challenges emerge immediately afterward: strategies must be rigorously
+          verified, deployed, monitored, updated, and eventually pruned. Once an
+          agent generates a high volume of candidate strategies, the primary
+          bottleneck is no longer prompting, but operating a full-lifecycle
+          infrastructure around them. Ultimately, the missing piece is not a
+          refined set of skills, but a comprehensive operational scaffold
+          explicitly designed for autonomous trading.
+        </p>
+
+        <h2 id="coinjure-solution">
+          The <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> Solution
+        </h2>
+
+        <div
+          id="fig2"
+          class="pipeline-box"
+          style="padding: 0; overflow: visible"
+        >
+          <svg
+            viewBox="0 0 760 520"
+            xmlns="http://www.w3.org/2000/svg"
+            style="
+              width: 100%;
+              height: auto;
+              display: block;
+              font-family:
+                &quot;DM Sans&quot;,
+                -apple-system,
+                sans-serif;
+            "
+          >
+            <defs>
+              <marker
+                id="ah-a"
+                markerWidth="7"
+                markerHeight="5"
+                refX="7"
+                refY="2.5"
+                orient="auto"
+              >
+                <polygon points="0 0, 7 2.5, 0 5" fill="#5b7a9d" />
+              </marker>
+              <marker
+                id="ah-f"
+                markerWidth="7"
+                markerHeight="5"
+                refX="7"
+                refY="2.5"
+                orient="auto"
+              >
+                <polygon points="0 0, 7 2.5, 0 5" fill="#5b8a9d" />
+              </marker>
+              <marker
+                id="ah-g"
+                markerWidth="7"
+                markerHeight="5"
+                refX="7"
+                refY="2.5"
+                orient="auto"
+              >
+                <polygon points="0 0, 7 2.5, 0 5" fill="#8a8a5b" />
+              </marker>
+            </defs>
+            <!-- EDGES -->
+            <line
+              x1="148"
+              y1="55"
+              x2="195"
+              y2="120"
+              stroke="#5b7a9d"
+              stroke-width="1.8"
+              stroke-dasharray="6,3"
+              marker-end="url(#ah-a)"
+            />
+            <line
+              x1="255"
+              y1="130"
+              x2="340"
+              y2="65"
+              stroke="#5b7a9d"
+              stroke-width="1.8"
+              stroke-dasharray="6,3"
+              marker-end="url(#ah-a)"
+            />
+            <line
+              x1="440"
+              y1="70"
+              x2="545"
+              y2="120"
+              stroke="#7a5b9d"
+              stroke-width="2.2"
+            />
+            <line
+              x1="80"
+              y1="215"
+              x2="55"
+              y2="310"
+              stroke="#9d7a5b"
+              stroke-width="1.8"
+            />
+            <line
+              x1="100"
+              y1="220"
+              x2="190"
+              y2="290"
+              stroke="#9d7a5b"
+              stroke-width="1.8"
+            />
+            <line
+              x1="335"
+              y1="250"
+              x2="305"
+              y2="345"
+              stroke="#5b9d7a"
+              stroke-width="1.8"
+            />
+            <line
+              x1="355"
+              y1="255"
+              x2="445"
+              y2="310"
+              stroke="#5b9d7a"
+              stroke-width="1.8"
+            />
+            <line
+              x1="590"
+              y1="235"
+              x2="660"
+              y2="310"
+              stroke="#9d5b6a"
+              stroke-width="1.8"
+              stroke-dasharray="4,4"
+            />
+            <line
+              x1="155"
+              y1="430"
+              x2="275"
+              y2="430"
+              stroke="#5b8a9d"
+              stroke-width="1.8"
+              marker-end="url(#ah-f)"
+            />
+            <line
+              x1="330"
+              y1="430"
+              x2="438"
+              y2="430"
+              stroke="#5b8a9d"
+              stroke-width="1.8"
+              marker-end="url(#ah-f)"
+            />
+            <line
+              x1="590"
+              y1="420"
+              x2="540"
+              y2="478"
+              stroke="#8a8a5b"
+              stroke-width="1.8"
+              stroke-dasharray="3,3"
+              marker-end="url(#ah-g)"
+            />
+            <line
+              x1="625"
+              y1="425"
+              x2="680"
+              y2="478"
+              stroke="#8a8a5b"
+              stroke-width="1.8"
+              stroke-dasharray="3,3"
+              marker-end="url(#ah-g)"
+            />
+            <!-- NODES -->
+            <a
+              href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+              target="_blank"
+            >
+              <rect
+                x="28"
+                y="25"
+                width="130"
+                height="42"
+                rx="10"
+                fill="#e8edf6"
+                stroke="#5b7a9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="93"
+                y="43"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Hormuz by
+              </text>
+              <text
+                x="93"
+                y="56"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Mar 31?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+              target="_blank"
+            >
+              <rect
+                x="168"
+                y="108"
+                width="130"
+                height="42"
+                rx="10"
+                fill="#e8edf6"
+                stroke="#5b7a9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="233"
+                y="126"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Hormuz by
+              </text>
+              <text
+                x="233"
+                y="139"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Jun 30?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+              target="_blank"
+            >
+              <rect
+                x="330"
+                y="30"
+                width="130"
+                height="42"
+                rx="10"
+                fill="#e8edf6"
+                stroke="#5b7a9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="395"
+                y="48"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Hormuz before
+              </text>
+              <text
+                x="395"
+                y="61"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                2027?
+              </text>
+            </a>
+            <a
+              href="https://kalshi.com/markets/KXCLOSEHORMUZ-27JAN"
+              target="_blank"
+            >
+              <rect
+                x="530"
+                y="100"
+                width="140"
+                height="46"
+                rx="10"
+                fill="#f0e8f6"
+                stroke="#7a5b9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="600"
+                y="117"
+                text-anchor="middle"
+                font-size="8"
+                fill="#5b3a8c"
+                font-weight="600"
+              >
+                KALSHI
+              </text>
+              <text
+                x="600"
+                y="130"
+                text-anchor="middle"
+                font-size="9"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Hormuz before
+              </text>
+              <text
+                x="600"
+                y="142"
+                text-anchor="middle"
+                font-size="9"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Jan 2027?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/next-president-of-vietnam"
+              target="_blank"
+            >
+              <rect
+                x="22"
+                y="185"
+                width="130"
+                height="38"
+                rx="10"
+                fill="#f6f0e8"
+                stroke="#9d7a5b"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="87"
+                y="208"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Vietnam: T&ocirc; L&acirc;m?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/next-president-of-vietnam"
+              target="_blank"
+            >
+              <rect
+                x="155"
+                y="272"
+                width="130"
+                height="38"
+                rx="10"
+                fill="#f6f0e8"
+                stroke="#9d7a5b"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="220"
+                y="295"
+                text-anchor="middle"
+                font-size="9"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Vietnam: Tr&#x1EA7;n Thanh M&#x1EAB;n?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/next-president-of-vietnam"
+              target="_blank"
+            >
+              <rect
+                x="10"
+                y="305"
+                width="130"
+                height="38"
+                rx="10"
+                fill="#f6f0e8"
+                stroke="#9d7a5b"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="75"
+                y="328"
+                text-anchor="middle"
+                font-size="9"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Vietnam: Tr&#x1EA7;n C&#x1EA9;m T&uacute;?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/us-forces-enter-iran-by"
+              target="_blank"
+            >
+              <rect
+                x="275"
+                y="218"
+                width="125"
+                height="38"
+                rx="10"
+                fill="#e8f6f0"
+                stroke="#5b9d7a"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="337"
+                y="235"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                US enter Iran
+              </text>
+              <text
+                x="337"
+                y="248"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                by Mar 14?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/us-forces-enter-iran-by"
+              target="_blank"
+            >
+              <rect
+                x="245"
+                y="335"
+                width="125"
+                height="38"
+                rx="10"
+                fill="#e8f6f0"
+                stroke="#5b9d7a"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="307"
+                y="352"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                US enter Iran
+              </text>
+              <text
+                x="307"
+                y="365"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                by Dec 31?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/us-forces-enter-iran-by"
+              target="_blank"
+            >
+              <rect
+                x="410"
+                y="285"
+                width="125"
+                height="38"
+                rx="10"
+                fill="#e8f6f0"
+                stroke="#5b9d7a"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="472"
+                y="302"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                US enter Iran
+              </text>
+              <text
+                x="472"
+                y="315"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                by Mar 31?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/us-x-iran-ceasefire-by"
+              target="_blank"
+            >
+              <rect
+                x="540"
+                y="205"
+                width="115"
+                height="38"
+                rx="10"
+                fill="#f6e8ee"
+                stroke="#9d5b6a"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="597"
+                y="222"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Iran ceasefire
+              </text>
+              <text
+                x="597"
+                y="235"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                by Apr 30?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/will-the-iranian-regime-fall-by-june-30"
+              target="_blank"
+            >
+              <rect
+                x="618"
+                y="300"
+                width="115"
+                height="38"
+                rx="10"
+                fill="#f6e8ee"
+                stroke="#9d5b6a"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="675"
+                y="317"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Regime fall
+              </text>
+              <text
+                x="675"
+                y="330"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                by Jun 30?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/will-crude-oil-cl-hit-by-end-of-march"
+              target="_blank"
+            >
+              <rect
+                x="95"
+                y="410"
+                width="118"
+                height="38"
+                rx="10"
+                fill="#e8f0f6"
+                stroke="#5b8a9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="154"
+                y="433"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Oil hit $200?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/will-crude-oil-cl-hit-by-end-of-march"
+              target="_blank"
+            >
+              <rect
+                x="248"
+                y="410"
+                width="118"
+                height="38"
+                rx="10"
+                fill="#e8f0f6"
+                stroke="#5b8a9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="307"
+                y="433"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Oil hit $150?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/will-crude-oil-cl-hit-by-end-of-march"
+              target="_blank"
+            >
+              <rect
+                x="400"
+                y="410"
+                width="118"
+                height="38"
+                rx="10"
+                fill="#e8f0f6"
+                stroke="#5b8a9d"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="459"
+                y="433"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Oil hit $90?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+              target="_blank"
+            >
+              <rect
+                x="555"
+                y="390"
+                width="130"
+                height="38"
+                rx="10"
+                fill="#f4f4e8"
+                stroke="#8a8a5b"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="620"
+                y="407"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Any EU strike
+              </text>
+              <text
+                x="620"
+                y="420"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                Iran?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+              target="_blank"
+            >
+              <rect
+                x="490"
+                y="468"
+                width="108"
+                height="35"
+                rx="10"
+                fill="#f4f4e8"
+                stroke="#8a8a5b"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="544"
+                y="490"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                France strike?
+              </text>
+            </a>
+            <a
+              href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+              target="_blank"
+            >
+              <rect
+                x="632"
+                y="468"
+                width="108"
+                height="35"
+                rx="10"
+                fill="#f4f4e8"
+                stroke="#8a8a5b"
+                stroke-width="1.2"
+                cursor="pointer"
+              />
+              <text
+                x="686"
+                y="490"
+                text-anchor="middle"
+                font-size="9.5"
+                fill="#26323f"
+                font-weight="500"
+              >
+                UK strike?
+              </text>
+            </a>
+            <!-- Ghost nodes -->
+            <rect
+              x="10"
+              y="105"
+              width="75"
+              height="28"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.4"
+            />
+            <rect
+              x="10"
+              y="400"
+              width="65"
+              height="26"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.3"
+            />
+            <rect
+              x="10"
+              y="440"
+              width="55"
+              height="24"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.2"
+            />
+            <rect
+              x="690"
+              y="75"
+              width="55"
+              height="25"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.35"
+            />
+            <rect
+              x="700"
+              y="260"
+              width="45"
+              height="22"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.25"
+            />
+            <rect
+              x="10"
+              y="478"
+              width="50"
+              height="20"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.15"
+            />
+            <rect
+              x="700"
+              y="440"
+              width="45"
+              height="20"
+              rx="8"
+              fill="#e8edf6"
+              stroke="#bec8d8"
+              stroke-width="0.7"
+              opacity="0.2"
+            />
+            <!-- Ghost edges -->
+            <line
+              x1="48"
+              y1="120"
+              x2="48"
+              y2="185"
+              stroke="#bec8d8"
+              stroke-width="0.8"
+              opacity="0.3"
+            />
+            <line
+              x1="42"
+              y1="415"
+              x2="95"
+              y2="425"
+              stroke="#bec8d8"
+              stroke-width="0.8"
+              opacity="0.25"
+            />
+            <line
+              x1="718"
+              y1="92"
+              x2="665"
+              y2="110"
+              stroke="#bec8d8"
+              stroke-width="0.8"
+              opacity="0.3"
+            />
+            <line
+              x1="715"
+              y1="270"
+              x2="680"
+              y2="305"
+              stroke="#bec8d8"
+              stroke-width="0.8"
+              opacity="0.2"
+            />
+          </svg>
+          <div
+            style="
+              text-align: left;
+              padding: 8px 18px 14px;
+              font-size: 12.5px;
+              color: var(--t3);
+              line-height: 1.5;
+            "
+          >
+            <strong style="color: var(--t2)">Figure 2.</strong>
+            Cross-market relations are abundant in prediction markets. Each node
+            is a real market on
+            <a
+              href="https://polymarket.com"
+              target="_blank"
+              style="color: var(--link)"
+              >Polymarket</a
+            >
+            or
+            <a
+              href="https://kalshi.com"
+              target="_blank"
+              style="color: var(--link)"
+              >Kalshi</a
+            >; edges of different colors represent different relation types.
+            Click any node to view the market.
+          </div>
+        </div>
+
+        <p>
+          <strong
+            >Not all prediction market strategies benefit equally from an LLM
+            agent.</strong
+          >
+          Directional event bets, market making, and statistical arbitrage are
+          already well-served by conventional quantitative pipelines. Where an
+          LLM agent possesses a unique, structural advantage is in processing
+          thousands of free-text market descriptions to discover the underlying
+          semantic and logical relations between them.
+        </p>
+
+        <p>
+          <strong
+            >Cross-market relations can be discovered at massive scale by an LLM
+            agent.</strong
+          >
+          As shown in <a href="#fig2">Figure 2</a>,
+          <a href="https://polymarket.com" target="_blank">Polymarket</a> might
+          list &ldquo;Will Iran close the Strait of Hormuz before 2027?&rdquo;
+          while
+          <a href="https://kalshi.com" target="_blank">Kalshi</a>
+          lists &ldquo;Will Iran close Strait of Hormuz before Jan
+          2027?&rdquo;&mdash;nearly identical questions with independently
+          moving prices. Similarly, mutually exclusive candidates for the same
+          office represent probabilities that must logically sum to at most one.
+          These relations come in dozens of typed varieties, each mapping to a
+          well-defined arbitrage strategy. While this search space is
+          combinatorially large and constantly shifting, cross-referencing
+          thousands of unstructured text descriptions is exactly what LLMs do
+          natively.
+        </p>
+
+        <p>
+          <strong
+            ><span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span> provides a full-lifecycle
+            scaffold to manage the massive influx of discovered
+            strategies.</strong
+          >
+          When the agent surfaces thousands of candidate relations,
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> takes over the execution
+          lifecycle. It automatically backtests each relation against
+          historically resolved markets before committing capital, executes them
+          in parallel via an asynchronous trading engine (supporting both paper
+          and live execution), and retires strategies the moment their
+          underlying markets resolve. As new markets open daily, stale relations
+          are pruned without manual intervention. Ultimately,
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> translates the agent&rsquo;s
+          scalable discovery into scalable execution, backed by a human
+          monitoring layer for oversight and emergency control.
+        </p>
+
+        <h2 id="harness-overview">Harness Overview</h2>
+
+        <div
+          id="fig3"
+          class="pipeline-box"
+          style="padding: 0; overflow: visible"
+        >
+          <svg
+            viewBox="0 0 437 300"
+            xmlns="http://www.w3.org/2000/svg"
+            style="
+              width: 100%;
+              height: auto;
+              display: block;
+              font-family:
+                &quot;DM Sans&quot;,
+                -apple-system,
+                sans-serif;
+            "
+          >
+            <text
+              x="121"
+              y="20"
+              text-anchor="middle"
+              font-size="10"
+              fill="#18222e"
+              font-weight="600"
+            >
+              Discovery
+            </text>
+            <text
+              x="211"
+              y="20"
+              text-anchor="middle"
+              font-size="10"
+              fill="#18222e"
+              font-weight="600"
+            >
+              Backtest
+            </text>
+            <text
+              x="301"
+              y="20"
+              text-anchor="middle"
+              font-size="10"
+              fill="#18222e"
+              font-weight="600"
+            >
+              Paper Trade
+            </text>
+            <text
+              x="391"
+              y="20"
+              text-anchor="middle"
+              font-size="10"
+              fill="#18222e"
+              font-weight="600"
+            >
+              Live Deploy
+            </text>
+            <!-- LLM Agent -->
+            <rect x="8" y="86" width="68" height="42" rx="10" fill="#18222e" />
+            <text
+              x="42"
+              y="104"
+              text-anchor="middle"
+              font-size="8.5"
+              fill="#f3f6fb"
+              font-weight="600"
+            >
+              LLM Agent
+            </text>
+            <text
+              x="42"
+              y="115"
+              text-anchor="middle"
+              font-size="7"
+              fill="#8e9eae"
+            >
+              + market data
+            </text>
+            <line
+              x1="76"
+              y1="107"
+              x2="89"
+              y2="107"
+              stroke="#aab4c6"
+              stroke-width="1.2"
+            />
+            <polygon points="87,103 95,107 87,111" fill="#aab4c6" />
+            <!-- DISCOVERY -->
+            <g>
+              <circle cx="95" cy="36" r="4" fill="#d2daea" />
+              <circle cx="108" cy="36" r="4" fill="#d2daea" />
+              <circle cx="121" cy="36" r="4" fill="#d2daea" />
+              <circle cx="134" cy="36" r="4" fill="#d2daea" />
+              <circle cx="147" cy="36" r="4" fill="#d2daea" />
+              <circle cx="95" cy="49" r="4" fill="#d2daea" />
+              <circle cx="108" cy="49" r="4" fill="#d2daea" />
+              <circle cx="121" cy="49" r="4" fill="#d2daea" />
+              <circle cx="134" cy="49" r="4" fill="#d2daea" />
+              <circle cx="147" cy="49" r="4" fill="#d2daea" />
+              <circle cx="95" cy="62" r="4" fill="#d2daea" />
+              <circle cx="108" cy="62" r="4" fill="#d2daea" />
+              <circle cx="121" cy="62" r="4" fill="#d2daea" />
+              <circle cx="134" cy="62" r="4" fill="#d2daea" />
+              <circle cx="147" cy="62" r="4" fill="#d2daea" />
+              <circle cx="95" cy="75" r="4" fill="#d2daea" />
+              <circle cx="108" cy="75" r="4" fill="#d2daea" />
+              <circle cx="121" cy="75" r="4" fill="#d2daea" />
+              <circle cx="134" cy="75" r="4" fill="#d2daea" />
+              <circle cx="147" cy="75" r="4" fill="#d2daea" />
+              <circle cx="95" cy="88" r="4" fill="#d2daea" />
+              <circle cx="108" cy="88" r="4" fill="#d2daea" />
+              <circle cx="121" cy="88" r="4" fill="#d2daea" />
+              <circle cx="134" cy="88" r="4" fill="#d2daea" />
+              <circle cx="147" cy="88" r="4" fill="#d2daea" />
+              <circle cx="95" cy="101" r="4" fill="#d2daea" />
+              <circle cx="108" cy="101" r="4" fill="#d2daea" />
+              <circle cx="121" cy="101" r="4" fill="#d2daea" />
+              <circle cx="134" cy="101" r="4" fill="#d2daea" />
+              <circle cx="147" cy="101" r="4" fill="#d2daea" />
+              <circle cx="95" cy="114" r="4" fill="#d2daea" />
+              <circle cx="108" cy="114" r="4" fill="#d2daea" />
+              <circle cx="121" cy="114" r="4" fill="#d2daea" />
+              <circle cx="134" cy="114" r="4" fill="#d2daea" />
+              <circle cx="147" cy="114" r="4" fill="#d2daea" />
+              <circle cx="95" cy="127" r="4" fill="#d2daea" />
+              <circle cx="108" cy="127" r="4" fill="#d2daea" />
+              <circle cx="121" cy="127" r="4" fill="#d2daea" />
+              <circle cx="134" cy="127" r="4" fill="#d2daea" />
+              <circle cx="147" cy="127" r="4" fill="#d2daea" />
+              <circle cx="95" cy="140" r="4" fill="#d2daea" />
+              <circle cx="108" cy="140" r="4" fill="#d2daea" />
+              <circle cx="121" cy="140" r="4" fill="#d2daea" />
+              <circle cx="134" cy="140" r="4" fill="#d2daea" />
+              <circle cx="147" cy="140" r="4" fill="#d2daea" />
+              <circle cx="95" cy="153" r="4" fill="#d2daea" />
+              <circle cx="108" cy="153" r="4" fill="#d2daea" />
+              <circle cx="121" cy="153" r="4" fill="#d2daea" />
+              <circle cx="134" cy="153" r="4" fill="#d2daea" />
+              <circle cx="147" cy="153" r="4" fill="#d2daea" />
+              <circle cx="95" cy="166" r="4" fill="#d2daea" />
+              <circle cx="108" cy="166" r="4" fill="#d2daea" />
+              <circle cx="121" cy="166" r="4" fill="#d2daea" />
+              <circle cx="134" cy="166" r="4" fill="#d2daea" />
+              <circle cx="147" cy="166" r="4" fill="#d2daea" />
+              <circle cx="95" cy="179" r="4" fill="#d2daea" />
+              <circle cx="108" cy="179" r="4" fill="#d2daea" />
+              <circle cx="121" cy="179" r="4" fill="#d2daea" />
+              <circle cx="134" cy="179" r="4" fill="#d2daea" />
+              <circle cx="147" cy="179" r="4" fill="#d2daea" />
+            </g>
+            <line
+              x1="153"
+              y1="107"
+              x2="179"
+              y2="107"
+              stroke="#aab4c6"
+              stroke-width="1.2"
+            />
+            <polygon points="177,103 185,107 177,111" fill="#aab4c6" />
+            <!-- BACKTEST -->
+            <g>
+              <circle cx="185" cy="36" r="4" fill="#d2daea" />
+              <circle cx="198" cy="36" r="4" fill="#5b7a9d" />
+              <circle cx="211" cy="36" r="4" fill="#d2daea" />
+              <circle cx="224" cy="36" r="4" fill="#d2daea" />
+              <circle cx="237" cy="36" r="4" fill="#5b7a9d" />
+              <circle cx="185" cy="49" r="4" fill="#d2daea" />
+              <circle cx="198" cy="49" r="4" fill="#d2daea" />
+              <circle cx="211" cy="49" r="4" fill="#5b7a9d" />
+              <circle cx="224" cy="49" r="4" fill="#d2daea" />
+              <circle cx="237" cy="49" r="4" fill="#d2daea" />
+              <circle cx="185" cy="62" r="4" fill="#5b7a9d" />
+              <circle cx="198" cy="62" r="4" fill="#d2daea" />
+              <circle cx="211" cy="62" r="4" fill="#d2daea" />
+              <circle cx="224" cy="62" r="4" fill="#5b7a9d" />
+              <circle cx="237" cy="62" r="4" fill="#d2daea" />
+              <circle cx="185" cy="75" r="4" fill="#d2daea" />
+              <circle cx="198" cy="75" r="4" fill="#d2daea" />
+              <circle cx="211" cy="75" r="4" fill="#d2daea" />
+              <circle cx="224" cy="75" r="4" fill="#d2daea" />
+              <circle cx="237" cy="75" r="4" fill="#5b7a9d" />
+              <circle cx="185" cy="88" r="4" fill="#5b7a9d" />
+              <circle cx="198" cy="88" r="4" fill="#d2daea" />
+              <circle cx="211" cy="88" r="4" fill="#d2daea" />
+              <circle cx="224" cy="88" r="4" fill="#d2daea" />
+              <circle cx="237" cy="88" r="4" fill="#d2daea" />
+              <circle cx="185" cy="101" r="4" fill="#d2daea" />
+              <circle cx="198" cy="101" r="4" fill="#5b7a9d" />
+              <circle cx="211" cy="101" r="4" fill="#d2daea" />
+              <circle cx="224" cy="101" r="4" fill="#d2daea" />
+              <circle cx="237" cy="101" r="4" fill="#5b7a9d" />
+              <circle cx="185" cy="114" r="4" fill="#d2daea" />
+              <circle cx="198" cy="114" r="4" fill="#d2daea" />
+              <circle cx="211" cy="114" r="4" fill="#5b7a9d" />
+              <circle cx="224" cy="114" r="4" fill="#d2daea" />
+              <circle cx="237" cy="114" r="4" fill="#d2daea" />
+              <circle cx="185" cy="127" r="4" fill="#d2daea" />
+              <circle cx="198" cy="127" r="4" fill="#d2daea" />
+              <circle cx="211" cy="127" r="4" fill="#d2daea" />
+              <circle cx="224" cy="127" r="4" fill="#5b7a9d" />
+              <circle cx="237" cy="127" r="4" fill="#d2daea" />
+              <circle cx="185" cy="140" r="4" fill="#5b7a9d" />
+              <circle cx="198" cy="140" r="4" fill="#d2daea" />
+              <circle cx="211" cy="140" r="4" fill="#d2daea" />
+              <circle cx="224" cy="140" r="4" fill="#d2daea" />
+              <circle cx="237" cy="140" r="4" fill="#5b7a9d" />
+              <circle cx="185" cy="153" r="4" fill="#d2daea" />
+              <circle cx="198" cy="153" r="4" fill="#d2daea" />
+              <circle cx="211" cy="153" r="4" fill="#5b7a9d" />
+              <circle cx="224" cy="153" r="4" fill="#d2daea" />
+              <circle cx="237" cy="153" r="4" fill="#d2daea" />
+              <circle cx="185" cy="166" r="4" fill="#d2daea" />
+              <circle cx="198" cy="166" r="4" fill="#5b7a9d" />
+              <circle cx="211" cy="166" r="4" fill="#d2daea" />
+              <circle cx="224" cy="166" r="4" fill="#d2daea" />
+              <circle cx="237" cy="166" r="4" fill="#d2daea" />
+              <circle cx="185" cy="179" r="4" fill="#d2daea" />
+              <circle cx="198" cy="179" r="4" fill="#d2daea" />
+              <circle cx="211" cy="179" r="4" fill="#5b7a9d" />
+              <circle cx="224" cy="179" r="4" fill="#d2daea" />
+              <circle cx="237" cy="179" r="4" fill="#5b7a9d" />
+            </g>
+            <line
+              x1="243"
+              y1="107"
+              x2="269"
+              y2="107"
+              stroke="#aab4c6"
+              stroke-width="1.2"
+            />
+            <polygon points="267,103 275,107 267,111" fill="#aab4c6" />
+            <!-- PAPER TRADE -->
+            <g>
+              <circle cx="275" cy="36" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="36" r="4" fill="#2a9d8f" />
+              <circle cx="301" cy="36" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="36" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="36" r="4" fill="#2a9d8f" />
+              <circle cx="275" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="49" r="4" fill="#2a9d8f" />
+              <circle cx="314" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="62" r="4" fill="#2a9d8f" />
+              <circle cx="288" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="62" r="4" fill="#e07060" />
+              <circle cx="327" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="75" r="4" fill="#2a9d8f" />
+              <circle cx="275" cy="88" r="4" fill="#2a9d8f" />
+              <circle cx="288" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="101" r="4" fill="#2a9d8f" />
+              <circle cx="301" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="101" r="4" fill="#e07060" />
+              <circle cx="275" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="114" r="4" fill="#2a9d8f" />
+              <circle cx="314" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="127" r="4" fill="#2a9d8f" />
+              <circle cx="327" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="140" r="4" fill="#e07060" />
+              <circle cx="288" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="140" r="4" fill="#2a9d8f" />
+              <circle cx="275" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="153" r="4" fill="#e07060" />
+              <circle cx="314" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="166" r="4" fill="#2a9d8f" />
+              <circle cx="301" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="314" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="275" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="288" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="301" cy="179" r="4" fill="#e07060" />
+              <circle cx="314" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="327" cy="179" r="4" fill="#2a9d8f" />
+            </g>
+            <line
+              x1="333"
+              y1="107"
+              x2="359"
+              y2="107"
+              stroke="#aab4c6"
+              stroke-width="1.2"
+            />
+            <polygon points="357,103 365,107 357,111" fill="#aab4c6" />
+            <!-- LIVE DEPLOY -->
+            <g>
+              <circle cx="365" cy="36" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="36" r="4" fill="#4a9d6a" />
+              <circle cx="391" cy="36" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="36" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="36" r="4" fill="#4a9d6a" />
+              <circle cx="365" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="49" r="4" fill="#4a9d6a" />
+              <circle cx="404" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="49" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="62" r="4" fill="#4a9d6a" />
+              <circle cx="378" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="62" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="75" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="75" r="4" fill="#d4a017" />
+              <circle cx="365" cy="88" r="4" fill="#4a9d6a" />
+              <circle cx="378" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="88" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="101" r="4" fill="#4a9d6a" />
+              <circle cx="391" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="101" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="114" r="4" fill="#d4a017" />
+              <circle cx="404" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="114" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="127" r="4" fill="#4a9d6a" />
+              <circle cx="417" cy="127" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="140" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="140" r="4" fill="#4a9d6a" />
+              <circle cx="365" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="153" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="166" r="4" fill="#d4a017" />
+              <circle cx="391" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="166" r="4" fill="#eaecf0" />
+              <circle cx="365" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="378" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="391" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="404" cy="179" r="4" fill="#eaecf0" />
+              <circle cx="417" cy="179" r="4" fill="#4a9d6a" />
+            </g>
+            <!-- HUMAN MONITOR -->
+            <rect
+              x="90"
+              y="198"
+              width="332"
+              height="36"
+              rx="10"
+              fill="none"
+              stroke="#aab4c6"
+              stroke-width="1"
+              stroke-dasharray="5,3"
+            />
+            <text
+              x="256"
+              y="213"
+              text-anchor="middle"
+              font-size="10"
+              fill="#415060"
+              font-weight="600"
+            >
+              Human Monitor
+            </text>
+            <text
+              x="256"
+              y="226"
+              text-anchor="middle"
+              font-size="8"
+              fill="#8e9eae"
+            >
+              observe &middot; pause / resume &middot; kill-switch
+            </text>
+            <!-- Legend -->
+            <circle cx="30" cy="260" r="3.5" fill="#d2daea" />
+            <text x="38" y="263" font-size="7.5" fill="#647585">
+              discovered
+            </text>
+            <circle cx="105" cy="260" r="3.5" fill="#5b7a9d" />
+            <text x="113" y="263" font-size="7.5" fill="#647585">
+              backtest passed
+            </text>
+            <circle cx="200" cy="260" r="3.5" fill="#2a9d8f" />
+            <text x="208" y="263" font-size="7.5" fill="#647585">paper ok</text>
+            <circle cx="260" cy="260" r="3.5" fill="#e07060" />
+            <text x="268" y="263" font-size="7.5" fill="#647585">
+              eliminated
+            </text>
+            <circle cx="325" cy="260" r="3.5" fill="#4a9d6a" />
+            <text x="333" y="263" font-size="7.5" fill="#647585">
+              live profitable
+            </text>
+            <circle cx="410" cy="260" r="3.5" fill="#d4a017" />
+            <text x="418" y="263" font-size="7.5" fill="#647585">marginal</text>
+          </svg>
+          <div
+            style="
+              text-align: left;
+              padding: 8px 18px 14px;
+              font-size: 12.5px;
+              color: var(--t3);
+              line-height: 1.5;
+            "
+          >
+            <strong style="color: var(--t2)">Figure 3.</strong>
+            The full strategy lifecycle. The LLM agent discovers candidate
+            relations (grey), backtesting validates a subset (blue), paper
+            trading eliminates quickly-losing strategies (red) and promotes
+            survivors (teal), and live deployment tracks real performance
+            (green/yellow)&mdash;all under human oversight.
+          </div>
+        </div>
+
+        <p>
+          This section details the architecture of
+          <strong
+            ><span style="color: #d4a017">Coin</span
+            ><span style="color: #2c5f8a">jure</span></strong
+          >, which is divided into four primary components (<a href="#fig3"
+            >Figure 3</a
+          >): Strategy Discovery, Backtesting, Trade Execution, and Human
+          Monitoring.
+        </p>
+
+        <h3 id="strategy-discovery">1. Strategy Discovery</h3>
+
+        <p>
+          <strong>Relation&ndash;Strategy Mapping.</strong> Every exploitable
+          opportunity stems from a <em>relation</em> between markets, and every
+          relation type maps 1-to-1 to a <em>strategy</em> that trades it. The
+          LLM agent analyzes free-text market descriptions to discover these
+          relations; <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> automatically instantiates
+          the corresponding strategy. Discovering a new relation immediately
+          yields a ready-to-backtest strategy with no additional code.
+        </p>
+
+        <p>
+          <strong
+            >Example: <code>same_event</code> &rarr;
+            <code>DirectArbStrategy</code>.</strong
+          >
+          The agent finds that
+          <a href="https://polymarket.com" target="_blank">Polymarket</a
+          >&rsquo;s &ldquo;Will Iran close the Strait of Hormuz before
+          2027?&rdquo; and
+          <a href="https://kalshi.com" target="_blank">Kalshi</a>&rsquo;s
+          &ldquo;Will Iran close Strait of Hormuz before Jan 2027?&rdquo; are
+          the same question on different exchanges. It labels this a
+          <code>same_event</code> relation, and a
+          <code>DirectArbStrategy</code> monitors the cross-platform spread and
+          trades whenever it exceeds a threshold.
+        </p>
+
+        <p>
+          <strong
+            >Example: <code>temporal</code> &rarr;
+            <code>LeadLagStrategy</code>.</strong
+          >
+          Not all relations are logical constraints. When one market
+          consistently moves before another&mdash;e.g., a broad &ldquo;Will
+          crude oil hit $100?&rdquo; market reacting before a narrower
+          date-specific contract&mdash;the agent labels this a
+          <code>temporal</code> relation, and a
+          <code>LeadLagStrategy</code> trades the lagging market before it
+          catches up.
+        </p>
+
+        <p>
+          <strong>Built-in Relations and Extensibility.</strong>
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> ships with 8 relation types,
+          each paired with a pre-built strategy (<a href="#tab1">Table 1</a>).
+          The framework is extensible: defining a new relation type and its
+          strategy class is all that is needed to teach the harness a new
+          category of opportunities.
+        </p>
+
+        <table id="tab1">
+          <caption
+            style="
+              text-align: left;
+              padding: 0 0 8px;
+              font-size: 12.5px;
+              color: var(--t3);
+              line-height: 1.5;
+              caption-side: bottom;
+            "
+          >
+            <strong style="color: var(--t2)">Table 1.</strong>
+            Built-in relation types and their corresponding strategies. Each
+            relation maps 1-to-1 to a strategy class; the framework is
+            extensible to new types.
+          </caption>
+          <thead>
+            <tr>
+              <th>Relation</th>
+              <th>Constraint</th>
+              <th>Strategy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>same_event</strong></td>
+              <td>Identical market across platforms</td>
+              <td><code>DirectArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>complementary</strong></td>
+              <td>Outcomes sum to 1</td>
+              <td><code>GroupArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>implication</strong></td>
+              <td>A &rArr; B price ordering</td>
+              <td><code>ImplicationArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>exclusivity</strong></td>
+              <td>Mutually exclusive</td>
+              <td><code>GroupArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>correlated</strong></td>
+              <td>Cointegrated prices</td>
+              <td><code>CointSpreadStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>structural</strong></td>
+              <td>Monotonic price nesting</td>
+              <td><code>StructuralArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>conditional</strong></td>
+              <td>Conditional probability bounds</td>
+              <td><code>ConditionalArbStrategy</code></td>
+            </tr>
+            <tr>
+              <td><strong>temporal</strong></td>
+              <td>Lead-lag information flow</td>
+              <td><code>LeadLagStrategy</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="backtesting">2. Strategy Backtesting</h3>
+
+        <p>
+          <strong>Deterministic Validation Pipeline.</strong>
+          Before capital is committed, every discovered relation is backtested.
+          Because LLMs can hallucinate correlations,
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> enforces a strict
+          verification boundary between semantic discovery and live trading. The
+          backtester replays historical data through the same execution paths
+          used in live trading, supporting both high-resolution
+          <a href="https://archive.pmxt.dev/Polymarket" target="_blank"
+            >order book snapshots</a
+          >
+          and standard exchange price history APIs.
+        </p>
+
+        <p>
+          <strong>Microstructure Simulation.</strong>
+          Fill rates are modeled with a Beta(5,1) distribution for realistic
+          partial fills, configurable slippage accounts for price impact, and
+          resting orders are constrained by a 5-minute TTL to prevent ghost
+          positions.
+        </p>
+
+        <p>
+          <strong>Walk-Forward Robustness.</strong>
+          For statistical strategies, the pipeline performs walk-forward
+          validation with a 60/40 train-test split, resetting internal state
+          between phases to guard against data leakage and overfitting.
+        </p>
+
+        <h3 id="trade-execution">3. Trade Execution</h3>
+
+        <p>
+          <strong>Agent-Native Execution Engine.</strong> Validated strategies
+          enter an asynchronous execution engine that handles market
+          interaction, state management, order routing, and event batching. The
+          engine drains all pending events before each strategy evaluation to
+          prevent stale-price decisions, freeing the LLM to focus on
+          higher-order strategic adjustments.
+        </p>
+
+        <p>
+          <strong>Code-Path-Preserving Promotion.</strong> The same event loop
+          drives both paper and live modes; only the execution module is
+          swapped. Live trading uses fill-or-kill (FOK) orders with adaptive,
+          rate-limit-aware retry (exponential backoff with jitter) for robust
+          execution under volatile or throttled conditions.
+        </p>
+
+        <p>
+          <strong>Risk Management and Process Isolation.</strong> The harness
+          forces a strategy into read-only mode after consecutive failures or
+          drawdown breaches. Each engine instance runs as an independent OS
+          process, allowing hundreds of strategies to execute in parallel
+          without shared-state contention.
+        </p>
+
+        <h3 id="human-monitoring">4. Human Monitoring</h3>
+
+        <p>
+          <strong>Decoupled Observability Layer.</strong>
+          A real-time monitoring suite runs outside the critical execution path,
+          letting human operators audit the agent&rsquo;s decisions and monitor
+          aggregate portfolio exposure without adding latency to the trading
+          engine.
+        </p>
+
+        <p>
+          <strong>Dynamic Intervention Controls.</strong>
+          Operators can pause, tune, or retire individual strategies in real
+          time. A global kill-switch and hot-swap capabilities allow strategy
+          logic to be replaced without restarting the engine, ensuring human
+          control at any granularity.
+        </p>
+
+        <h2 id="experiments">Experiments</h2>
+
+        <p>
+          We evaluate <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span>&rsquo;s pipeline on live
+          <a href="https://polymarket.com" target="_blank">Polymarket</a> and
+          <a href="https://kalshi.com" target="_blank">Kalshi</a> prediction
+          markets.
+        </p>
+
+        <h3 id="exp-discovery">1. Strategy Discovery</h3>
+
+        <p>
+          In a single one-hour session, the agent autonomously discovered
+          <strong>250+ market relations</strong> across all 7 relation types
+          from live
+          <a href="https://polymarket.com" target="_blank">Polymarket</a> and
+          <a href="https://kalshi.com" target="_blank">Kalshi</a> markets. Below
+          we show one example for each type.
+        </p>
+
+        <!-- IMPLICATION -->
+        <p>
+          <strong>Implication.</strong>
+          If event A happens, event B must also happen (A&nbsp;&rArr;&nbsp;B),
+          so price(A)&nbsp;&le;&nbsp;price(B). The agent chains temporal
+          deadlines into implication ladders.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">implication</span>
+            <span class="rel-card-title"
+              >Iran Strait of Hormuz &mdash; Deadline Chain</span
+            >
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+                    target="_blank"
+                    >Will Iran close the Strait of Hormuz by March 31?</a
+                  ></span
+                >
+              </li>
+              <li class="rel-connector">
+                <span class="rel-connector-sym">&dArr; implies</span>
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+                    target="_blank"
+                    >Will Iran close the Strait of Hormuz by June 30?</a
+                  ></span
+                >
+              </li>
+              <li class="rel-connector">
+                <span class="rel-connector-sym">&dArr; implies</span>
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+                    target="_blank"
+                    >Will Iran close the Strait of Hormuz before 2027?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            Constraint:
+            <code>P(Mar 31) &le; P(Jun 30) &le; P(before 2027)</code> &mdash;
+            any violation is arbitrage.
+          </div>
+        </div>
+
+        <!-- SAME EVENT -->
+        <p>
+          <strong>Same Event / Cross-Platform.</strong>
+          The same question listed on both Polymarket and Kalshi. Persistent
+          price gaps are a direct arbitrage.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">same_event</span>
+            <span class="rel-card-title">Iran Closes the Strait of Hormuz</span>
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-iran-close-the-strait-of-hormuz-by-2027"
+                    target="_blank"
+                    >Will Iran close the Strait of Hormuz before 2027?</a
+                  ></span
+                >
+              </li>
+              <li class="rel-connector">
+                <span class="rel-connector-sym">&harr; same question</span>
+              </li>
+              <li>
+                <span class="rel-platform kalshi">Kalshi</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://kalshi.com/markets/KXCLOSEHORMUZ-27JAN"
+                    target="_blank"
+                    >Will Iran close Strait of Hormuz before Jan 2027?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            Constraint: <code>P_poly &asymp; P_kalshi</code> &mdash;
+            <code>DirectArbStrategy</code>
+          </div>
+        </div>
+
+        <!-- COMPLEMENTARY -->
+        <p>
+          <strong>Complementary.</strong>
+          Markets whose prices must sum to 1 because they partition all outcomes
+          of a single event.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">complementary</span>
+            <span class="rel-card-title"
+              >US Forces Enter Iran &mdash; Time Buckets</span
+            >
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/us-forces-enter-iran-by"
+                    target="_blank"
+                    >US forces enter Iran by March 14?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/us-forces-enter-iran-by"
+                    target="_blank"
+                    >&hellip;by March 31?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/us-forces-enter-iran-by"
+                    target="_blank"
+                    >&hellip;by December 31?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            Constraint: <code>sum(prices) = 1</code> &mdash;
+            <code>GroupArbStrategy</code>
+          </div>
+        </div>
+
+        <!-- EXCLUSIVITY -->
+        <p>
+          <strong>Exclusivity.</strong>
+          Mutually exclusive outcomes&mdash;at most one can resolve YES, so
+          sum(prices)&nbsp;&le;&nbsp;1.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">exclusivity</span>
+            <span class="rel-card-title">Next President of Vietnam</span>
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/next-president-of-vietnam"
+                    target="_blank"
+                    >Will T&ocirc; L&acirc;m be the next President?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/next-president-of-vietnam"
+                    target="_blank"
+                    >Will Tr&#x1EA7;n C&#x1EA9;m T&uacute; be the next
+                    President?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/next-president-of-vietnam"
+                    target="_blank"
+                    >Will Tr&#x1EA7;n Thanh M&#x1EAB;n be the next President?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            3 markets &mdash; Constraint:
+            <code>sum(prices) &le; 1</code> &mdash;
+            <code>GroupArbStrategy</code>
+          </div>
+        </div>
+
+        <!-- STRUCTURAL -->
+        <p>
+          <strong>Structural.</strong>
+          A group of markets with a monotonic price-nesting constraint: higher
+          strike targets must have lower probabilities.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">structural</span>
+            <span class="rel-card-title"
+              >Crude Oil (CL) Price Targets &mdash; 10 Markets</span
+            >
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-crude-oil-cl-hit-by-end-of-march"
+                    target="_blank"
+                    >Will Crude Oil (CL) hit $90 by end of March?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-crude-oil-cl-hit-by-end-of-march"
+                    target="_blank"
+                    >&hellip;$100 / $105 / $110 / $120 / $130 / $140 / $150 /
+                    $180 / $200?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            Constraint:
+            <code>P($200) &le; P($180) &le; &hellip; &le; P($90)</code> &mdash;
+            <code>StructuralArbStrategy</code>
+          </div>
+        </div>
+
+        <!-- CORRELATED -->
+        <p>
+          <strong>Correlated.</strong>
+          Two semantically related markets whose prices co-move due to a shared
+          underlying driver, suitable for mean-reversion spread trading.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">correlated</span>
+            <span class="rel-card-title"
+              >Iran War Outcomes &mdash; Ceasefire &amp; Regime Change</span
+            >
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/us-x-iran-ceasefire-by"
+                    target="_blank"
+                    >US &times; Iran ceasefire by April 30?</a
+                  ></span
+                >
+              </li>
+              <li class="rel-connector">
+                <span class="rel-connector-sym">&uarr;&darr; co-move</span>
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/will-the-iranian-regime-fall-by-june-30"
+                    target="_blank"
+                    >Will the Iranian regime fall by June 30?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            Both driven by the same geopolitical conflict &mdash;
+            <code>CointSpreadStrategy</code> trades the spread.
+          </div>
+        </div>
+
+        <!-- CONDITIONAL -->
+        <p>
+          <strong>Conditional.</strong>
+          Conditional probability bounds: P(A&thinsp;|&thinsp;B) constrains the
+          joint pricing of related markets.
+        </p>
+
+        <div class="rel-card">
+          <div class="rel-card-head">
+            <span class="rel-type-badge">conditional</span>
+            <span class="rel-card-title"
+              >EU Country Strikes Iran &mdash; Subset Bound</span
+            >
+          </div>
+          <div class="rel-card-body">
+            <ul class="rel-market-list">
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+                    target="_blank"
+                    >Will any E.U. country strike Iran by March 31?</a
+                  ></span
+                >
+              </li>
+              <li class="rel-connector">
+                <span class="rel-connector-sym">&ge; max of</span>
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+                    target="_blank"
+                    >Will France strike Iran by March 31?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+                    target="_blank"
+                    >Will UK strike Iran by March 31?</a
+                  ></span
+                >
+              </li>
+              <li>
+                <span class="rel-platform poly">Polymarket</span>
+                <span class="rel-market-q"
+                  ><a
+                    href="https://polymarket.com/event/which-countries-will-strike-iran-by-march-31"
+                    target="_blank"
+                    >Will Germany strike Iran by March 31?</a
+                  ></span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="rel-card-footer">
+            Constraint:
+            <code>P(any EU) &ge; max(P(France), P(UK), P(Germany))</code>
+            &mdash; <code>ConditionalArbStrategy</code>
+          </div>
+        </div>
+
+        <p>
+          Importantly, the discovery process is
+          <strong>cumulative</strong>. The 250+ relations above were actively
+          searched and identified by the LLM agent within a single one-hour
+          session. As the agent continues to run over longer time horizons, it
+          accumulates an ever-growing pool of validated relations ready for
+          backtesting and deployment&mdash;new markets appear daily, and each
+          session builds on prior discoveries. Scaling to
+          <strong>thousands or 10,000+ relations</strong> is simply a matter of
+          letting the agent run longer and across more exchanges.
+        </p>
+
+        <h3 id="exp-backtest">2. Backtesting</h3>
+
+        <p>
+          All discovered relations are automatically equipped with their
+          corresponding arbitrage strategy and backtested against historical
+          Polymarket order book snapshots. Around <strong>half</strong> of the
+          discovered relations passed the backtest gate with positive PnL,
+          confirming that a meaningful fraction of the structural mispricings
+          identified by the agent are genuinely tradeable (<a href="#fig4"
+            >Figure 4</a
+          >).
+        </p>
+
+        <div
+          id="fig4"
+          class="pipeline-box"
+          style="padding: 0; overflow: visible"
+        >
+          <svg
+            viewBox="0 0 760 500"
+            xmlns="http://www.w3.org/2000/svg"
+            style="
+              width: 100%;
+              height: auto;
+              display: block;
+              font-family:
+                &quot;DM Sans&quot;,
+                -apple-system,
+                sans-serif;
+            "
+          >
+            <!-- Title -->
+            <text
+              x="380"
+              y="22"
+              text-anchor="middle"
+              font-size="13"
+              font-weight="600"
+              fill="#18222e"
+            >
+              Backtest PnL by Market Relation Strategy
+            </text>
+            <text
+              x="380"
+              y="38"
+              text-anchor="middle"
+              font-size="10"
+              fill="#647585"
+            >
+              Ranked high &#x2192; low &#xb7; replayed on historical order book
+              snapshots
+            </text>
+
+            <!-- Grid lines -->
+            <line
+              x1="382"
+              y1="50"
+              x2="382"
+              y2="467"
+              stroke="#e8edf3"
+              stroke-width="0.5"
+            />
+            <line
+              x1="485"
+              y1="50"
+              x2="485"
+              y2="467"
+              stroke="#bec8d8"
+              stroke-width="1"
+              stroke-dasharray="4,3"
+            />
+            <line
+              x1="588"
+              y1="50"
+              x2="588"
+              y2="467"
+              stroke="#e8edf3"
+              stroke-width="0.5"
+            />
+            <line
+              x1="690"
+              y1="50"
+              x2="690"
+              y2="467"
+              stroke="#e8edf3"
+              stroke-width="0.5"
+            />
+
+            <!-- Background shading -->
+            <rect
+              x="285"
+              y="50"
+              width="435"
+              height="211"
+              fill="#3d8b63"
+              opacity="0.04"
+              rx="2"
+            />
+            <rect
+              x="285"
+              y="265"
+              width="435"
+              height="202"
+              fill="#b05555"
+              opacity="0.04"
+              rx="2"
+            />
+
+            <!-- Pass / Fail separator -->
+            <line
+              x1="285"
+              y1="261"
+              x2="720"
+              y2="261"
+              stroke="#aab4c6"
+              stroke-width="0.8"
+              stroke-dasharray="3,3"
+            />
+
+            <!-- Bottom axis -->
+            <line
+              x1="285"
+              y1="472"
+              x2="720"
+              y2="472"
+              stroke="#bec8d8"
+              stroke-width="0.5"
+            />
+            <text
+              x="285"
+              y="486"
+              text-anchor="middle"
+              font-size="9"
+              fill="#8e9eae"
+            >
+              &#x2212;$40
+            </text>
+            <text
+              x="382"
+              y="486"
+              text-anchor="middle"
+              font-size="9"
+              fill="#8e9eae"
+            >
+              &#x2212;$20
+            </text>
+            <text
+              x="485"
+              y="486"
+              text-anchor="middle"
+              font-size="9"
+              fill="#8e9eae"
+            >
+              $0
+            </text>
+            <text
+              x="588"
+              y="486"
+              text-anchor="middle"
+              font-size="9"
+              fill="#8e9eae"
+            >
+              +$20
+            </text>
+            <text
+              x="690"
+              y="486"
+              text-anchor="middle"
+              font-size="9"
+              fill="#8e9eae"
+            >
+              +$40
+            </text>
+
+            <!-- ROW 0: +$45.80 -->
+            <text x="275" y="70" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Oil CL Strike Ladder</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">structural</tspan>
+            </text>
+            <rect
+              x="485"
+              y="55"
+              width="235"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="717"
+              y="70"
+              text-anchor="end"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              +$45.80
+            </text>
+
+            <!-- ROW 1: +$34.20 -->
+            <text x="275" y="100" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Vietnam President</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">exclusivity</tspan>
+            </text>
+            <rect
+              x="485"
+              y="85"
+              width="176"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="658"
+              y="100"
+              text-anchor="end"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              +$34.20
+            </text>
+
+            <!-- ROW 2: +$28.60 -->
+            <text x="275" y="130" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Hormuz Deadline Chain</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">implication</tspan>
+            </text>
+            <rect
+              x="485"
+              y="115"
+              width="147"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="629"
+              y="130"
+              text-anchor="end"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              +$28.60
+            </text>
+
+            <!-- ROW 3: +$21.40 -->
+            <text x="275" y="160" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Hormuz Cross-Platform</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">same_event</tspan>
+            </text>
+            <rect
+              x="485"
+              y="145"
+              width="110"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="592"
+              y="160"
+              text-anchor="end"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              +$21.40
+            </text>
+
+            <!-- ROW 4: +$16.50 -->
+            <text x="275" y="190" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">EU Strike Iran Subset</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">conditional</tspan>
+            </text>
+            <rect
+              x="485"
+              y="175"
+              width="85"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="567"
+              y="190"
+              text-anchor="end"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              +$16.50
+            </text>
+
+            <!-- ROW 5: +$11.30 -->
+            <text x="275" y="220" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">US Enter Iran Buckets</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">complementary</tspan>
+            </text>
+            <rect
+              x="485"
+              y="205"
+              width="58"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="547"
+              y="220"
+              text-anchor="start"
+              font-size="9"
+              fill="#3d8b63"
+              font-weight="600"
+            >
+              +$11.30
+            </text>
+
+            <!-- ROW 6: +$5.80 -->
+            <text x="275" y="250" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">
+                Iran Ceasefire / Regime
+              </tspan>
+              <tspan fill="#8e9eae" font-size="8.5">correlated</tspan>
+            </text>
+            <rect
+              x="485"
+              y="235"
+              width="30"
+              height="22"
+              rx="3"
+              fill="#3d8b63"
+              opacity="0.85"
+            />
+            <text
+              x="519"
+              y="250"
+              text-anchor="start"
+              font-size="9"
+              fill="#3d8b63"
+              font-weight="600"
+            >
+              +$5.80
+            </text>
+
+            <!-- ROW 7: -$3.20 -->
+            <text x="275" y="280" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">BTC ETF / BTC Price</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">correlated</tspan>
+            </text>
+            <rect
+              x="469"
+              y="265"
+              width="16"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="465"
+              y="280"
+              text-anchor="end"
+              font-size="9"
+              fill="#b05555"
+              font-weight="600"
+            >
+              &#x2212;$3.20
+            </text>
+
+            <!-- ROW 8: -$8.70 -->
+            <text x="275" y="310" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Natural Gas Targets</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">structural</tspan>
+            </text>
+            <rect
+              x="440"
+              y="295"
+              width="45"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="436"
+              y="310"
+              text-anchor="end"
+              font-size="9"
+              fill="#b05555"
+              font-weight="600"
+            >
+              &#x2212;$8.70
+            </text>
+
+            <!-- ROW 9: -$14.50 -->
+            <text x="275" y="340" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Fed Rate Cut Buckets</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">complementary</tspan>
+            </text>
+            <rect
+              x="410"
+              y="325"
+              width="75"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="413"
+              y="340"
+              text-anchor="start"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              &#x2212;$14.50
+            </text>
+
+            <!-- ROW 10: -$19.80 -->
+            <text x="275" y="370" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Taiwan Invasion Chain</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">implication</tspan>
+            </text>
+            <rect
+              x="383"
+              y="355"
+              width="102"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="386"
+              y="370"
+              text-anchor="start"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              &#x2212;$19.80
+            </text>
+
+            <!-- ROW 11: -$25.60 -->
+            <text x="275" y="400" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">NATO Strike Iran</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">conditional</tspan>
+            </text>
+            <rect
+              x="353"
+              y="385"
+              width="132"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="356"
+              y="400"
+              text-anchor="start"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              &#x2212;$25.60
+            </text>
+
+            <!-- ROW 12: -$31.40 -->
+            <text x="275" y="430" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">
+                Ukraine Ceasefire X-Plat
+              </tspan>
+              <tspan fill="#8e9eae" font-size="8.5">same_event</tspan>
+            </text>
+            <rect
+              x="324"
+              y="415"
+              width="161"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="327"
+              y="430"
+              text-anchor="start"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              &#x2212;$31.40
+            </text>
+
+            <!-- ROW 13: -$38.90 -->
+            <text x="275" y="460" text-anchor="end">
+              <tspan fill="#26323f" font-size="10">Oil / Gold Lead-Lag</tspan>
+              <tspan fill="#8e9eae" font-size="8.5">temporal</tspan>
+            </text>
+            <rect
+              x="285"
+              y="445"
+              width="200"
+              height="22"
+              rx="3"
+              fill="#b05555"
+              opacity="0.85"
+            />
+            <text
+              x="288"
+              y="460"
+              text-anchor="start"
+              font-size="9"
+              fill="#fff"
+              font-weight="600"
+            >
+              &#x2212;$38.90
+            </text>
+          </svg>
+          <div
+            style="
+              text-align: left;
+              padding: 8px 18px 14px;
+              font-size: 12.5px;
+              color: var(--t3);
+              line-height: 1.5;
+            "
+          >
+            <strong style="color: var(--t2)">Figure 4.</strong>
+            Backtest results for 14 representative market relation strategies.
+            Around half pass the PnL gate, confirming that discovered
+            mispricings are genuinely tradeable.
+          </div>
+        </div>
+
+        <h3 id="exp-live">3. Live Trading</h3>
+
+        <p>
+          To validate end-to-end performance, we funded a Kalshi account with
+          limited real capital and let
+          <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> autonomously allocate
+          positions. The harness automatically sized each position to roughly
+          <strong>$20</strong>, identified opportunities, and executed trades
+          without manual intervention. Within a short initial period the
+          portfolio reached <strong>$53.97</strong> ($22.08 in open positions,
+          $31.89 cash), reflecting a gain of <strong>$3.40 (6.72%)</strong>.
+          These are early, short-horizon results and do not constitute a claim
+          of long-term performance; we present them solely as evidence that the
+          pipeline can identify and execute real opportunities end-to-end.
+        </p>
+
+        <p>
+          <a href="#fig5">Figure 5</a> highlights one representative trade where
+          the agent identified and executed a complementary-set arbitrage.
+        </p>
+
+        <div
+          id="fig5"
+          class="pipeline-box"
+          style="padding: 0; overflow: visible"
+        >
+          <svg
+            viewBox="0 0 760 410"
+            xmlns="http://www.w3.org/2000/svg"
+            style="
+              width: 100%;
+              height: auto;
+              display: block;
+              font-family:
+                &quot;DM Sans&quot;,
+                -apple-system,
+                sans-serif;
+            "
+          >
+            <defs>
+              <marker
+                id="ah-live"
+                markerWidth="8"
+                markerHeight="6"
+                refX="8"
+                refY="3"
+                orient="auto"
+              >
+                <polygon points="0 0, 8 3, 0 6" fill="#3d8b63" />
+              </marker>
+              <linearGradient id="cost-profit-bar" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="91.5%" stop-color="#5b7a9d" stop-opacity="0.3" />
+                <stop offset="91.5%" stop-color="#3d8b63" stop-opacity="0.4" />
+              </linearGradient>
+            </defs>
+
+            <!-- Title -->
+            <text
+              x="380"
+              y="22"
+              text-anchor="middle"
+              font-size="13"
+              font-weight="600"
+              fill="#18222e"
+            >
+              Live Arbitrage: Fed Dissenting Votes
+            </text>
+            <text
+              x="380"
+              y="40"
+              text-anchor="middle"
+              font-size="10"
+              fill="#647585"
+            >
+              Kalshi &#xb7; Executed March 14, 2026 &#xb7; Complementary outcome
+              set
+            </text>
+
+            <!-- Ticket 0 -->
+            <rect
+              x="40"
+              y="60"
+              width="270"
+              height="36"
+              rx="6"
+              fill="#f3f6fb"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <text
+              x="55"
+              y="83"
+              font-size="10.5"
+              fill="#26323f"
+              font-weight="600"
+            >
+              Yes &#xb7; 0
+            </text>
+            <text
+              x="175"
+              y="83"
+              text-anchor="middle"
+              font-size="8.5"
+              fill="#8e9eae"
+            >
+              pays $20
+            </text>
+            <text
+              x="300"
+              y="83"
+              text-anchor="end"
+              font-size="10.5"
+              fill="#26323f"
+            >
+              $0.43
+            </text>
+
+            <!-- Ticket 1 (settled outcome) -->
+            <rect
+              x="40"
+              y="104"
+              width="270"
+              height="36"
+              rx="6"
+              fill="#e8f6ef"
+              stroke="#3d8b63"
+              stroke-width="1.5"
+            />
+            <text
+              x="55"
+              y="127"
+              font-size="10.5"
+              fill="#3d8b63"
+              font-weight="600"
+            >
+              Yes &#xb7; 1 &#x2713;
+            </text>
+            <text
+              x="175"
+              y="127"
+              text-anchor="middle"
+              font-size="8.5"
+              fill="#8e9eae"
+            >
+              pays $20
+            </text>
+            <text
+              x="300"
+              y="127"
+              text-anchor="end"
+              font-size="10.5"
+              fill="#3d8b63"
+              font-weight="600"
+            >
+              $4.80
+            </text>
+
+            <!-- Ticket 2 -->
+            <rect
+              x="40"
+              y="148"
+              width="270"
+              height="36"
+              rx="6"
+              fill="#f3f6fb"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <text
+              x="55"
+              y="171"
+              font-size="10.5"
+              fill="#26323f"
+              font-weight="600"
+            >
+              Yes &#xb7; 2
+            </text>
+            <text
+              x="175"
+              y="171"
+              text-anchor="middle"
+              font-size="8.5"
+              fill="#8e9eae"
+            >
+              pays $20
+            </text>
+            <text
+              x="300"
+              y="171"
+              text-anchor="end"
+              font-size="10.5"
+              fill="#26323f"
+            >
+              $10.80
+            </text>
+
+            <!-- Ticket 3 -->
+            <rect
+              x="40"
+              y="192"
+              width="270"
+              height="36"
+              rx="6"
+              fill="#f3f6fb"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <text
+              x="55"
+              y="215"
+              font-size="10.5"
+              fill="#26323f"
+              font-weight="600"
+            >
+              Yes &#xb7; 3
+            </text>
+            <text
+              x="175"
+              y="215"
+              text-anchor="middle"
+              font-size="8.5"
+              fill="#8e9eae"
+            >
+              pays $20
+            </text>
+            <text
+              x="300"
+              y="215"
+              text-anchor="end"
+              font-size="10.5"
+              fill="#26323f"
+            >
+              $2.00
+            </text>
+
+            <!-- Ticket 4 -->
+            <rect
+              x="40"
+              y="236"
+              width="270"
+              height="36"
+              rx="6"
+              fill="#f3f6fb"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <text
+              x="55"
+              y="259"
+              font-size="10.5"
+              fill="#26323f"
+              font-weight="600"
+            >
+              Yes &#xb7; 4
+            </text>
+            <text
+              x="175"
+              y="259"
+              text-anchor="middle"
+              font-size="8.5"
+              fill="#8e9eae"
+            >
+              pays $22
+            </text>
+            <text
+              x="300"
+              y="259"
+              text-anchor="end"
+              font-size="10.5"
+              fill="#26323f"
+            >
+              $0.26
+            </text>
+
+            <!-- Connecting lines (green for settled, gray for others) -->
+            <line
+              x1="310"
+              y1="78"
+              x2="375"
+              y2="166"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <line
+              x1="310"
+              y1="122"
+              x2="375"
+              y2="166"
+              stroke="#3d8b63"
+              stroke-width="1.2"
+            />
+            <line
+              x1="310"
+              y1="166"
+              x2="375"
+              y2="166"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <line
+              x1="310"
+              y1="210"
+              x2="375"
+              y2="166"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+            <line
+              x1="310"
+              y1="254"
+              x2="375"
+              y2="166"
+              stroke="#bec8d8"
+              stroke-width="1"
+            />
+
+            <!-- Arrow to payout -->
+            <line
+              x1="375"
+              y1="166"
+              x2="440"
+              y2="166"
+              stroke="#3d8b63"
+              stroke-width="2"
+              marker-end="url(#ah-live)"
+            />
+
+            <!-- Payout box -->
+            <rect
+              x="450"
+              y="120"
+              width="270"
+              height="92"
+              rx="10"
+              fill="#e8f6ef"
+              stroke="#3d8b63"
+              stroke-width="1.5"
+            />
+            <text
+              x="585"
+              y="148"
+              text-anchor="middle"
+              font-size="10"
+              fill="#647585"
+            >
+              any 1 of 5 outcomes settles
+            </text>
+            <text
+              x="585"
+              y="176"
+              text-anchor="middle"
+              font-size="24"
+              fill="#3d8b63"
+              font-weight="700"
+            >
+              &#x2265; $20
+            </text>
+            <text
+              x="585"
+              y="198"
+              text-anchor="middle"
+              font-size="10"
+              fill="#647585"
+            >
+              guaranteed payout
+            </text>
+
+            <!-- Summary bar (gradient: cost | profit) -->
+            <rect
+              x="40"
+              y="300"
+              width="680"
+              height="32"
+              rx="5"
+              fill="url(#cost-profit-bar)"
+              stroke="#bec8d8"
+              stroke-width="0.5"
+            />
+            <text
+              x="351"
+              y="321"
+              text-anchor="middle"
+              font-size="11"
+              fill="#26323f"
+              font-weight="600"
+            >
+              Total Cost: $18.29
+            </text>
+            <text
+              x="691"
+              y="321"
+              text-anchor="middle"
+              font-size="9.5"
+              fill="#3d8b63"
+              font-weight="700"
+            >
+              +$1.71
+            </text>
+            <text
+              x="380"
+              y="352"
+              text-anchor="middle"
+              font-size="10"
+              fill="#647585"
+            >
+              &#x2265; $20.00 guaranteed payout &#x2192; locked profit &#x2265;
+              $1.71 (9.3% return)
+            </text>
+
+            <!-- Settlement result -->
+            <rect
+              x="140"
+              y="374"
+              width="480"
+              height="28"
+              rx="6"
+              fill="#3d8b63"
+              opacity="0.1"
+              stroke="#3d8b63"
+              stroke-width="0.8"
+            />
+            <text
+              x="380"
+              y="393"
+              text-anchor="middle"
+              font-size="10.5"
+              fill="#3d8b63"
+              font-weight="600"
+            >
+              Settled: 1 dissent &#x2192; Payout $20.24 &#x2192; Net profit
+              $1.95
+            </text>
+          </svg>
+          <div
+            style="
+              text-align: left;
+              padding: 8px 18px 14px;
+              font-size: 12.5px;
+              color: var(--t3);
+              line-height: 1.5;
+            "
+          >
+            <strong style="color: var(--t2)">Figure 5.</strong>
+            The agent bought Yes contracts on every mutually exclusive outcome,
+            locking in guaranteed profit before settlement. &#x2713; marks the
+            resolved outcome.
+          </div>
+        </div>
+
+        <p>
+          As shown in <a href="#fig5">Figure 5</a>, at
+          <strong>around 11:24 pm on March 14, 2026</strong> the agent
+          recognized that the five mutually exclusive outcomes of
+          <a href="https://kalshi.com/markets/kxfeddissent" target="_blank"
+            >&ldquo;How many dissenting votes at the next Fed meeting?&rdquo;</a
+          >
+          were collectively priced below their guaranteed settlement value. It
+          then purchased Yes contracts across all outcomes in rapid
+          succession&mdash;not simultaneously, but within a short time
+          window&mdash;assembling a near-risk-free position: regardless of which
+          outcome resolved, at least one contract would pay out, yielding a
+          locked-in profit once the full basket was in place. This trade was
+          triggered while the harness was running roughly
+          <strong>50 strategies concurrently</strong>&mdash;just one of many
+          opportunities being monitored in parallel. With more strategies
+          deployed, the harness can surface and execute a proportionally larger
+          number of such opportunities.
+        </p>
+
+        <h2 id="citation">Citation</h2>
+
+        <p>
+          If you find <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> useful in your research or
+          work, please cite:
+        </p>
+
+        <div class="bibtex-block">
+          <pre>
+@software{coinjure2026,
+  title   = {Coinjure: A Trading Agent Harness for Prediction Markets},
+  author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
+  year    = {2026},
+  url     = {https://github.com/ulab-uiuc/coinjure},
+  note    = {University of Illinois Urbana-Champaign}
+}</pre
+          >
+        </div>
+      </article>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <div class="footer-links">
+        <a href="/coinjure/docs/index.html">Docs</a>
+        <a href="https://github.com/ulab-uiuc/coinjure">GitHub</a>
+      </div>
+      &copy; 2026 Coinjure &middot; Apache 2.0
+    </footer>
+
+    <!-- TOC scroll spy -->
+    <script>
+      (function () {
+        const toc = document.getElementById("toc");
+        const links = [...toc.querySelectorAll("a[data-section]")];
+        const ids = links.map((a) => a.dataset.section);
+
+        function update() {
+          let active = ids[0];
+          for (const id of ids) {
+            const el = document.getElementById(id);
+            if (el && el.getBoundingClientRect().top <= 100) active = id;
+          }
+          links.forEach((a) => {
+            a.classList.toggle("active", a.dataset.section === active);
+          });
+        }
+
+        const obs = new IntersectionObserver(
+          () => {
+            toc.classList.add("visible");
+            obs.disconnect();
+          },
+          { rootMargin: "-40% 0px -40% 0px" },
+        );
+        const first = document.getElementById(ids[0]);
+        if (first) obs.observe(first);
+
+        window.addEventListener("scroll", update, { passive: true });
+        update();
+      })();
+    </script>
+  </body>
+</html>

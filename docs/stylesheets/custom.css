@@ -1,0 +1,496 @@
+/* ── CORAL-style complete override for MkDocs Material ── */
+
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap");
+
+/* ── Force ALL Material CSS variables to CORAL palette ── */
+:root,
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"],
+[data-md-color-scheme] {
+  /* Core backgrounds */
+  --md-default-bg-color: #f3f6fb !important;
+  --md-default-bg-color--light: #e8edf6 !important;
+  --md-default-bg-color--lighter: #dde4f0 !important;
+  --md-default-bg-color--lightest: #d2daea !important;
+
+  /* Core foregrounds */
+  --md-default-fg-color: #26323f !important;
+  --md-default-fg-color--light: #415060 !important;
+  --md-default-fg-color--lighter: #647585 !important;
+  --md-default-fg-color--lightest: #8e9eae !important;
+
+  /* Primary */
+  --md-primary-fg-color: #f3f6fb !important;
+  --md-primary-fg-color--light: #e8edf6 !important;
+  --md-primary-fg-color--dark: #18222e !important;
+  --md-primary-bg-color: #18222e !important;
+  --md-primary-bg-color--light: #26323f !important;
+
+  /* Accent */
+  --md-accent-fg-color: #2a5282 !important;
+  --md-accent-fg-color--transparent: rgba(42, 82, 130, 0.1) !important;
+  --md-accent-bg-color: #f3f6fb !important;
+
+  /* Code */
+  --md-code-bg-color: #e8edf6 !important;
+  --md-code-fg-color: #18222e !important;
+  --md-code-hl-color: rgba(42, 82, 130, 0.15) !important;
+
+  /* Typeset link */
+  --md-typeset-a-color: #2a5282 !important;
+
+  /* Footer */
+  --md-footer-bg-color: #f3f6fb !important;
+  --md-footer-bg-color--dark: #e8edf6 !important;
+  --md-footer-fg-color: #647585 !important;
+  --md-footer-fg-color--light: #8e9eae !important;
+  --md-footer-fg-color--lighter: #8e9eae !important;
+
+  /* Shadow override */
+  --md-shadow-z1: none !important;
+  --md-shadow-z2: none !important;
+  --md-shadow-z3: none !important;
+
+  /* Fonts */
+  --md-text-font: "DM Sans", -apple-system, sans-serif;
+  --md-code-font: "DM Mono", "SF Mono", Consolas, monospace;
+}
+
+/* ── Base typography ── */
+body {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+.md-typeset {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  font-size: 16px !important;
+  line-height: 1.75;
+  color: #26323f !important;
+}
+
+/* ── Headings ── */
+.md-typeset h1 {
+  font-family: "Source Serif 4", Georgia, serif !important;
+  font-weight: 700 !important;
+  color: #18222e !important;
+  letter-spacing: -0.03em !important;
+}
+
+.md-typeset h2 {
+  font-family: "Source Serif 4", Georgia, serif !important;
+  font-weight: 600 !important;
+  color: #18222e !important;
+  letter-spacing: -0.02em !important;
+  border-bottom: 0.7px solid #bec8d8 !important;
+  padding-bottom: 8px !important;
+}
+
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-family: "Source Serif 4", Georgia, serif !important;
+  font-weight: 600 !important;
+  color: #18222e !important;
+}
+
+.md-typeset strong {
+  color: #18222e !important;
+  font-weight: 600;
+}
+
+/* ── Links ── */
+.md-typeset a {
+  color: #2a5282 !important;
+}
+.md-typeset a:hover {
+  color: #18222e !important;
+}
+
+/* ── Inline code ── */
+.md-typeset code:not(pre code) {
+  background: #e8edf6 !important;
+  color: #18222e !important;
+  border-radius: 5px !important;
+  padding: 2px 6px !important;
+  font-size: 12.5px !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-family: "DM Mono", "SF Mono", Consolas, monospace !important;
+}
+
+/* ── Code blocks ── */
+.md-typeset pre {
+  border-radius: 14px !important;
+  background: #e8edf6 !important;
+  border: 0.7px solid #bec8d8 !important;
+}
+
+.md-typeset pre > code {
+  font-family: "DM Mono", "SF Mono", Consolas, monospace !important;
+  font-size: 12.5px !important;
+  line-height: 1.7 !important;
+  color: #18222e !important;
+  background: transparent !important;
+}
+
+.highlight code {
+  background: transparent !important;
+}
+
+/* Syntax highlighting tokens — light theme */
+.highlight .k,
+.highlight .kn,
+.highlight .kd,
+.highlight .kc,
+.highlight .kr,
+.highlight .kt {
+  color: #2a5282 !important;
+} /* keywords */
+.highlight .s,
+.highlight .s1,
+.highlight .s2,
+.highlight .sa,
+.highlight .sb,
+.highlight .sc {
+  color: #4a7c59 !important;
+} /* strings */
+.highlight .c,
+.highlight .c1,
+.highlight .cm,
+.highlight .cs,
+.highlight .ch,
+.highlight .cp {
+  color: #8e9eae !important;
+  font-style: italic !important;
+} /* comments */
+.highlight .n,
+.highlight .na,
+.highlight .nb,
+.highlight .nc,
+.highlight .nd,
+.highlight .nf,
+.highlight .ni,
+.highlight .nn,
+.highlight .nt {
+  color: #18222e !important;
+} /* names */
+.highlight .mi,
+.highlight .mf,
+.highlight .mh,
+.highlight .mo,
+.highlight .il {
+  color: #8b5e3c !important;
+} /* numbers */
+.highlight .o,
+.highlight .ow,
+.highlight .p {
+  color: #415060 !important;
+} /* operators/punctuation */
+.highlight .bp {
+  color: #647585 !important;
+} /* builtins */
+
+/* ── Header ── */
+.md-header {
+  background: #f3f6fb !important;
+  border-bottom: 0.7px solid #bec8d8 !important;
+  box-shadow: none !important;
+  color: #18222e !important;
+}
+
+.md-header[data-md-state="shadow"] {
+  box-shadow: none !important;
+  border-bottom: 0.7px solid #bec8d8 !important;
+}
+
+.md-header__title {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 17px !important;
+  color: #18222e !important;
+  letter-spacing: 0.02em;
+}
+
+.md-header__topic {
+  font-weight: 700 !important;
+  color: #18222e !important;
+}
+
+.md-header__button {
+  color: #18222e !important;
+}
+
+.md-header .md-logo img,
+.md-header .md-logo svg {
+  filter: none !important;
+}
+
+/* Search in header */
+.md-search__input {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  background: #e8edf6 !important;
+  color: #26323f !important;
+}
+
+.md-search__input::placeholder {
+  color: #647585 !important;
+}
+
+/* ── Tabs (hidden, using sidebar nav instead) ── */
+.md-tabs {
+  display: none !important;
+}
+
+/* ── Sidebar ── */
+.md-sidebar {
+  background: transparent !important;
+}
+
+.md-nav {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+}
+
+.md-nav__link {
+  font-size: 13px !important;
+  color: #647585 !important;
+  transition: all 0.15s;
+}
+
+.md-nav__link:hover {
+  color: #26323f !important;
+}
+
+.md-nav__link--active,
+.md-nav__item--active > .md-nav__link {
+  color: #18222e !important;
+  font-weight: 600 !important;
+}
+
+.md-nav__title {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #647585 !important;
+}
+
+/* ── Tables ── */
+.md-typeset table:not([class]) {
+  font-size: 13.5px !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.md-typeset table:not([class]) th {
+  font-weight: 600 !important;
+  font-size: 11.5px !important;
+  color: #18222e !important;
+  background: #e8edf6 !important;
+  border-bottom: 0.7px solid #bec8d8 !important;
+  border-top: none !important;
+}
+
+.md-typeset table:not([class]) td {
+  color: #26323f !important;
+  border-bottom: 0.7px solid #bec8d8 !important;
+  border-top: none !important;
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background: #e8edf6 !important;
+}
+
+/* ── Admonitions ── */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 12px !important;
+  border: 0.7px solid #bec8d8 !important;
+  box-shadow: none !important;
+  background: #e8edf6 !important;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background: #dde4f0 !important;
+  border-bottom: 0.7px solid #bec8d8 !important;
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  font-weight: 600 !important;
+  color: #18222e !important;
+}
+
+/* ── Content ── */
+.md-content {
+  max-width: 800px;
+}
+
+/* ── Footer ── */
+.md-footer {
+  background: #f3f6fb !important;
+  border-top: 0.7px solid #bec8d8 !important;
+  color: #647585 !important;
+}
+
+.md-footer__inner {
+  color: #647585 !important;
+}
+
+.md-footer-meta {
+  background: #f3f6fb !important;
+}
+
+.md-footer-meta__inner {
+  color: #647585 !important;
+}
+
+.md-footer__link {
+  color: #26323f !important;
+}
+
+/* ── Selection ── */
+::selection {
+  background: #18222e !important;
+  color: #f3f6fb !important;
+}
+
+/* ── Shared nav bar (same classes as blog) ── */
+
+/* Make Material announce container full-width, no padding */
+.md-banner {
+  padding: 0 !important;
+  background: transparent !important;
+}
+.md-banner__inner {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+}
+
+.nav {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: #f3f6fb;
+  border-bottom: 0.7px solid #bec8d8;
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif;
+}
+
+.nav-logo {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    sans-serif !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: #18222e !important;
+  letter-spacing: 0.02em;
+  text-decoration: none !important;
+}
+
+.nav-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-link {
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: #647585 !important;
+  padding: 5px 10px;
+  border-radius: 10px;
+  text-decoration: none !important;
+  transition: all 0.15s;
+}
+
+.nav-link:hover {
+  color: #26323f !important;
+  background: #e8edf6;
+}
+
+.gh-pill,
+.gh-pill:link,
+.gh-pill:visited,
+.gh-pill:active,
+.md-banner .gh-pill,
+a.gh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: #18222e !important;
+  color: #f3f6fb !important;
+  font-size: 11px !important;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-decoration: none !important;
+  transition: opacity 0.15s;
+}
+
+.gh-pill:hover,
+.md-banner .gh-pill:hover,
+a.gh-pill:hover {
+  opacity: 0.85;
+  color: #f3f6fb !important;
+}
+
+.gh-pill svg {
+  flex-shrink: 0;
+}
+
+/* ── Hide Material's default header title + repo (we have our own) ── */
+.md-header__source {
+  display: none !important;
+}
+
+/* Material header removed via template override (block header) */
+
+/* ── Responsive video embeds ── */
+.video-container {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 */
+  margin-bottom: 32px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 0.7px solid #bec8d8;
+}
+
+.video-container iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}

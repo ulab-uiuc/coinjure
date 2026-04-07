@@ -1,0 +1,1522 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.">
+      
+      
+      
+        <link rel="canonical" href="https://ulab-uiuc.github.io/coinjure/docs/api/strategy.html">
+      
+      
+        <link rel="prev" href="index.html">
+      
+      
+        <link rel="next" href="trading.html">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Strategy - Coinjure</title>
+      
+    
+     
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+<style>
+  /* Critical inline styles — prevent FOUC on file:// */
+  :root,
+  [data-md-color-scheme="default"],
+  [data-md-color-scheme="slate"],
+  [data-md-color-scheme] {
+    --md-default-bg-color: #f3f6fb !important;
+    --md-default-fg-color: #26323f !important;
+    --md-primary-fg-color: #f3f6fb !important;
+    --md-primary-bg-color: #18222e !important;
+    --md-accent-fg-color: #2a5282 !important;
+    --md-code-bg-color: #e8edf6 !important;
+    --md-code-fg-color: #18222e !important;
+    --md-text-font: "DM Sans", sans-serif;
+    --md-code-font: "DM Mono", monospace;
+    --md-shadow-z1: none !important;
+    --md-shadow-z2: none !important;
+    --md-shadow-z3: none !important;
+    --md-footer-bg-color: #f3f6fb !important;
+    --md-footer-bg-color--dark: #e8edf6 !important;
+  }
+  body {
+    background: #f3f6fb !important;
+    font-family: "DM Sans", sans-serif !important;
+  }
+  .md-tabs {
+    display: none !important;
+  }
+  .md-banner {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .md-banner__inner {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .nav {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: #f3f6fb;
+    border-bottom: 0.7px solid #bec8d8;
+    font-family: "DM Sans", sans-serif;
+  }
+  .nav-logo {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #18222e !important;
+    text-decoration: none !important;
+    letter-spacing: 0.02em;
+  }
+  .nav-r {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link {
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #647585 !important;
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none !important;
+  }
+  .gh-pill,
+  .gh-pill:link,
+  .gh-pill:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: #18222e !important;
+    color: #f3f6fb !important;
+    font-size: 11px !important;
+    font-weight: 500;
+    text-decoration: none !important;
+  }
+</style>
+
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#strategy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+<nav class="nav">
+  <a href=".." class="nav-logo"
+    ><span style="color: #d4a017">Coin</span
+    ><span style="color: #2c5f8a">jure</span></a
+  >
+  <div class="nav-r">
+    <a href=".." class="nav-link" style="color: #18222e">Docs</a>
+    <a href="javascript:void(0)" class="nav-link" id="blog-link">Blog</a>
+    <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+<script>
+  (function () {
+    var a = document.createElement("a");
+    a.href = document.querySelector(".nav-logo").getAttribute("href");
+    var siteRoot = a.href.replace(/\/?$/, "/");
+    document.getElementById("blog-link").href = siteRoot + "../blog/index.html";
+  })();
+</script>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="Coinjure" class="md-nav__button md-logo" aria-label="Coinjure" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Coinjure
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ulab-uiuc/coinjure" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ulab-uiuc/coinjure
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_QUICK_START.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_MONITORING.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategy
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="strategy.html" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#strategy_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#class-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Class Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategycontext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StrategyContext
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StrategyContext">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategydecision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StrategyDecision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Strategies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#loading-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loading Strategies
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="trading.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trading Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="data.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="relations.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Market Relations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="engine.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_SPECIFICATION.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blog/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#strategy_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#class-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Class Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategycontext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StrategyContext
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StrategyContext">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategydecision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StrategyDecision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Strategies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#loading-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loading Strategies
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/ulab-uiuc/coinjure/edit/main/docs/api/strategy.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="strategy">Strategy</h1>
+<p>Module: <code>coinjure.strategy.strategy</code></p>
+<p>The <code>Strategy</code> ABC is the base class for all trading strategies. Subclasses implement <code>process_event</code> to react to market data and place orders.</p>
+<h2 id="strategy_1">Strategy</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.strategy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Strategy</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.events</span><span class="w"> </span><span class="kn">import</span> <span class="n">Event</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.trading.trader</span><span class="w"> </span><span class="kn">import</span> <span class="n">Trader</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyStrategy</span><span class="p">(</span><span class="n">Strategy</span><span class="p">):</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;my_strategy&quot;</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;0.1.0&quot;</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">process_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">Event</span><span class="p">,</span> <span class="n">trader</span><span class="p">:</span> <span class="n">Trader</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_context</span><span class="p">()</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="c1"># Your logic here</span>
+</code></pre></div>
+<h3 id="class-variables">Class Variables</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>str</code></td>
+<td>Strategy display name</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td><code>str</code></td>
+<td>Semantic version string</td>
+</tr>
+<tr>
+<td><code>author</code></td>
+<td><code>str</code></td>
+<td>Author identifier</td>
+</tr>
+<tr>
+<td><code>strategy_type</code></td>
+<td><code>str</code></td>
+<td>Category tag (default: <code>"generic"</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods">Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>process_event(event, trader)</code></td>
+<td><strong>Abstract.</strong> Handle one market event.</td>
+</tr>
+<tr>
+<td><code>on_start()</code></td>
+<td>Lifecycle hook — called before the first event.</td>
+</tr>
+<tr>
+<td><code>on_stop()</code></td>
+<td>Lifecycle hook — called after the last event.</td>
+</tr>
+<tr>
+<td><code>watch_tokens() -&gt; list[str]</code></td>
+<td>Return token IDs the data source should prioritize.</td>
+</tr>
+<tr>
+<td><code>set_paused(paused)</code></td>
+<td>Pause/resume decision-making via control plane.</td>
+</tr>
+<tr>
+<td><code>is_paused() -&gt; bool</code></td>
+<td>Check if strategy is paused.</td>
+</tr>
+<tr>
+<td><code>is_warming_up() -&gt; bool</code></td>
+<td>Check if still in warmup window after engine start.</td>
+</tr>
+<tr>
+<td><code>bind_context(event, trader)</code></td>
+<td>Bind <code>StrategyContext</code> for this timestep.</td>
+</tr>
+<tr>
+<td><code>require_context() -&gt; StrategyContext</code></td>
+<td>Get bound context or raise <code>RuntimeError</code>.</td>
+</tr>
+<tr>
+<td><code>record_decision(...)</code></td>
+<td>Record a decision to the shared buffer + counters.</td>
+</tr>
+<tr>
+<td><code>get_decisions() -&gt; list[StrategyDecision]</code></td>
+<td>Return recent decisions (max 200).</td>
+</tr>
+<tr>
+<td><code>get_decision_stats() -&gt; dict</code></td>
+<td>Return running decision counters.</td>
+</tr>
+<tr>
+<td><code>param_schema() -&gt; dict</code></td>
+<td>Classmethod. Introspect <code>__init__</code> for tunable parameters.</td>
+</tr>
+<tr>
+<td><code>reset_live_state()</code></td>
+<td>Reset ephemeral state between walk-forward phases.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="strategycontext">StrategyContext</h2>
+<p>Unified runtime context bound before every strategy invocation. Provides safe access to market data, positions, and news without touching internal engine state.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_context</span><span class="p">()</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Market data</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">books</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">order_books</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">history</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">ticker_history</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">prices</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">price_history</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">tickers</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">available_tickers</span><span class="p">()</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># Positions</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">positions</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_positions</span><span class="p">()</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">cash</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">cash_positions</span><span class="p">()</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># News</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">news</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">recent_news</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># Ticker resolution</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">ticker</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">resolve_ticker</span><span class="p">(</span><span class="s2">&quot;TRUMP_YES&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">trade_ticker</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">resolve_trade_ticker</span><span class="p">(</span><span class="s2">&quot;TRUMP&quot;</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">&quot;no&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="properties">Properties</h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>event</code></td>
+<td><code>Event</code></td>
+<td>The current event being processed</td>
+</tr>
+<tr>
+<td><code>trader</code></td>
+<td><code>Trader</code></td>
+<td>The active trader instance</td>
+</tr>
+<tr>
+<td><code>event_type</code></td>
+<td><code>str</code></td>
+<td>Class name of the event (e.g. <code>"PriceChangeEvent"</code>)</td>
+</tr>
+<tr>
+<td><code>ticker</code></td>
+<td><code>Ticker \| None</code></td>
+<td>Ticker from the event, if present</td>
+</tr>
+<tr>
+<td><code>event_timestamp</code></td>
+<td><code>object</code></td>
+<td>Timestamp or published_at from the event</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods_1">Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>market_history(ticker, limit)</code></td>
+<td><code>list[DataPoint]</code></td>
+<td>Full market history for a ticker</td>
+</tr>
+<tr>
+<td><code>ticker_history(limit)</code></td>
+<td><code>list[DataPoint]</code></td>
+<td>History for the current event's ticker</td>
+</tr>
+<tr>
+<td><code>price_history(ticker, limit)</code></td>
+<td><code>list</code></td>
+<td>Price-only history</td>
+</tr>
+<tr>
+<td><code>order_books(limit)</code></td>
+<td><code>list[StrategyOrderBookView]</code></td>
+<td>Current order book snapshots</td>
+</tr>
+<tr>
+<td><code>available_tickers(limit, include_complements)</code></td>
+<td><code>list[Ticker]</code></td>
+<td>All tickers with active order books</td>
+</tr>
+<tr>
+<td><code>resolve_ticker(symbol)</code></td>
+<td><code>Ticker \| None</code></td>
+<td>Find ticker by symbol string</td>
+</tr>
+<tr>
+<td><code>resolve_trade_ticker(symbol, side)</code></td>
+<td><code>Ticker \| None</code></td>
+<td>Find ticker for YES/NO side</td>
+</tr>
+<tr>
+<td><code>positions()</code></td>
+<td><code>list[StrategyPositionView]</code></td>
+<td>All positions (cash + market)</td>
+</tr>
+<tr>
+<td><code>cash_positions()</code></td>
+<td><code>list[StrategyPositionView]</code></td>
+<td>Cash-only positions</td>
+</tr>
+<tr>
+<td><code>active_positions()</code></td>
+<td><code>list[StrategyPositionView]</code></td>
+<td>Non-cash positions with quantity &gt; 0</td>
+</tr>
+<tr>
+<td><code>recent_news(limit)</code></td>
+<td><code>list[dict]</code></td>
+<td>Recent news headlines</td>
+</tr>
+</tbody>
+</table>
+<h2 id="strategydecision">StrategyDecision</h2>
+<p>Dataclass emitted by <code>record_decision()</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timestamp</code></td>
+<td><code>str</code></td>
+<td><code>HH:MM:SS</code> format</td>
+</tr>
+<tr>
+<td><code>ticker_name</code></td>
+<td><code>str</code></td>
+<td>Market name (truncated to 40 chars)</td>
+</tr>
+<tr>
+<td><code>action</code></td>
+<td><code>str</code></td>
+<td><code>BUY_YES</code>, <code>BUY_NO</code>, <code>HOLD</code>, <code>CLOSE_*</code>, etc.</td>
+</tr>
+<tr>
+<td><code>executed</code></td>
+<td><code>bool</code></td>
+<td>Whether the order was actually placed</td>
+</tr>
+<tr>
+<td><code>reasoning</code></td>
+<td><code>str</code></td>
+<td>Human-readable explanation</td>
+</tr>
+<tr>
+<td><code>confidence</code></td>
+<td><code>float</code></td>
+<td>Signal confidence (0.0 if N/A)</td>
+</tr>
+<tr>
+<td><code>signal_values</code></td>
+<td><code>dict[str, float]</code></td>
+<td>Strategy-specific signals</td>
+</tr>
+</tbody>
+</table>
+<h2 id="built-in-strategies">Built-in Strategies</h2>
+<p>All built-in strategies live in <code>coinjure.strategy.builtin</code> and are auto-selected by relation type:</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Relation</th>
+<th>Module</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DirectArbStrategy</code></td>
+<td><code>same_event</code></td>
+<td><code>builtin.direct_arb_strategy</code></td>
+</tr>
+<tr>
+<td><code>GroupArbStrategy</code></td>
+<td><code>complementary</code>, <code>exclusivity</code></td>
+<td><code>builtin.group_arb_strategy</code></td>
+</tr>
+<tr>
+<td><code>ImplicationArbStrategy</code></td>
+<td><code>implication</code></td>
+<td><code>builtin.implication_arb_strategy</code></td>
+</tr>
+<tr>
+<td><code>CointSpreadStrategy</code></td>
+<td><code>correlated</code></td>
+<td><code>builtin.coint_spread_strategy</code></td>
+</tr>
+<tr>
+<td><code>StructuralArbStrategy</code></td>
+<td><code>structural</code></td>
+<td><code>builtin.structural_arb_strategy</code></td>
+</tr>
+<tr>
+<td><code>ConditionalArbStrategy</code></td>
+<td><code>conditional</code></td>
+<td><code>builtin.conditional_arb_strategy</code></td>
+</tr>
+<tr>
+<td><code>LeadLagStrategy</code></td>
+<td><code>temporal</code></td>
+<td><code>builtin.lead_lag_strategy</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="loading-strategies">Loading Strategies</h2>
+<p>Strategies are referenced by <code>module.path:ClassName</code> or <code>/path/file.py:ClassName</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_strategy</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">strategy</span> <span class="o">=</span> <span class="n">load_strategy</span><span class="p">(</span><span class="s2">&quot;coinjure.strategy.demo:DemoStrategy&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">strategy</span> <span class="o">=</span> <span class="n">load_strategy</span><span class="p">(</span><span class="s2">&quot;./my_strategies/alpha.py:AlphaStrategy&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

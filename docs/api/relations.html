@@ -1,0 +1,1389 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.">
+      
+      
+      
+        <link rel="canonical" href="https://ulab-uiuc.github.io/coinjure/docs/api/relations.html">
+      
+      
+        <link rel="prev" href="data.html">
+      
+      
+        <link rel="next" href="engine.html">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Market Relations - Coinjure</title>
+      
+    
+     
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+<style>
+  /* Critical inline styles — prevent FOUC on file:// */
+  :root,
+  [data-md-color-scheme="default"],
+  [data-md-color-scheme="slate"],
+  [data-md-color-scheme] {
+    --md-default-bg-color: #f3f6fb !important;
+    --md-default-fg-color: #26323f !important;
+    --md-primary-fg-color: #f3f6fb !important;
+    --md-primary-bg-color: #18222e !important;
+    --md-accent-fg-color: #2a5282 !important;
+    --md-code-bg-color: #e8edf6 !important;
+    --md-code-fg-color: #18222e !important;
+    --md-text-font: "DM Sans", sans-serif;
+    --md-code-font: "DM Mono", monospace;
+    --md-shadow-z1: none !important;
+    --md-shadow-z2: none !important;
+    --md-shadow-z3: none !important;
+    --md-footer-bg-color: #f3f6fb !important;
+    --md-footer-bg-color--dark: #e8edf6 !important;
+  }
+  body {
+    background: #f3f6fb !important;
+    font-family: "DM Sans", sans-serif !important;
+  }
+  .md-tabs {
+    display: none !important;
+  }
+  .md-banner {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .md-banner__inner {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .nav {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: #f3f6fb;
+    border-bottom: 0.7px solid #bec8d8;
+    font-family: "DM Sans", sans-serif;
+  }
+  .nav-logo {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #18222e !important;
+    text-decoration: none !important;
+    letter-spacing: 0.02em;
+  }
+  .nav-r {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link {
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #647585 !important;
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none !important;
+  }
+  .gh-pill,
+  .gh-pill:link,
+  .gh-pill:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: #18222e !important;
+    color: #f3f6fb !important;
+    font-size: 11px !important;
+    font-weight: 500;
+    text-decoration: none !important;
+  }
+</style>
+
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#market-relations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+<nav class="nav">
+  <a href=".." class="nav-logo"
+    ><span style="color: #d4a017">Coin</span
+    ><span style="color: #2c5f8a">jure</span></a
+  >
+  <div class="nav-r">
+    <a href=".." class="nav-link" style="color: #18222e">Docs</a>
+    <a href="javascript:void(0)" class="nav-link" id="blog-link">Blog</a>
+    <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+<script>
+  (function () {
+    var a = document.createElement("a");
+    a.href = document.querySelector(".nav-logo").getAttribute("href");
+    var siteRoot = a.href.replace(/\/?$/, "/");
+    document.getElementById("blog-link").href = siteRoot + "../blog/index.html";
+  })();
+</script>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="Coinjure" class="md-nav__button md-logo" aria-label="Coinjure" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Coinjure
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ulab-uiuc/coinjure" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ulab-uiuc/coinjure
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_QUICK_START.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_MONITORING.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="strategy.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="trading.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trading Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="data.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Market Relations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="relations.html" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Market Relations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#relation-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relation Types
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#marketrelation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MarketRelation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MarketRelation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationstore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RelationStore
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RelationStore">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="engine.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_SPECIFICATION.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blog/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#relation-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relation Types
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#marketrelation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MarketRelation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MarketRelation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationstore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RelationStore
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RelationStore">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/ulab-uiuc/coinjure/edit/main/docs/api/relations.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="market-relations">Market Relations</h1>
+<p>Module: <code>coinjure.market.relations</code></p>
+<p>The relation system models structural and statistical relationships between prediction markets. Each relation type maps to a dedicated arbitrage strategy.</p>
+<h2 id="relation-types">Relation Types</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Constraint</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>same_event</code></td>
+<td>Identical market across platforms (p_A ≈ p_B)</td>
+<td>Same question on Polymarket + Kalshi</td>
+</tr>
+<tr>
+<td><code>complementary</code></td>
+<td>Outcomes sum to 1 (Σp ≈ 1)</td>
+<td>"Will X win?" + "Will Y win?" + "Will Z win?"</td>
+</tr>
+<tr>
+<td><code>implication</code></td>
+<td>A implies B (p_A ≤ p_B)</td>
+<td>"By March" implies "By June"</td>
+</tr>
+<tr>
+<td><code>exclusivity</code></td>
+<td>Mutually exclusive (Σp ≤ 1)</td>
+<td>Winner-take-all candidates</td>
+</tr>
+<tr>
+<td><code>correlated</code></td>
+<td>Cointegrated price series</td>
+<td>Semantically related markets</td>
+</tr>
+<tr>
+<td><code>structural</code></td>
+<td>Known linear relationship (p_A = α + β·p_B)</td>
+<td>Price nesting</td>
+</tr>
+<tr>
+<td><code>conditional</code></td>
+<td>Conditional probability bounds</td>
+<td>p(A|B) ∈ [lower, upper]</td>
+</tr>
+<tr>
+<td><code>temporal</code></td>
+<td>Lead-lag information flow</td>
+<td>Market A leads Market B by N steps</td>
+</tr>
+</tbody>
+</table>
+<h2 id="marketrelation">MarketRelation</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">relation</span> <span class="o">=</span> <span class="n">MarketRelation</span><span class="p">(</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">relation_id</span><span class="o">=</span><span class="s2">&quot;12345-67890&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">markets</span><span class="o">=</span><span class="p">[</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;12345&quot;</span><span class="p">,</span> <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="s2">&quot;Will X happen by March?&quot;</span><span class="p">,</span> <span class="s2">&quot;token_ids&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;abc&quot;</span><span class="p">]},</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;67890&quot;</span><span class="p">,</span> <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="s2">&quot;Will X happen by June?&quot;</span><span class="p">,</span> <span class="s2">&quot;token_ids&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;def&quot;</span><span class="p">]},</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="p">],</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">spread_type</span><span class="o">=</span><span class="s2">&quot;implication&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">reasoning</span><span class="o">=</span><span class="s2">&quot;March deadline implies June deadline&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">hypothesis</span><span class="o">=</span><span class="s2">&quot;p_A &lt;= p_B&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
+</code></pre></div>
+<h3 id="fields">Fields</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>relation_id</code></td>
+<td><code>str</code></td>
+<td>—</td>
+<td>Unique identifier</td>
+</tr>
+<tr>
+<td><code>markets</code></td>
+<td><code>list[dict]</code></td>
+<td><code>[]</code></td>
+<td>Market metadata (id, question, token_ids, platform)</td>
+</tr>
+<tr>
+<td><code>spread_type</code></td>
+<td><code>str</code></td>
+<td><code>"unknown"</code></td>
+<td>One of the 8 relation types</td>
+</tr>
+<tr>
+<td><code>confidence</code></td>
+<td><code>float</code></td>
+<td><code>0.0</code></td>
+<td>Discovery confidence (0.0–1.0)</td>
+</tr>
+<tr>
+<td><code>reasoning</code></td>
+<td><code>str</code></td>
+<td><code>""</code></td>
+<td>Why the markets are related</td>
+</tr>
+<tr>
+<td><code>hypothesis</code></td>
+<td><code>str</code></td>
+<td><code>""</code></td>
+<td>Mathematical relationship (e.g., <code>"p_A - p_B ≈ 0"</code>)</td>
+</tr>
+<tr>
+<td><code>hedge_ratio</code></td>
+<td><code>float</code></td>
+<td><code>1.0</code></td>
+<td>β from OLS regression</td>
+</tr>
+<tr>
+<td><code>lead_lag</code></td>
+<td><code>int</code></td>
+<td><code>0</code></td>
+<td>Lead-lag steps (positive = A leads B)</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>str</code></td>
+<td><code>"active"</code></td>
+<td>Lifecycle: <code>active</code>, <code>backtest_passed</code>, <code>backtest_failed</code>, <code>deployed</code>, <code>retired</code></td>
+</tr>
+<tr>
+<td><code>backtest_pnl</code></td>
+<td><code>float \| None</code></td>
+<td><code>None</code></td>
+<td>PnL from backtest run</td>
+</tr>
+<tr>
+<td><code>backtest_trades</code></td>
+<td><code>int \| None</code></td>
+<td><code>None</code></td>
+<td>Trade count from backtest</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods">Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>set_backtest_result(passed, pnl, trades)</code></td>
+<td>Update lifecycle based on backtest outcome</td>
+</tr>
+<tr>
+<td><code>get_token_id(index)</code></td>
+<td>Get YES-side CLOB token_id for market at index</td>
+</tr>
+<tr>
+<td><code>get_no_token_id(index)</code></td>
+<td>Get NO-side CLOB token_id for market at index</td>
+</tr>
+<tr>
+<td><code>to_dict()</code></td>
+<td>Serialize to dictionary</td>
+</tr>
+<tr>
+<td><code>from_dict(d)</code></td>
+<td>Classmethod. Deserialize from dictionary</td>
+</tr>
+</tbody>
+</table>
+<h2 id="relationstore">RelationStore</h2>
+<p>JSON-backed persistent store at <code>~/.coinjure/relations.json</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">RelationStore</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">store</span> <span class="o">=</span> <span class="n">RelationStore</span><span class="p">()</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># CRUD</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">store</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">relation</span><span class="p">)</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">store</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">relation</span><span class="p">)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">store</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s2">&quot;12345-67890&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">rel</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;12345-67890&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1"># Query</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">all_relations</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">implication_rels</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">spread_type</span><span class="o">=</span><span class="s2">&quot;implication&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">passed</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;backtest_passed&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">related</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">find_by_market</span><span class="p">(</span><span class="s2">&quot;12345&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># Batch</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">count</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">add_batch</span><span class="p">([</span><span class="n">rel1</span><span class="p">,</span> <span class="n">rel2</span><span class="p">,</span> <span class="n">rel3</span><span class="p">])</span>
+</code></pre></div>
+<h3 id="methods_1">Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list(spread_type, status)</code></td>
+<td><code>list[MarketRelation]</code></td>
+<td>Filter relations by type and/or status</td>
+</tr>
+<tr>
+<td><code>get(relation_id)</code></td>
+<td><code>MarketRelation \| None</code></td>
+<td>Fetch by ID</td>
+</tr>
+<tr>
+<td><code>add(relation)</code></td>
+<td><code>None</code></td>
+<td>Upsert a relation</td>
+</tr>
+<tr>
+<td><code>update(relation)</code></td>
+<td><code>None</code></td>
+<td>Update existing or add if not found</td>
+</tr>
+<tr>
+<td><code>remove(relation_id)</code></td>
+<td><code>bool</code></td>
+<td>Delete by ID, returns success</td>
+</tr>
+<tr>
+<td><code>add_batch(relations)</code></td>
+<td><code>int</code></td>
+<td>Bulk upsert, returns count of new relations</td>
+</tr>
+<tr>
+<td><code>find_by_market(market_id)</code></td>
+<td><code>list[MarketRelation]</code></td>
+<td>Find all relations involving a market</td>
+</tr>
+</tbody>
+</table>
+<h2 id="lifecycle">Lifecycle</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>active → backtest_passed → deployed → retired
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>   ↓
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>backtest_failed
+</code></pre></div>
+<p>Relations progress through lifecycle stages as they are backtested and deployed. The <code>status</code> field gates which strategies can advance to paper and live trading.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,1177 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.">
+      
+      
+      
+        <link rel="canonical" href="https://ulab-uiuc.github.io/coinjure/docs/plans/2026-03-09-group-relation-design.html">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Group Relation Design: MarketRelation Pair → Group - Coinjure</title>
+      
+    
+     
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+<style>
+  /* Critical inline styles — prevent FOUC on file:// */
+  :root,
+  [data-md-color-scheme="default"],
+  [data-md-color-scheme="slate"],
+  [data-md-color-scheme] {
+    --md-default-bg-color: #f3f6fb !important;
+    --md-default-fg-color: #26323f !important;
+    --md-primary-fg-color: #f3f6fb !important;
+    --md-primary-bg-color: #18222e !important;
+    --md-accent-fg-color: #2a5282 !important;
+    --md-code-bg-color: #e8edf6 !important;
+    --md-code-fg-color: #18222e !important;
+    --md-text-font: "DM Sans", sans-serif;
+    --md-code-font: "DM Mono", monospace;
+    --md-shadow-z1: none !important;
+    --md-shadow-z2: none !important;
+    --md-shadow-z3: none !important;
+    --md-footer-bg-color: #f3f6fb !important;
+    --md-footer-bg-color--dark: #e8edf6 !important;
+  }
+  body {
+    background: #f3f6fb !important;
+    font-family: "DM Sans", sans-serif !important;
+  }
+  .md-tabs {
+    display: none !important;
+  }
+  .md-banner {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .md-banner__inner {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .nav {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: #f3f6fb;
+    border-bottom: 0.7px solid #bec8d8;
+    font-family: "DM Sans", sans-serif;
+  }
+  .nav-logo {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #18222e !important;
+    text-decoration: none !important;
+    letter-spacing: 0.02em;
+  }
+  .nav-r {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link {
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #647585 !important;
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none !important;
+  }
+  .gh-pill,
+  .gh-pill:link,
+  .gh-pill:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: #18222e !important;
+    color: #f3f6fb !important;
+    font-size: 11px !important;
+    font-weight: 500;
+    text-decoration: none !important;
+  }
+</style>
+
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#group-relation-design-marketrelation-pair-group" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+<nav class="nav">
+  <a href=".." class="nav-logo"
+    ><span style="color: #d4a017">Coin</span
+    ><span style="color: #2c5f8a">jure</span></a
+  >
+  <div class="nav-r">
+    <a href=".." class="nav-link" style="color: #18222e">Docs</a>
+    <a href="javascript:void(0)" class="nav-link" id="blog-link">Blog</a>
+    <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+<script>
+  (function () {
+    var a = document.createElement("a");
+    a.href = document.querySelector(".nav-logo").getAttribute("href");
+    var siteRoot = a.href.replace(/\/?$/, "/");
+    document.getElementById("blog-link").href = siteRoot + "../blog/index.html";
+  })();
+</script>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="Coinjure" class="md-nav__button md-logo" aria-label="Coinjure" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Coinjure
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ulab-uiuc/coinjure" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ulab-uiuc/coinjure
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_QUICK_START.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_MONITORING.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/strategy.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/trading.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trading Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/data.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/relations.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Market Relations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_SPECIFICATION.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blog/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-data-structure-marketrelation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Data Structure — MarketRelation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-file-renames" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. File Renames
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-detection-logic-auto_discoverpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Detection Logic — auto_discover.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-strategy-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Strategy Merge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-downstream-adaptation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Downstream Adaptation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-storage-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Storage Compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#affected-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Affected Files
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Affected Files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-high-impact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core (high impact)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#medium-impact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Medium impact
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unaffected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unaffected
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/ulab-uiuc/coinjure/edit/main/docs/plans/2026-03-09-group-relation-design.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="group-relation-design-marketrelation-pair-group">Group Relation Design: MarketRelation Pair → Group</h1>
+<h2 id="problem">Problem</h2>
+<p><code>MarketRelation</code> only supports pairs (<code>market_a</code>, <code>market_b</code>), but exclusivity
+and complementary relations are inherently about N markets (e.g. all candidates
+in a presidential election). The pair-only model causes:</p>
+<ul>
+<li>O(n²) pair explosion for N-market events, forcing <code>max_event_size</code> caps</li>
+<li>Weaker pairwise constraint <code>A + B ≤ 1</code> misses group violations (3 markets at
+  0.4 each: every pair sums to 0.8 but group sums to 1.2)</li>
+<li><code>arb &gt; 0</code> filter discards most pairs since pairwise violations are rare</li>
+<li><code>EventSumArbStrategy</code> already handles groups correctly but isn't wired to
+  relation discovery</li>
+</ul>
+<h2 id="design">Design</h2>
+<h3 id="1-data-structure-marketrelation">1. Data Structure — <code>MarketRelation</code></h3>
+<p>Replace <code>market_a: dict</code> + <code>market_b: dict</code> with <code>markets: list[dict]</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@dataclass</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">MarketRelation</span><span class="p">:</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">relation_id</span><span class="p">:</span> <span class="nb">str</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">markets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">spread_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;unknown&#39;</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">...</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_token_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_no_token_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+<p><code>from_dict()</code> auto-migrates old format:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">if</span> <span class="s1">&#39;market_a&#39;</span> <span class="ow">in</span> <span class="n">d</span> <span class="ow">and</span> <span class="s1">&#39;markets&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">d</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">d</span><span class="p">[</span><span class="s1">&#39;markets&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;market_a&#39;</span><span class="p">),</span> <span class="n">d</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;market_b&#39;</span><span class="p">)]</span>
+</code></pre></div>
+<h3 id="2-file-renames">2. File Renames</h3>
+<table>
+<thead>
+<tr>
+<th>Old</th>
+<th>New</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>market/auto_pair.py</code></td>
+<td><code>market/auto_discover.py</code></td>
+</tr>
+<tr>
+<td><code>AutoPairResult</code></td>
+<td><code>DiscoveryResult</code></td>
+</tr>
+<tr>
+<td><code>auto_pair_markets()</code></td>
+<td><code>discover_relations()</code></td>
+</tr>
+<tr>
+<td>CLI <code>--auto-pair</code></td>
+<td><code>--auto-discover</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="3-detection-logic-auto_discoverpy">3. Detection Logic — <code>auto_discover.py</code></h3>
+<ul>
+<li><strong>Implication (date nesting)</strong>: stays pairwise (<code>len(markets) == 2</code>)</li>
+<li><strong>Exclusivity / Complementary</strong>: one group relation per event, <code>markets</code>
+  contains all active markets in the event</li>
+<li>Remove <code>arb &gt; 0</code> filter — keep all structural relations</li>
+<li>Remove <code>max_event_size</code> caps — groups don't explode</li>
+<li>Add Kalshi intra-event detection (currently unused)</li>
+</ul>
+<h3 id="4-strategy-merge">4. Strategy Merge</h3>
+<p>Merge <code>ExclusivityArbStrategy</code> + <code>EventSumArbStrategy</code> → <code>GroupArbStrategy</code>.</p>
+<ul>
+<li>Receives <code>relation_id</code>, loads <code>markets</code> list from relation</li>
+<li>Checks <code>Σ(prices)</code> vs 1.0</li>
+<li>Direction based on <code>spread_type</code> (exclusivity: ≤1, complementary: ≈1)</li>
+<li>Replaces two separate strategies with one unified implementation</li>
+</ul>
+<h3 id="5-downstream-adaptation">5. Downstream Adaptation</h3>
+<ul>
+<li><strong><code>RelationArbMixin</code></strong>: <code>_id_a/_id_b/_token_a/_token_b</code> → <code>_ids: list</code> /
+  <code>_tokens: list</code>. Pair strategies use <code>[0]</code>/<code>[1]</code>.</li>
+<li><strong><code>backtester.py</code></strong>: <code>_make_ticker(relation, leg='a')</code> →
+  <code>_make_ticker(relation, index=0)</code></li>
+<li><strong><code>market_commands.py</code></strong>: display adapts to N markets, <code>relations add</code> gets
+  <code>--market-ids</code> option</li>
+<li><strong><code>builtin/__init__.py</code></strong>: route exclusivity/complementary → <code>GroupArbStrategy</code></li>
+<li><strong>Tests</strong>: update all fixtures</li>
+</ul>
+<h3 id="6-storage-compatibility">6. Storage Compatibility</h3>
+<p><code>MarketRelation.from_dict()</code> handles old <code>{market_a, market_b}</code> format
+transparently. No migration script needed.</p>
+<h2 id="affected-files">Affected Files</h2>
+<h3 id="core-high-impact">Core (high impact)</h3>
+<ul>
+<li><code>coinjure/market/relations.py</code> — MarketRelation dataclass</li>
+<li><code>coinjure/market/auto_pair.py</code> → <code>auto_discover.py</code> — detection logic</li>
+<li><code>coinjure/strategy/relation_mixin.py</code> — RelationArbMixin</li>
+<li><code>coinjure/strategy/builtin/exclusivity_arb_strategy.py</code> → removed</li>
+<li><code>coinjure/strategy/builtin/event_sum_arb_strategy.py</code> → <code>group_arb_strategy.py</code></li>
+<li><code>coinjure/strategy/builtin/__init__.py</code> — routing</li>
+</ul>
+<h3 id="medium-impact">Medium impact</h3>
+<ul>
+<li><code>coinjure/cli/market_commands.py</code> — display + CLI flags</li>
+<li><code>coinjure/engine/backtester.py</code> — ticker creation from legs</li>
+</ul>
+<h3 id="tests">Tests</h3>
+<ul>
+<li><code>tests/test_auto_pair.py</code> → <code>tests/test_auto_discover.py</code></li>
+<li><code>tests/test_relations.py</code></li>
+<li><code>tests/test_backtester.py</code></li>
+</ul>
+<h3 id="unaffected">Unaffected</h3>
+<ul>
+<li><code>DirectArbStrategy</code> — doesn't use relations</li>
+<li><code>RelationStore</code> persistence — JSON flexible, auto-migration handles it</li>
+<li><code>ImplicationArbStrategy</code>, <code>CointSpreadStrategy</code>, etc. — pair strategies
+  just use <code>markets[0]</code>/<code>markets[1]</code></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

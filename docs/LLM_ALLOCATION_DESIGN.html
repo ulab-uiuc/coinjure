@@ -1,0 +1,1417 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.">
+      
+      
+      
+        <link rel="canonical" href="https://ulab-uiuc.github.io/coinjure/docs/LLM_ALLOCATION_DESIGN.html">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>LLM Allocation Design - Coinjure</title>
+      
+    
+     
+      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+<style>
+  /* Critical inline styles — prevent FOUC on file:// */
+  :root,
+  [data-md-color-scheme="default"],
+  [data-md-color-scheme="slate"],
+  [data-md-color-scheme] {
+    --md-default-bg-color: #f3f6fb !important;
+    --md-default-fg-color: #26323f !important;
+    --md-primary-fg-color: #f3f6fb !important;
+    --md-primary-bg-color: #18222e !important;
+    --md-accent-fg-color: #2a5282 !important;
+    --md-code-bg-color: #e8edf6 !important;
+    --md-code-fg-color: #18222e !important;
+    --md-text-font: "DM Sans", sans-serif;
+    --md-code-font: "DM Mono", monospace;
+    --md-shadow-z1: none !important;
+    --md-shadow-z2: none !important;
+    --md-shadow-z3: none !important;
+    --md-footer-bg-color: #f3f6fb !important;
+    --md-footer-bg-color--dark: #e8edf6 !important;
+  }
+  body {
+    background: #f3f6fb !important;
+    font-family: "DM Sans", sans-serif !important;
+  }
+  .md-tabs {
+    display: none !important;
+  }
+  .md-banner {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .md-banner__inner {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .nav {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: #f3f6fb;
+    border-bottom: 0.7px solid #bec8d8;
+    font-family: "DM Sans", sans-serif;
+  }
+  .nav-logo {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #18222e !important;
+    text-decoration: none !important;
+    letter-spacing: 0.02em;
+  }
+  .nav-r {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link {
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #647585 !important;
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none !important;
+  }
+  .gh-pill,
+  .gh-pill:link,
+  .gh-pill:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: #18222e !important;
+    color: #f3f6fb !important;
+    font-size: 11px !important;
+    font-weight: 500;
+    text-decoration: none !important;
+  }
+</style>
+
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="stylesheets/custom.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#llm-allocation-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+<nav class="nav">
+  <a href="." class="nav-logo"
+    ><span style="color: #d4a017">Coin</span
+    ><span style="color: #2c5f8a">jure</span></a
+  >
+  <div class="nav-r">
+    <a href="." class="nav-link" style="color: #18222e">Docs</a>
+    <a href="javascript:void(0)" class="nav-link" id="blog-link">Blog</a>
+    <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+<script>
+  (function () {
+    var a = document.createElement("a");
+    a.href = document.querySelector(".nav-logo").getAttribute("href");
+    var siteRoot = a.href.replace(/\/?$/, "/");
+    document.getElementById("blog-link").href = siteRoot + "../blog/index.html";
+  })();
+</script>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="index.html" title="Coinjure" class="md-nav__button md-logo" aria-label="Coinjure" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Coinjure
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ulab-uiuc/coinjure" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ulab-uiuc/coinjure
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="CLI_QUICK_START.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="CLI_MONITORING.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/strategy.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/trading.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trading Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/data.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/relations.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Market Relations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/engine.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="PROJECT_SPECIFICATION.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="blog/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#three-llm-control-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three LLM Control Points
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Three LLM Control Points">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-portfolio-allocation-launch-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Portfolio Allocation (launch-time)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-per-opportunity-trade-sizing-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Per-Opportunity Trade Sizing (runtime)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-periodic-portfolio-review-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Periodic Portfolio Review (runtime)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy Integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#safety-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Safety Model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Safety Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#quant-remains-the-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quant remains the baseline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fallback-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fallback behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#existing-risk-controls-stay-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Existing risk controls stay in place
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-toggles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Toggles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-Goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rationale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rationale
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/ulab-uiuc/coinjure/edit/main/docs/LLM_ALLOCATION_DESIGN.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="llm-allocation-design">LLM Allocation Design</h1>
+<p>This document describes the hybrid quant + LLM allocation system for builtin arbitrage strategies.</p>
+<h2 id="goal">Goal</h2>
+<p>Keep the existing quant arbitrage detectors and fast execution path, while allowing operators to opt into LLM review at two layers:</p>
+<ol>
+<li><strong>Portfolio allocation</strong> — LLM reviews capital distribution across relations at launch time.</li>
+<li><strong>Per-opportunity trade sizing</strong> — LLM reviews portfolio state and decides trade size when a strategy detects an arb opportunity at runtime.</li>
+</ol>
+<p>The LLM does not decide which arbitrage opportunities exist. Builtin strategies still own edge detection and trade execution.</p>
+<h2 id="architecture">Architecture</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>relations
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>   |
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>   v
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>_run_batch() in engine_commands.py
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>   |
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>   +--&gt; allocate_capital()  [quant baseline]
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>   |
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   +--&gt; optional allocate_capital_llm() review  [launch-time]
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>   |         |
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>   |         v
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>   |    adjusted budgets per relation
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>   |
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>   v
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>build strategy kwargs (incl. llm_trade_sizing, llm_portfolio_review, llm_model) and launch engines
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>   |
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>   v
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>TradingEngine event loop (engine.py)
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>   |
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>   +--&gt; data_source.get_next_event()
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>   |
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>   +--&gt; strategy.process_event(event, trader)
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>   |      |
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>   |      +--&gt; detect opportunity (edge &gt; threshold)
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>   |      |
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>   |      +--&gt; await compute_trade_size_with_llm(pm, edge, leg_count, leg_prices, ...)
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>   |               |
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>   |               +--&gt; compute_trade_size()  [always runs first — quant baseline]
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>   |               |
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>   |               +--&gt; if llm_trade_sizing=False: return quant_size  [fast path]
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>   |               |
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>   |               +--&gt; if llm_trade_sizing=True:
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>   |               |       +--&gt; rate limiter check (configurable, disabled by default)
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>   |               |       +--&gt; build OpportunitySizingRequest with real portfolio state
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>   |               |       |       includes leg_count and leg_prices for multi-leg context
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>   |               |       +--&gt; await compute_opportunity_sizing_llm(request)
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>   |               |       +--&gt; validate, clamp, quantize response
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>   |               |       +--&gt; return llm_size (or quant_size on failure/None)
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>   |               |
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>   |               v
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>   |            trader.place_order(side, ticker, price, size)
+<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>   |
+<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>   +--&gt; every 500 events: _check_llm_portfolio_review()
+<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a>            |
+<a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>            +--&gt; if llm_portfolio_review=False: skip
+<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>            |
+<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>            +--&gt; if llm_portfolio_review=True:
+<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>                    +--&gt; await review_portfolio_llm(strategy state snapshot)
+<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>                    +--&gt; validate response (kelly_fraction in [0.01, 0.5], max_trade_size &gt;= 1)
+<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>                    +--&gt; apply adjustments to strategy.kelly_fraction / strategy.max_trade_size
+<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>                    +--&gt; fallback: no changes on error
+</code></pre></div>
+<h2 id="three-llm-control-points">Three LLM Control Points</h2>
+<h3 id="1-portfolio-allocation-launch-time">1. Portfolio Allocation (launch-time)</h3>
+<ul>
+<li>Module: <code>coinjure/trading/llm_allocator.py</code></li>
+<li>Function: <code>allocate_capital_llm()</code></li>
+<li>Triggered once at batch engine startup</li>
+<li>Takes the baseline quant allocation and optionally adjusts per-strategy budgets</li>
+<li>Fallback: uses quant budgets on any failure</li>
+</ul>
+<h3 id="2-per-opportunity-trade-sizing-runtime">2. Per-Opportunity Trade Sizing (runtime)</h3>
+<ul>
+<li>Module: <code>coinjure/trading/llm_sizing.py</code></li>
+<li>Function: <code>compute_opportunity_sizing_llm()</code></li>
+<li>Router: <code>coinjure/trading/sizing.py</code> → <code>compute_trade_size_with_llm()</code></li>
+<li>Triggered inside the event loop when a strategy detects an arb opportunity</li>
+<li>Receives real context: edge, available capital, current exposure, portfolio utilization, quant baseline size, leg_count, leg_prices</li>
+<li>Rate-limited (configurable interval, disabled by default; set <code>_OPPORTUNITY_MIN_INTERVAL_SECONDS</code> or use API to adjust)</li>
+<li>Fallback: returns quant size on rate-limit skip, API failure, invalid response, or None</li>
+</ul>
+<h3 id="3-periodic-portfolio-review-runtime">3. Periodic Portfolio Review (runtime)</h3>
+<ul>
+<li>Module: <code>coinjure/trading/llm_allocator.py</code></li>
+<li>Function: <code>review_portfolio_llm()</code></li>
+<li>Dataclass: <code>PortfolioAdjustment</code> (kelly_fraction, max_trade_size, reasoning)</li>
+<li>Triggered every 500 events in the engine event loop via <code>_check_llm_portfolio_review()</code></li>
+<li>Receives runtime snapshot: available capital, exposure, realized/unrealized PnL, position/trade counts, current sizing parameters</li>
+<li>Can adjust <code>kelly_fraction</code> (range [0.01, 0.5]) and <code>max_trade_size</code> (&gt;= 1) on the live strategy instance</li>
+<li>Null fields mean "keep current value" — conservative by default</li>
+<li>Fallback: no adjustments on any error</li>
+</ul>
+<p>All three features are <strong>off by default</strong>.</p>
+<h2 id="strategy-integration">Strategy Integration</h2>
+<p>All 7 builtin strategies call <code>await compute_trade_size_with_llm()</code> at every trade decision point (11 call sites total):</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Call Sites</th>
+<th>Relation Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DirectArbStrategy</code></td>
+<td>1</td>
+<td><code>same_event</code></td>
+</tr>
+<tr>
+<td><code>GroupArbStrategy</code></td>
+<td>1</td>
+<td><code>same_event</code></td>
+</tr>
+<tr>
+<td><code>ImplicationArbStrategy</code></td>
+<td>1</td>
+<td><code>implication</code></td>
+</tr>
+<tr>
+<td><code>ConditionalArbStrategy</code></td>
+<td>2</td>
+<td><code>conditional</code></td>
+</tr>
+<tr>
+<td><code>StructuralArbStrategy</code></td>
+<td>2</td>
+<td><code>structural</code></td>
+</tr>
+<tr>
+<td><code>CointSpreadStrategy</code></td>
+<td>2</td>
+<td><code>cointegrated</code></td>
+</tr>
+<tr>
+<td><code>LeadLagStrategy</code></td>
+<td>2</td>
+<td><code>lead_lag</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each strategy accepts <code>llm_trade_sizing: bool</code>, <code>llm_portfolio_review: bool</code>, and <code>llm_model: str | None</code> as constructor kwargs. When <code>llm_trade_sizing=False</code> (default), the async router immediately returns the quant size with zero overhead. When <code>llm_portfolio_review=False</code> (default), the engine skips periodic review entirely.</p>
+<h2 id="safety-model">Safety Model</h2>
+<h3 id="quant-remains-the-baseline">Quant remains the baseline</h3>
+<ul>
+<li><code>allocate_capital()</code> runs first for portfolio allocation</li>
+<li><code>compute_trade_size()</code> always runs first for trade sizing</li>
+<li>LLM review is optional and additive — never blocks the quant path</li>
+</ul>
+<h3 id="fallback-behavior">Fallback behavior</h3>
+<table>
+<thead>
+<tr>
+<th>Failure Mode</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Portfolio allocation API error</td>
+<td>Use baseline quant budgets</td>
+</tr>
+<tr>
+<td>Portfolio allocation invalid output</td>
+<td>Use baseline quant budgets</td>
+</tr>
+<tr>
+<td>Per-opportunity API error</td>
+<td>Return quant size</td>
+</tr>
+<tr>
+<td>Per-opportunity invalid size</td>
+<td>Return quant size</td>
+</tr>
+<tr>
+<td>Per-opportunity rate-limited</td>
+<td>Return quant size (no API call)</td>
+</tr>
+<tr>
+<td>LLM returns size &gt; max_size</td>
+<td>Clamp to max_size</td>
+</tr>
+<tr>
+<td>LLM returns size &lt; 1 after rounding</td>
+<td>Clamp to 1</td>
+</tr>
+<tr>
+<td>Portfolio review API error</td>
+<td>No adjustments applied</td>
+</tr>
+<tr>
+<td>Portfolio review invalid kelly/max_size</td>
+<td>No adjustments applied</td>
+</tr>
+<tr>
+<td>Portfolio review null fields</td>
+<td>Keep current values (no change)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="validation-rules">Validation rules</h3>
+<p><code>llm_allocator.py</code>:
+- All returned strategy IDs must match the candidate set
+- Each budget must be positive
+- Total allocation cannot exceed deployable capital
+- Each strategy stays within the per-strategy cap</p>
+<p><code>llm_sizing.py</code> (per-opportunity):
+- Size must be numeric, finite, and positive
+- Size is clamped to <code>max_size</code> ceiling
+- Size is quantized to integer contracts (Kalshi requirement)
+- Minimum size is 1
+- Rate limiter interface is preserved but disabled by default (interval = 0.0); operators can re-enable via <code>set_interval()</code></p>
+<h3 id="existing-risk-controls-stay-in-place">Existing risk controls stay in place</h3>
+<p>The LLM cannot bypass runtime safety controls. Orders still flow through the existing <code>RiskManager</code> and trader checks.</p>
+<h2 id="cli-toggles">CLI Toggles</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Launch-time portfolio allocation review only</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>coinjure<span class="w"> </span>engine<span class="w"> </span>paper-run<span class="w"> </span>--all-relations<span class="w"> </span>--llm-portfolio-review
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Per-opportunity trade sizing only</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>coinjure<span class="w"> </span>engine<span class="w"> </span>paper-run<span class="w"> </span>--all-relations<span class="w"> </span>--llm-trade-sizing
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Runtime periodic portfolio review (adjusts kelly_fraction / max_trade_size during trading)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>coinjure<span class="w"> </span>engine<span class="w"> </span>paper-run<span class="w"> </span>--all-relations<span class="w"> </span>--llm-portfolio-review<span class="w"> </span>--llm-trade-sizing
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># All three layers with custom model</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>coinjure<span class="w"> </span>engine<span class="w"> </span>paper-run<span class="w"> </span>--all-relations<span class="w"> </span>--llm-portfolio-review<span class="w"> </span>--llm-trade-sizing<span class="w"> </span>--llm-model<span class="w"> </span>gemini-3.1-flash-lite-preview
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># Backtest with LLM sizing</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>coinjure<span class="w"> </span>engine<span class="w"> </span>backtest<span class="w"> </span>--all-relations<span class="w"> </span>--llm-trade-sizing<span class="w"> </span>--llm-model<span class="w"> </span>gpt-4.1-mini
+</code></pre></div>
+<p>All three commands (<code>paper-run</code>, <code>live-run</code>, <code>backtest</code>) support <code>--llm-portfolio-review</code>, <code>--llm-trade-sizing</code>, and <code>--llm-model</code>.</p>
+<h2 id="modules">Modules</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>coinjure/trading/llm_allocator.py</code></td>
+<td>Launch-time portfolio allocation + runtime periodic portfolio review</td>
+</tr>
+<tr>
+<td><code>coinjure/trading/llm_sizing.py</code></td>
+<td>Per-opportunity LLM sizing + rate limiter</td>
+</tr>
+<tr>
+<td><code>coinjure/trading/sizing.py</code></td>
+<td>Trade sizing router (<code>compute_trade_size_with_llm</code>)</td>
+</tr>
+<tr>
+<td><code>coinjure/engine/engine.py</code></td>
+<td>Periodic <code>_check_llm_portfolio_review()</code> hook</td>
+</tr>
+<tr>
+<td><code>coinjure/cli/engine_commands.py</code></td>
+<td>CLI wiring for LLM toggles</td>
+</tr>
+</tbody>
+</table>
+<h2 id="tests">Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test File</th>
+<th>Tests</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tests/test_llm_allocator.py</code></td>
+<td>11</td>
+<td>Portfolio allocation validation/fallbacks (7) + runtime portfolio review (4)</td>
+</tr>
+<tr>
+<td><code>tests/test_llm_sizing.py</code></td>
+<td>13</td>
+<td>Per-opportunity sizing (8) + trade size router (3) + leg context serialization (2)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="known-limitations">Known Limitations</h2>
+<ul>
+<li><strong>Live budget enforcement</strong>: <code>--llm-portfolio-review</code> computes adjusted budgets but live mode does not enforce them (each live runner loads full exchange balance independently). Portfolio review is effective in paper/backtest only until live budget plumbing is added.</li>
+<li><strong>Per-process throttling</strong>: Rate limiting is per-strategy-process, not portfolio-wide.</li>
+</ul>
+<h2 id="non-goals">Non-Goals</h2>
+<ul>
+<li>LLM-driven trade entry or exit decisions (LLM only sizes, never triggers)</li>
+<li>LLM-driven replacement of builtin arbitrage detection logic</li>
+</ul>
+<h2 id="rationale">Rationale</h2>
+<ul>
+<li>Quant code handles the hot path — LLM is consulted only when opted in</li>
+<li>Rate limiting protects against API cost and latency in the event loop</li>
+<li>Failures degrade to deterministic quant behavior instead of blocking trading</li>
+<li>Strategy refs and kwargs remain serializable in the registry</li>
+<li>Both layers are independently toggleable for different use cases (fast simple arb = quant only, complex arb = LLM sizing)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

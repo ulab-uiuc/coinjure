@@ -1,0 +1,1859 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An intelligent trading agent for Polymarket & Kalshi prediction markets, powered by Social World Models and LLM-driven decision making.">
+      
+      
+      
+        <link rel="canonical" href="https://ulab-uiuc.github.io/coinjure/docs/plans/2026-03-09-batch-paper-live-trading.html">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Batch Paper/Live Trading Implementation Plan - Coinjure</title>
+      
+    
+     
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+<style>
+  /* Critical inline styles — prevent FOUC on file:// */
+  :root,
+  [data-md-color-scheme="default"],
+  [data-md-color-scheme="slate"],
+  [data-md-color-scheme] {
+    --md-default-bg-color: #f3f6fb !important;
+    --md-default-fg-color: #26323f !important;
+    --md-primary-fg-color: #f3f6fb !important;
+    --md-primary-bg-color: #18222e !important;
+    --md-accent-fg-color: #2a5282 !important;
+    --md-code-bg-color: #e8edf6 !important;
+    --md-code-fg-color: #18222e !important;
+    --md-text-font: "DM Sans", sans-serif;
+    --md-code-font: "DM Mono", monospace;
+    --md-shadow-z1: none !important;
+    --md-shadow-z2: none !important;
+    --md-shadow-z3: none !important;
+    --md-footer-bg-color: #f3f6fb !important;
+    --md-footer-bg-color--dark: #e8edf6 !important;
+  }
+  body {
+    background: #f3f6fb !important;
+    font-family: "DM Sans", sans-serif !important;
+  }
+  .md-tabs {
+    display: none !important;
+  }
+  .md-banner {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .md-banner__inner {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .nav {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: #f3f6fb;
+    border-bottom: 0.7px solid #bec8d8;
+    font-family: "DM Sans", sans-serif;
+  }
+  .nav-logo {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #18222e !important;
+    text-decoration: none !important;
+    letter-spacing: 0.02em;
+  }
+  .nav-r {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-link {
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #647585 !important;
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none !important;
+  }
+  .gh-pill,
+  .gh-pill:link,
+  .gh-pill:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: #18222e !important;
+    color: #f3f6fb !important;
+    font-size: 11px !important;
+    font-weight: 500;
+    text-decoration: none !important;
+  }
+</style>
+
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#batch-paperlive-trading-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+<nav class="nav">
+  <a href=".." class="nav-logo"
+    ><span style="color: #d4a017">Coin</span
+    ><span style="color: #2c5f8a">jure</span></a
+  >
+  <div class="nav-r">
+    <a href=".." class="nav-link" style="color: #18222e">Docs</a>
+    <a href="javascript:void(0)" class="nav-link" id="blog-link">Blog</a>
+    <a href="https://github.com/ulab-uiuc/coinjure" class="gh-pill">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+        />
+      </svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+<script>
+  (function () {
+    var a = document.createElement("a");
+    a.href = document.querySelector(".nav-logo").getAttribute("href");
+    var siteRoot = a.href.replace(/\/?$/, "/");
+    document.getElementById("blog-link").href = siteRoot + "../blog/index.html";
+  })();
+</script>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="Coinjure" class="md-nav__button md-logo" aria-label="Coinjure" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Coinjure
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ulab-uiuc/coinjure" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ulab-uiuc/coinjure
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_QUICK_START.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLI_MONITORING.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/strategy.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/trading.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trading Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/data.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/relations.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Market Relations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_SPECIFICATION.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blog/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#task-1-add-relation_id-field-to-strategyentry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 1: Add relation_id field to StrategyEntry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-2-add-build_strategy_ref_for_relation-helper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 2: Add build_strategy_ref_for_relation() helper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-3-add-detach-support-to-engine-paper-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 3: Add --detach support to engine paper-run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-4-add-all-relations-to-engine-paper-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 4: Add --all-relations to engine paper-run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-5-add-detach-and-all-relations-to-engine-live-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 5: Add --detach and --all-relations to engine live-run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-6-add-engine-promote-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 6: Add engine promote command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-7-final-integration-test-and-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 7: Final integration test and cleanup
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/ulab-uiuc/coinjure/edit/main/docs/plans/2026-03-09-batch-paper-live-trading.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="batch-paperlive-trading-implementation-plan">Batch Paper/Live Trading Implementation Plan</h1>
+<blockquote>
+<p><strong>For Claude:</strong> REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.</p>
+</blockquote>
+<p><strong>Goal:</strong> Add <code>--all-relations</code> and <code>--detach</code> to <code>engine paper-run</code> / <code>engine live-run</code>, plus <code>engine promote</code> command, so all backtest-passed relations can paper/live trade in parallel as detached processes with auto hub management.</p>
+<p><strong>Architecture:</strong> Each relation runs in its own detached OS process via <code>subprocess.Popen</code>. A shared MarketDataHub fans out market data. The CLI layer orchestrates: auto-starts hub if needed, spawns one <code>engine paper-run --detach</code> per relation, and registers each in <code>StrategyRegistry</code>.</p>
+<p><strong>Tech Stack:</strong> Click CLI, subprocess, asyncio, existing StrategyRegistry + RelationStore + STRATEGY_BY_RELATION</p>
+<hr />
+<h3 id="task-1-add-relation_id-field-to-strategyentry">Task 1: Add <code>relation_id</code> field to StrategyEntry</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>coinjure/engine/registry.py:20-53</code></li>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+</ul>
+<p><strong>Step 1: Write the failing test</strong></p>
+<p>Add to <code>tests/test_trade_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_strategy_entry_relation_id</span><span class="p">():</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.engine.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyEntry</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">entry</span> <span class="o">=</span> <span class="n">StrategyEntry</span><span class="p">(</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">strategy_id</span><span class="o">=</span><span class="s1">&#39;rel-abc&#39;</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">strategy_ref</span><span class="o">=</span><span class="s1">&#39;coinjure.strategy.builtin:DirectArbStrategy&#39;</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;rel-abc&#39;</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">assert</span> <span class="n">entry</span><span class="o">.</span><span class="n">relation_id</span> <span class="o">==</span> <span class="s1">&#39;rel-abc&#39;</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">d</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">assert</span> <span class="n">d</span><span class="p">[</span><span class="s1">&#39;relation_id&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;rel-abc&#39;</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">restored</span> <span class="o">=</span> <span class="n">StrategyEntry</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="k">assert</span> <span class="n">restored</span><span class="o">.</span><span class="n">relation_id</span> <span class="o">==</span> <span class="s1">&#39;rel-abc&#39;</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_strategy_entry_relation_id_default</span><span class="p">():</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.engine.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyEntry</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">entry</span> <span class="o">=</span> <span class="n">StrategyEntry</span><span class="p">(</span><span class="n">strategy_id</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">strategy_ref</span><span class="o">=</span><span class="s1">&#39;m:C&#39;</span><span class="p">)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="k">assert</span> <span class="n">entry</span><span class="o">.</span><span class="n">relation_id</span> <span class="ow">is</span> <span class="kc">None</span>
+</code></pre></div>
+<p><strong>Step 2: Run test to verify it fails</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_strategy_entry_relation_id tests/test_trade_cli.py::test_strategy_entry_relation_id_default -v -p no:nbmake</code>
+Expected: FAIL — <code>StrategyEntry.__init__() got an unexpected keyword argument 'relation_id'</code></p>
+<p><strong>Step 3: Write minimal implementation</strong></p>
+<p>In <code>coinjure/engine/registry.py</code>, add <code>relation_id</code> field to <code>StrategyEntry</code> (after line 52, before <code>retired_reason</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">relation_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+<p>Add <code>'relation_id'</code> to the <code>_FIELDS</code> set (line 20).</p>
+<p><strong>Step 4: Run test to verify it passes</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_strategy_entry_relation_id tests/test_trade_cli.py::test_strategy_entry_relation_id_default -v -p no:nbmake</code>
+Expected: PASS</p>
+<p><strong>Step 5: Commit</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>add<span class="w"> </span>coinjure/engine/registry.py<span class="w"> </span>tests/test_trade_cli.py
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(registry): add relation_id field to StrategyEntry&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="task-2-add-build_strategy_ref_for_relation-helper">Task 2: Add <code>build_strategy_ref_for_relation()</code> helper</h3>
+<p>This helper converts a <code>MarketRelation</code> into <code>(strategy_ref, strategy_kwargs)</code> tuple that can be passed to <code>engine paper-run --strategy-ref ... --strategy-kwargs-json ...</code>. Reuses the same kwargs-building logic from <code>backtester.py</code>.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>coinjure/strategy/builtin/__init__.py</code></li>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+</ul>
+<p><strong>Step 1: Write the failing test</strong></p>
+<p>Add to <code>tests/test_trade_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_build_strategy_ref_for_relation_same_event</span><span class="p">():</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.builtin</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_strategy_ref_for_relation</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">rel</span> <span class="o">=</span> <span class="n">MarketRelation</span><span class="p">(</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;r1&#39;</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;same_event&#39;</span><span class="p">,</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="n">market_a</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="s1">&#39;poly-123&#39;</span><span class="p">,</span> <span class="s1">&#39;platform&#39;</span><span class="p">:</span> <span class="s1">&#39;polymarket&#39;</span><span class="p">,</span> <span class="s1">&#39;token_ids&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;0xabc&#39;</span><span class="p">]},</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">market_b</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="s1">&#39;kalshi-456&#39;</span><span class="p">,</span> <span class="s1">&#39;platform&#39;</span><span class="p">:</span> <span class="s1">&#39;kalshi&#39;</span><span class="p">,</span> <span class="s1">&#39;ticker&#39;</span><span class="p">:</span> <span class="s1">&#39;K-TICK&#39;</span><span class="p">},</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="p">)</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">build_strategy_ref_for_relation</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="k">assert</span> <span class="n">ref</span> <span class="o">==</span> <span class="s1">&#39;coinjure.strategy.builtin.direct_arb_strategy:DirectArbStrategy&#39;</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="k">assert</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;poly_market_id&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;poly-123&#39;</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">assert</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;poly_token_id&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;0xabc&#39;</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="k">assert</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;kalshi_ticker&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;K-TICK&#39;</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_build_strategy_ref_for_relation_complementary</span><span class="p">():</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.builtin</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_strategy_ref_for_relation</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="n">rel</span> <span class="o">=</span> <span class="n">MarketRelation</span><span class="p">(</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;r2&#39;</span><span class="p">,</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;complementary&#39;</span><span class="p">,</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="n">market_a</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;event_id&#39;</span><span class="p">:</span> <span class="s1">&#39;evt-1&#39;</span><span class="p">},</span>
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>        <span class="n">market_b</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="s1">&#39;b&#39;</span><span class="p">},</span>
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>    <span class="p">)</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>    <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">build_strategy_ref_for_relation</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>    <span class="k">assert</span> <span class="s1">&#39;EventSumArbStrategy&#39;</span> <span class="ow">in</span> <span class="n">ref</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>    <span class="k">assert</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;event_id&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;evt-1&#39;</span>
+<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>
+<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>
+<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_build_strategy_ref_for_relation_generic</span><span class="p">():</span>
+<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.builtin</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_strategy_ref_for_relation</span>
+<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>
+<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>    <span class="k">for</span> <span class="n">spread_type</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;implication&#39;</span><span class="p">,</span> <span class="s1">&#39;exclusivity&#39;</span><span class="p">,</span> <span class="s1">&#39;correlated&#39;</span><span class="p">,</span> <span class="s1">&#39;structural&#39;</span><span class="p">,</span> <span class="s1">&#39;conditional&#39;</span><span class="p">,</span> <span class="s1">&#39;temporal&#39;</span><span class="p">):</span>
+<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>        <span class="n">rel</span> <span class="o">=</span> <span class="n">MarketRelation</span><span class="p">(</span><span class="n">relation_id</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;r-</span><span class="si">{</span><span class="n">spread_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">spread_type</span><span class="o">=</span><span class="n">spread_type</span><span class="p">)</span>
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>        <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">build_strategy_ref_for_relation</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>        <span class="k">assert</span> <span class="n">ref</span>  <span class="c1"># non-empty strategy ref</span>
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>        <span class="k">assert</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;relation_id&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="sa">f</span><span class="s1">&#39;r-</span><span class="si">{</span><span class="n">spread_type</span><span class="si">}</span><span class="s1">&#39;</span>
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>
+<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>
+<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_build_strategy_ref_for_relation_unknown</span><span class="p">():</span>
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.builtin</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_strategy_ref_for_relation</span>
+<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>
+<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>    <span class="n">rel</span> <span class="o">=</span> <span class="n">MarketRelation</span><span class="p">(</span><span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;r-bad&#39;</span><span class="p">,</span> <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;unknown_type&#39;</span><span class="p">)</span>
+<a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a>    <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">build_strategy_ref_for_relation</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-3-50" name="__codelineno-3-50" href="#__codelineno-3-50"></a>    <span class="k">assert</span> <span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span>
+</code></pre></div>
+<p><strong>Step 2: Run tests to verify they fail</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_build_strategy_ref_for_relation_same_event tests/test_trade_cli.py::test_build_strategy_ref_for_relation_complementary tests/test_trade_cli.py::test_build_strategy_ref_for_relation_generic tests/test_trade_cli.py::test_build_strategy_ref_for_relation_unknown -v -p no:nbmake</code>
+Expected: FAIL — <code>ImportError: cannot import name 'build_strategy_ref_for_relation'</code></p>
+<p><strong>Step 3: Write minimal implementation</strong></p>
+<p>Add to <code>coinjure/strategy/builtin/__init__.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_strategy_ref_for_relation</span><span class="p">(</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">relation</span><span class="p">:</span> <span class="n">MarketRelation</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">extra_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build (strategy_ref, strategy_kwargs) for a relation.</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="sd">    Returns (None, {}) if no strategy maps to the relation&#39;s spread_type.</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">strategy_cls</span> <span class="o">=</span> <span class="n">STRATEGY_BY_RELATION</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">relation</span><span class="o">.</span><span class="n">spread_type</span><span class="p">)</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="k">if</span> <span class="n">strategy_cls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="p">{}</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">extra_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">spread_type</span> <span class="o">=</span> <span class="n">relation</span><span class="o">.</span><span class="n">spread_type</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="k">if</span> <span class="n">spread_type</span> <span class="o">==</span> <span class="s1">&#39;same_event&#39;</span><span class="p">:</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>        <span class="n">plat_a</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">relation</span><span class="o">.</span><span class="n">market_a</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;platform&#39;</span><span class="p">,</span> <span class="s1">&#39;polymarket&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>        <span class="k">if</span> <span class="n">plat_a</span> <span class="o">==</span> <span class="s1">&#39;kalshi&#39;</span><span class="p">:</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>            <span class="n">poly_m</span><span class="p">,</span> <span class="n">kalshi_m</span><span class="p">,</span> <span class="n">poly_leg</span> <span class="o">=</span> <span class="n">relation</span><span class="o">.</span><span class="n">market_b</span><span class="p">,</span> <span class="n">relation</span><span class="o">.</span><span class="n">market_a</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>            <span class="n">poly_m</span><span class="p">,</span> <span class="n">kalshi_m</span><span class="p">,</span> <span class="n">poly_leg</span> <span class="o">=</span> <span class="n">relation</span><span class="o">.</span><span class="n">market_a</span><span class="p">,</span> <span class="n">relation</span><span class="o">.</span><span class="n">market_b</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;poly_market_id&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">poly_m</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)))</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;poly_token_id&#39;</span><span class="p">,</span> <span class="n">relation</span><span class="o">.</span><span class="n">get_token_id</span><span class="p">(</span><span class="n">poly_leg</span><span class="p">))</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>            <span class="s1">&#39;kalshi_ticker&#39;</span><span class="p">,</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">kalshi_m</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ticker&#39;</span><span class="p">,</span> <span class="n">kalshi_m</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">))),</span>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>        <span class="p">)</span>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>    <span class="k">elif</span> <span class="n">spread_type</span> <span class="o">==</span> <span class="s1">&#39;complementary&#39;</span><span class="p">:</span>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;event_id&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">relation</span><span class="o">.</span><span class="n">market_a</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;event_id&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)))</span>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;relation_id&#39;</span><span class="p">,</span> <span class="n">relation</span><span class="o">.</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>    <span class="n">module</span> <span class="o">=</span> <span class="n">strategy_cls</span><span class="o">.</span><span class="vm">__module__</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>    <span class="n">name</span> <span class="o">=</span> <span class="n">strategy_cls</span><span class="o">.</span><span class="vm">__name__</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>    <span class="n">ref</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">&#39;</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>    <span class="k">return</span> <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span>
+</code></pre></div>
+<p>Add imports at top of the file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+</code></pre></div>
+<p>Add <code>'build_strategy_ref_for_relation'</code> to <code>__all__</code>.</p>
+<p><strong>Step 4: Run tests to verify they pass</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py -k "build_strategy_ref" -v -p no:nbmake</code>
+Expected: PASS (4 tests)</p>
+<p><strong>Step 5: Commit</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>git<span class="w"> </span>add<span class="w"> </span>coinjure/strategy/builtin/__init__.py<span class="w"> </span>tests/test_trade_cli.py
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(builtin): add build_strategy_ref_for_relation helper&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="task-3-add-detach-support-to-engine-paper-run">Task 3: Add <code>--detach</code> support to <code>engine paper-run</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>coinjure/cli/engine_commands.py:176-304</code></li>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+</ul>
+<p><strong>Step 1: Write the failing test</strong></p>
+<p>Add to <code>tests/test_trade_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_paper_run_detach</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;--detach spawns a subprocess and registers in the registry.&quot;&quot;&quot;</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">spawned</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">FakeProcess</span><span class="p">:</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        <span class="n">pid</span> <span class="o">=</span> <span class="mi">12345</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">fake_popen</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>        <span class="n">spawned</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="k">return</span> <span class="n">FakeProcess</span><span class="p">()</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="s1">&#39;coinjure.cli.engine_commands.subprocess.Popen&#39;</span><span class="p">,</span> <span class="n">fake_popen</span><span class="p">)</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>        <span class="s1">&#39;coinjure.cli.engine_commands.REGISTRY_PATH&#39;</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;portfolio.json&#39;</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="p">)</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>    <span class="c1"># Prevent hub auto-connect</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>        <span class="s1">&#39;coinjure.cli.engine_commands.HUB_SOCKET_PATH&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>        <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;no-hub.sock&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>    <span class="p">)</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a>
+<a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span>
+<a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a>        <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;paper-run&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a>        <span class="s1">&#39;--strategy-ref&#39;</span><span class="p">,</span> <span class="s1">&#39;coinjure.strategy.demo:DemoStrategy&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a>        <span class="s1">&#39;--detach&#39;</span><span class="p">,</span> <span class="s1">&#39;--json&#39;</span><span class="p">,</span>
+<a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a>    <span class="p">])</span>
+<a id="__codelineno-7-33" name="__codelineno-7-33" href="#__codelineno-7-33"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span>
+<a id="__codelineno-7-34" name="__codelineno-7-34" href="#__codelineno-7-34"></a>    <span class="n">out</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<a id="__codelineno-7-35" name="__codelineno-7-35" href="#__codelineno-7-35"></a>    <span class="k">assert</span> <span class="n">out</span><span class="p">[</span><span class="s1">&#39;ok&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span>
+<a id="__codelineno-7-36" name="__codelineno-7-36" href="#__codelineno-7-36"></a>    <span class="k">assert</span> <span class="n">out</span><span class="p">[</span><span class="s1">&#39;pid&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">12345</span>
+<a id="__codelineno-7-37" name="__codelineno-7-37" href="#__codelineno-7-37"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">spawned</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+<a id="__codelineno-7-38" name="__codelineno-7-38" href="#__codelineno-7-38"></a>    <span class="k">assert</span> <span class="s1">&#39;--no-detach&#39;</span> <span class="ow">in</span> <span class="n">spawned</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</code></pre></div>
+<p><strong>Step 2: Run test to verify it fails</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_paper_run_detach -v -p no:nbmake</code>
+Expected: FAIL — no <code>--detach</code> option</p>
+<p><strong>Step 3: Write minimal implementation</strong></p>
+<p>In <code>coinjure/cli/engine_commands.py</code>, modify <code>engine_paper_run</code>:</p>
+<ol>
+<li>
+<p>Add <code>import subprocess</code> back to imports (line 13 area).</p>
+</li>
+<li>
+<p>Add click option after <code>--no-hub</code> (around line 207):</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="s1">&#39;--detach/--no-detach&#39;</span><span class="p">,</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Run as a detached background process.&#39;</span><span class="p">,</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">)</span>
+</code></pre></div>
+<ol>
+<li>
+<p>Add <code>detach: bool</code> parameter to function signature.</p>
+</li>
+<li>
+<p>At the top of the function body (after line 224), add detach logic:</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>    <span class="k">if</span> <span class="n">detach</span><span class="p">:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>        <span class="n">cmd</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_coinjure_cmd</span><span class="p">())</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;paper-run&#39;</span><span class="p">,</span> <span class="s1">&#39;--no-detach&#39;</span><span class="p">]</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>        <span class="k">if</span> <span class="n">strategy_ref</span><span class="p">:</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--strategy-ref&#39;</span><span class="p">,</span> <span class="n">strategy_ref</span><span class="p">]</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        <span class="k">if</span> <span class="n">strategy_kwargs_json</span><span class="p">:</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--strategy-kwargs-json&#39;</span><span class="p">,</span> <span class="n">strategy_kwargs_json</span><span class="p">]</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>        <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--exchange&#39;</span><span class="p">,</span> <span class="n">exchange</span><span class="p">,</span> <span class="s1">&#39;--initial-capital&#39;</span><span class="p">,</span> <span class="n">initial_capital</span><span class="p">]</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>        <span class="k">if</span> <span class="n">duration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--duration&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">duration</span><span class="p">)]</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>        <span class="k">if</span> <span class="n">no_hub</span><span class="p">:</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--no-hub&#39;</span><span class="p">]</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>        <span class="k">if</span> <span class="n">as_json</span><span class="p">:</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--json&#39;</span><span class="p">]</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>        <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>            <span class="n">cmd</span><span class="p">,</span> <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>            <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>        <span class="p">)</span>
+<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>        <span class="c1"># Register in portfolio</span>
+<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>        <span class="n">reg</span> <span class="o">=</span> <span class="n">_load_registry</span><span class="p">()</span>
+<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>        <span class="n">sid</span> <span class="o">=</span> <span class="n">strategy_ref</span> <span class="ow">or</span> <span class="sa">f</span><span class="s1">&#39;paper-</span><span class="si">{</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="si">}</span><span class="s1">&#39;</span>
+<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>        <span class="n">entry</span> <span class="o">=</span> <span class="n">StrategyEntry</span><span class="p">(</span>
+<a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>            <span class="n">strategy_id</span><span class="o">=</span><span class="n">sid</span><span class="p">,</span>
+<a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a>            <span class="n">strategy_ref</span><span class="o">=</span><span class="n">strategy_ref</span> <span class="ow">or</span> <span class="s1">&#39;idle&#39;</span><span class="p">,</span>
+<a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a>            <span class="n">lifecycle</span><span class="o">=</span><span class="s1">&#39;paper_trading&#39;</span><span class="p">,</span>
+<a id="__codelineno-9-27" name="__codelineno-9-27" href="#__codelineno-9-27"></a>            <span class="n">exchange</span><span class="o">=</span><span class="n">exchange</span><span class="p">,</span>
+<a id="__codelineno-9-28" name="__codelineno-9-28" href="#__codelineno-9-28"></a>            <span class="n">pid</span><span class="o">=</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+<a id="__codelineno-9-29" name="__codelineno-9-29" href="#__codelineno-9-29"></a>            <span class="n">socket_path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">SOCKET_DIR</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;engine-</span><span class="si">{</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="si">}</span><span class="s1">.sock&#39;</span><span class="p">),</span>
+<a id="__codelineno-9-30" name="__codelineno-9-30" href="#__codelineno-9-30"></a>        <span class="p">)</span>
+<a id="__codelineno-9-31" name="__codelineno-9-31" href="#__codelineno-9-31"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-9-32" name="__codelineno-9-32" href="#__codelineno-9-32"></a>            <span class="n">reg</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-9-33" name="__codelineno-9-33" href="#__codelineno-9-33"></a>        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+<a id="__codelineno-9-34" name="__codelineno-9-34" href="#__codelineno-9-34"></a>            <span class="n">reg</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-9-35" name="__codelineno-9-35" href="#__codelineno-9-35"></a>
+<a id="__codelineno-9-36" name="__codelineno-9-36" href="#__codelineno-9-36"></a>        <span class="n">_emit</span><span class="p">({</span><span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;pid&#39;</span><span class="p">:</span> <span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span> <span class="s1">&#39;strategy_id&#39;</span><span class="p">:</span> <span class="n">sid</span><span class="p">,</span>
+<a id="__codelineno-9-37" name="__codelineno-9-37" href="#__codelineno-9-37"></a>               <span class="s1">&#39;socket&#39;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">socket_path</span><span class="p">},</span> <span class="n">as_json</span><span class="o">=</span><span class="n">as_json</span><span class="p">)</span>
+<a id="__codelineno-9-38" name="__codelineno-9-38" href="#__codelineno-9-38"></a>        <span class="k">return</span>
+</code></pre></div>
+<ol>
+<li>Add <code>import shlex</code> to imports.</li>
+</ol>
+<p><strong>Step 4: Run test to verify it passes</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_paper_run_detach -v -p no:nbmake</code>
+Expected: PASS</p>
+<p><strong>Step 5: Run full test suite</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/ -p no:nbmake -x -q</code>
+Expected: All passing</p>
+<p><strong>Step 6: Commit</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>add<span class="w"> </span>coinjure/cli/engine_commands.py<span class="w"> </span>tests/test_trade_cli.py
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(cli): add --detach support to engine paper-run&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="task-4-add-all-relations-to-engine-paper-run">Task 4: Add <code>--all-relations</code> to <code>engine paper-run</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>coinjure/cli/engine_commands.py:176-304</code></li>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+</ul>
+<p><strong>Step 1: Write the failing test</strong></p>
+<p>Add to <code>tests/test_trade_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_paper_run_all_relations</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;--all-relations spawns one detached process per backtest_passed relation.&quot;&quot;&quot;</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">spawned</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">FakeProcess</span><span class="p">:</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>        <span class="n">pid_counter</span> <span class="o">=</span> <span class="mi">100</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>            <span class="n">FakeProcess</span><span class="o">.</span><span class="n">pid_counter</span> <span class="o">+=</span> <span class="mi">1</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">FakeProcess</span><span class="o">.</span><span class="n">pid_counter</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">fake_popen</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>        <span class="n">spawned</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>        <span class="k">return</span> <span class="n">FakeProcess</span><span class="p">()</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>    <span class="n">fake_relations</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a>        <span class="n">MarketRelation</span><span class="p">(</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>            <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;rel-1&#39;</span><span class="p">,</span> <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;implication&#39;</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="s1">&#39;backtest_passed&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a>        <span class="p">),</span>
+<a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a>        <span class="n">MarketRelation</span><span class="p">(</span>
+<a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>            <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;rel-2&#39;</span><span class="p">,</span> <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;exclusivity&#39;</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="s1">&#39;backtest_passed&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a>        <span class="p">),</span>
+<a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a>    <span class="p">]</span>
+<a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a>
+<a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="s1">&#39;coinjure.cli.engine_commands.subprocess.Popen&#39;</span><span class="p">,</span> <span class="n">fake_popen</span><span class="p">)</span>
+<a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a>        <span class="s1">&#39;coinjure.cli.engine_commands.REGISTRY_PATH&#39;</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;portfolio.json&#39;</span>
+<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a>    <span class="p">)</span>
+<a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a>    <span class="c1"># Mock RelationStore</span>
+<a id="__codelineno-11-31" name="__codelineno-11-31" href="#__codelineno-11-31"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-11-32" name="__codelineno-11-32" href="#__codelineno-11-32"></a>        <span class="s1">&#39;coinjure.cli.engine_commands._load_relations_for_batch&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-33" name="__codelineno-11-33" href="#__codelineno-11-33"></a>        <span class="k">lambda</span> <span class="n">status</span><span class="p">:</span> <span class="n">fake_relations</span><span class="p">,</span>
+<a id="__codelineno-11-34" name="__codelineno-11-34" href="#__codelineno-11-34"></a>    <span class="p">)</span>
+<a id="__codelineno-11-35" name="__codelineno-11-35" href="#__codelineno-11-35"></a>    <span class="c1"># Mock hub auto-start: pretend hub is already running</span>
+<a id="__codelineno-11-36" name="__codelineno-11-36" href="#__codelineno-11-36"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-11-37" name="__codelineno-11-37" href="#__codelineno-11-37"></a>        <span class="s1">&#39;coinjure.cli.engine_commands.HUB_SOCKET_PATH&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-38" name="__codelineno-11-38" href="#__codelineno-11-38"></a>        <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;hub.sock&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-39" name="__codelineno-11-39" href="#__codelineno-11-39"></a>    <span class="p">)</span>
+<a id="__codelineno-11-40" name="__codelineno-11-40" href="#__codelineno-11-40"></a>    <span class="p">(</span><span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;hub.sock&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">touch</span><span class="p">()</span>
+<a id="__codelineno-11-41" name="__codelineno-11-41" href="#__codelineno-11-41"></a>
+<a id="__codelineno-11-42" name="__codelineno-11-42" href="#__codelineno-11-42"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-11-43" name="__codelineno-11-43" href="#__codelineno-11-43"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-11-44" name="__codelineno-11-44" href="#__codelineno-11-44"></a>
+<a id="__codelineno-11-45" name="__codelineno-11-45" href="#__codelineno-11-45"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-11-46" name="__codelineno-11-46" href="#__codelineno-11-46"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span>
+<a id="__codelineno-11-47" name="__codelineno-11-47" href="#__codelineno-11-47"></a>        <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;paper-run&#39;</span><span class="p">,</span> <span class="s1">&#39;--all-relations&#39;</span><span class="p">,</span> <span class="s1">&#39;--json&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-48" name="__codelineno-11-48" href="#__codelineno-11-48"></a>    <span class="p">])</span>
+<a id="__codelineno-11-49" name="__codelineno-11-49" href="#__codelineno-11-49"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span>
+<a id="__codelineno-11-50" name="__codelineno-11-50" href="#__codelineno-11-50"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">spawned</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+<a id="__codelineno-11-51" name="__codelineno-11-51" href="#__codelineno-11-51"></a>
+<a id="__codelineno-11-52" name="__codelineno-11-52" href="#__codelineno-11-52"></a>
+<a id="__codelineno-11-53" name="__codelineno-11-53" href="#__codelineno-11-53"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_paper_run_all_relations_mutually_exclusive_with_strategy_ref</span><span class="p">():</span>
+<a id="__codelineno-11-54" name="__codelineno-11-54" href="#__codelineno-11-54"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-11-55" name="__codelineno-11-55" href="#__codelineno-11-55"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-11-56" name="__codelineno-11-56" href="#__codelineno-11-56"></a>
+<a id="__codelineno-11-57" name="__codelineno-11-57" href="#__codelineno-11-57"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-11-58" name="__codelineno-11-58" href="#__codelineno-11-58"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span>
+<a id="__codelineno-11-59" name="__codelineno-11-59" href="#__codelineno-11-59"></a>        <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;paper-run&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-60" name="__codelineno-11-60" href="#__codelineno-11-60"></a>        <span class="s1">&#39;--all-relations&#39;</span><span class="p">,</span> <span class="s1">&#39;--strategy-ref&#39;</span><span class="p">,</span> <span class="s1">&#39;foo:Bar&#39;</span><span class="p">,</span>
+<a id="__codelineno-11-61" name="__codelineno-11-61" href="#__codelineno-11-61"></a>    <span class="p">])</span>
+<a id="__codelineno-11-62" name="__codelineno-11-62" href="#__codelineno-11-62"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">!=</span> <span class="mi">0</span>
+<a id="__codelineno-11-63" name="__codelineno-11-63" href="#__codelineno-11-63"></a>    <span class="k">assert</span> <span class="s1">&#39;mutually exclusive&#39;</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">or</span> <span class="s1">&#39;cannot&#39;</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</code></pre></div>
+<p><strong>Step 2: Run tests to verify they fail</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_paper_run_all_relations tests/test_trade_cli.py::test_paper_run_all_relations_mutually_exclusive_with_strategy_ref -v -p no:nbmake</code>
+Expected: FAIL</p>
+<p><strong>Step 3: Write minimal implementation</strong></p>
+<p>In <code>coinjure/cli/engine_commands.py</code>:</p>
+<ol>
+<li>Add click option to <code>engine_paper_run</code> (before <code>--detach</code>):</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="s1">&#39;--all-relations&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">is_flag</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Batch run all backtest_passed relations (each as a detached process).&#39;</span><span class="p">,</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="p">)</span>
+</code></pre></div>
+<ol>
+<li>
+<p>Add <code>all_relations: bool</code> to function signature.</p>
+</li>
+<li>
+<p>Add helper function near the top helpers section:</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">_load_relations_for_batch</span><span class="p">(</span><span class="n">status</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">RelationStore</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="k">return</span> <span class="n">RelationStore</span><span class="p">()</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="n">status</span><span class="p">)</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">_ensure_hub_running</span><span class="p">(</span><span class="n">as_json</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Auto-start hub if not running. Waits up to 5s for socket.&quot;&quot;&quot;</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="k">if</span> <span class="n">HUB_SOCKET_PATH</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>        <span class="k">return</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="n">cmd</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_coinjure_cmd</span><span class="p">())</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;hub&#39;</span><span class="p">,</span> <span class="s1">&#39;start&#39;</span><span class="p">,</span> <span class="s1">&#39;--detach&#39;</span><span class="p">]</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>    <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>        <span class="n">cmd</span><span class="p">,</span> <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>        <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>    <span class="p">)</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>        <span class="k">if</span> <span class="n">HUB_SOCKET_PATH</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+<a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a>            <span class="k">return</span>
+<a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a>        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+<a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">as_json</span><span class="p">:</span>
+<a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a>        <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="s1">&#39;Warning: Hub socket not ready after 5s, proceeding anyway.&#39;</span><span class="p">)</span>
+</code></pre></div>
+<ol>
+<li>Add batch logic at the top of <code>engine_paper_run</code> body:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>    <span class="k">if</span> <span class="n">all_relations</span> <span class="ow">and</span> <span class="n">strategy_ref</span><span class="p">:</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">ClickException</span><span class="p">(</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>            <span class="s1">&#39;--all-relations and --strategy-ref are mutually exclusive.&#39;</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>        <span class="p">)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>    <span class="k">if</span> <span class="n">all_relations</span><span class="p">:</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>        <span class="n">_run_batch_paper</span><span class="p">(</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>            <span class="n">initial_capital</span><span class="o">=</span><span class="n">initial_capital</span><span class="p">,</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>            <span class="n">duration</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>            <span class="n">as_json</span><span class="o">=</span><span class="n">as_json</span><span class="p">,</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>            <span class="n">no_hub</span><span class="o">=</span><span class="n">no_hub</span><span class="p">,</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>        <span class="p">)</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>        <span class="k">return</span>
+</code></pre></div>
+<ol>
+<li>Add the batch orchestration function:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">_run_batch_paper</span><span class="p">(</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="n">initial_capital</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="n">as_json</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>    <span class="n">no_hub</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Spawn one detached paper-run per backtest_passed relation.&quot;&quot;&quot;</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.builtin</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_strategy_ref_for_relation</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    <span class="n">relations</span> <span class="o">=</span> <span class="n">_load_relations_for_batch</span><span class="p">(</span><span class="s1">&#39;backtest_passed&#39;</span><span class="p">)</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">relations</span><span class="p">:</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">ClickException</span><span class="p">(</span><span class="s1">&#39;No relations with status backtest_passed.&#39;</span><span class="p">)</span>
+<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>
+<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">no_hub</span><span class="p">:</span>
+<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>        <span class="n">_ensure_hub_running</span><span class="p">(</span><span class="n">as_json</span><span class="o">=</span><span class="n">as_json</span><span class="p">)</span>
+<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>
+<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>    <span class="n">reg</span> <span class="o">=</span> <span class="n">_load_registry</span><span class="p">()</span>
+<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a>    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a>
+<a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a>    <span class="k">for</span> <span class="n">rel</span> <span class="ow">in</span> <span class="n">relations</span><span class="p">:</span>
+<a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a>        <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">build_strategy_ref_for_relation</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a>        <span class="k">if</span> <span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a>            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-15-25" name="__codelineno-15-25" href="#__codelineno-15-25"></a>                <span class="s1">&#39;relation_id&#39;</span><span class="p">:</span> <span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-15-26" name="__codelineno-15-26" href="#__codelineno-15-26"></a>                <span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-15-27" name="__codelineno-15-27" href="#__codelineno-15-27"></a>                <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;No strategy for spread_type: </span><span class="si">{</span><span class="n">rel</span><span class="o">.</span><span class="n">spread_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+<a id="__codelineno-15-28" name="__codelineno-15-28" href="#__codelineno-15-28"></a>            <span class="p">})</span>
+<a id="__codelineno-15-29" name="__codelineno-15-29" href="#__codelineno-15-29"></a>            <span class="k">continue</span>
+<a id="__codelineno-15-30" name="__codelineno-15-30" href="#__codelineno-15-30"></a>
+<a id="__codelineno-15-31" name="__codelineno-15-31" href="#__codelineno-15-31"></a>        <span class="n">cmd</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_coinjure_cmd</span><span class="p">())</span> <span class="o">+</span> <span class="p">[</span>
+<a id="__codelineno-15-32" name="__codelineno-15-32" href="#__codelineno-15-32"></a>            <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;paper-run&#39;</span><span class="p">,</span>
+<a id="__codelineno-15-33" name="__codelineno-15-33" href="#__codelineno-15-33"></a>            <span class="s1">&#39;--strategy-ref&#39;</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span>
+<a id="__codelineno-15-34" name="__codelineno-15-34" href="#__codelineno-15-34"></a>            <span class="s1">&#39;--strategy-kwargs-json&#39;</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">kwargs</span><span class="p">),</span>
+<a id="__codelineno-15-35" name="__codelineno-15-35" href="#__codelineno-15-35"></a>            <span class="s1">&#39;--initial-capital&#39;</span><span class="p">,</span> <span class="n">initial_capital</span><span class="p">,</span>
+<a id="__codelineno-15-36" name="__codelineno-15-36" href="#__codelineno-15-36"></a>            <span class="s1">&#39;--no-detach&#39;</span><span class="p">,</span>
+<a id="__codelineno-15-37" name="__codelineno-15-37" href="#__codelineno-15-37"></a>        <span class="p">]</span>
+<a id="__codelineno-15-38" name="__codelineno-15-38" href="#__codelineno-15-38"></a>        <span class="k">if</span> <span class="n">duration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-15-39" name="__codelineno-15-39" href="#__codelineno-15-39"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--duration&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">duration</span><span class="p">)]</span>
+<a id="__codelineno-15-40" name="__codelineno-15-40" href="#__codelineno-15-40"></a>
+<a id="__codelineno-15-41" name="__codelineno-15-41" href="#__codelineno-15-41"></a>        <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+<a id="__codelineno-15-42" name="__codelineno-15-42" href="#__codelineno-15-42"></a>            <span class="n">cmd</span><span class="p">,</span> <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-15-43" name="__codelineno-15-43" href="#__codelineno-15-43"></a>            <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+<a id="__codelineno-15-44" name="__codelineno-15-44" href="#__codelineno-15-44"></a>        <span class="p">)</span>
+<a id="__codelineno-15-45" name="__codelineno-15-45" href="#__codelineno-15-45"></a>
+<a id="__codelineno-15-46" name="__codelineno-15-46" href="#__codelineno-15-46"></a>        <span class="n">socket</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">SOCKET_DIR</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;engine-</span><span class="si">{</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="si">}</span><span class="s1">.sock&#39;</span><span class="p">)</span>
+<a id="__codelineno-15-47" name="__codelineno-15-47" href="#__codelineno-15-47"></a>        <span class="n">entry</span> <span class="o">=</span> <span class="n">StrategyEntry</span><span class="p">(</span>
+<a id="__codelineno-15-48" name="__codelineno-15-48" href="#__codelineno-15-48"></a>            <span class="n">strategy_id</span><span class="o">=</span><span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-15-49" name="__codelineno-15-49" href="#__codelineno-15-49"></a>            <span class="n">strategy_ref</span><span class="o">=</span><span class="n">ref</span><span class="p">,</span>
+<a id="__codelineno-15-50" name="__codelineno-15-50" href="#__codelineno-15-50"></a>            <span class="n">strategy_kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+<a id="__codelineno-15-51" name="__codelineno-15-51" href="#__codelineno-15-51"></a>            <span class="n">relation_id</span><span class="o">=</span><span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-15-52" name="__codelineno-15-52" href="#__codelineno-15-52"></a>            <span class="n">lifecycle</span><span class="o">=</span><span class="s1">&#39;paper_trading&#39;</span><span class="p">,</span>
+<a id="__codelineno-15-53" name="__codelineno-15-53" href="#__codelineno-15-53"></a>            <span class="n">exchange</span><span class="o">=</span><span class="s1">&#39;cross_platform&#39;</span><span class="p">,</span>
+<a id="__codelineno-15-54" name="__codelineno-15-54" href="#__codelineno-15-54"></a>            <span class="n">pid</span><span class="o">=</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+<a id="__codelineno-15-55" name="__codelineno-15-55" href="#__codelineno-15-55"></a>            <span class="n">socket_path</span><span class="o">=</span><span class="n">socket</span><span class="p">,</span>
+<a id="__codelineno-15-56" name="__codelineno-15-56" href="#__codelineno-15-56"></a>        <span class="p">)</span>
+<a id="__codelineno-15-57" name="__codelineno-15-57" href="#__codelineno-15-57"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-15-58" name="__codelineno-15-58" href="#__codelineno-15-58"></a>            <span class="n">reg</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-15-59" name="__codelineno-15-59" href="#__codelineno-15-59"></a>        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+<a id="__codelineno-15-60" name="__codelineno-15-60" href="#__codelineno-15-60"></a>            <span class="n">entry_existing</span> <span class="o">=</span> <span class="n">reg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-15-61" name="__codelineno-15-61" href="#__codelineno-15-61"></a>            <span class="k">if</span> <span class="n">entry_existing</span><span class="p">:</span>
+<a id="__codelineno-15-62" name="__codelineno-15-62" href="#__codelineno-15-62"></a>                <span class="n">entry_existing</span><span class="o">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">pid</span>
+<a id="__codelineno-15-63" name="__codelineno-15-63" href="#__codelineno-15-63"></a>                <span class="n">entry_existing</span><span class="o">.</span><span class="n">socket_path</span> <span class="o">=</span> <span class="n">socket</span>
+<a id="__codelineno-15-64" name="__codelineno-15-64" href="#__codelineno-15-64"></a>                <span class="n">entry_existing</span><span class="o">.</span><span class="n">lifecycle</span> <span class="o">=</span> <span class="s1">&#39;paper_trading&#39;</span>
+<a id="__codelineno-15-65" name="__codelineno-15-65" href="#__codelineno-15-65"></a>                <span class="n">reg</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">entry_existing</span><span class="p">)</span>
+<a id="__codelineno-15-66" name="__codelineno-15-66" href="#__codelineno-15-66"></a>
+<a id="__codelineno-15-67" name="__codelineno-15-67" href="#__codelineno-15-67"></a>        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-15-68" name="__codelineno-15-68" href="#__codelineno-15-68"></a>            <span class="s1">&#39;relation_id&#39;</span><span class="p">:</span> <span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-15-69" name="__codelineno-15-69" href="#__codelineno-15-69"></a>            <span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-15-70" name="__codelineno-15-70" href="#__codelineno-15-70"></a>            <span class="s1">&#39;pid&#39;</span><span class="p">:</span> <span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+<a id="__codelineno-15-71" name="__codelineno-15-71" href="#__codelineno-15-71"></a>            <span class="s1">&#39;strategy_ref&#39;</span><span class="p">:</span> <span class="n">ref</span><span class="p">,</span>
+<a id="__codelineno-15-72" name="__codelineno-15-72" href="#__codelineno-15-72"></a>            <span class="s1">&#39;socket&#39;</span><span class="p">:</span> <span class="n">socket</span><span class="p">,</span>
+<a id="__codelineno-15-73" name="__codelineno-15-73" href="#__codelineno-15-73"></a>        <span class="p">})</span>
+<a id="__codelineno-15-74" name="__codelineno-15-74" href="#__codelineno-15-74"></a>
+<a id="__codelineno-15-75" name="__codelineno-15-75" href="#__codelineno-15-75"></a>    <span class="k">if</span> <span class="n">as_json</span><span class="p">:</span>
+<a id="__codelineno-15-76" name="__codelineno-15-76" href="#__codelineno-15-76"></a>        <span class="n">_emit_json</span><span class="p">({</span><span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;launched&#39;</span><span class="p">:</span> <span class="n">results</span><span class="p">,</span> <span class="s1">&#39;count&#39;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)})</span>
+<a id="__codelineno-15-77" name="__codelineno-15-77" href="#__codelineno-15-77"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-15-78" name="__codelineno-15-78" href="#__codelineno-15-78"></a>        <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">Launched </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="si">}</span><span class="s1"> paper trading instances:</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<a id="__codelineno-15-79" name="__codelineno-15-79" href="#__codelineno-15-79"></a>        <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+<a id="__codelineno-15-80" name="__codelineno-15-80" href="#__codelineno-15-80"></a>            <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ok&#39;</span><span class="p">):</span>
+<a id="__codelineno-15-81" name="__codelineno-15-81" href="#__codelineno-15-81"></a>                <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span>
+<a id="__codelineno-15-82" name="__codelineno-15-82" href="#__codelineno-15-82"></a>                    <span class="sa">f</span><span class="s1">&#39;  </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;relation_id&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">  pid=</span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;pid&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">  </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;strategy_ref&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
+<a id="__codelineno-15-83" name="__codelineno-15-83" href="#__codelineno-15-83"></a>                <span class="p">)</span>
+<a id="__codelineno-15-84" name="__codelineno-15-84" href="#__codelineno-15-84"></a>            <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-15-85" name="__codelineno-15-85" href="#__codelineno-15-85"></a>                <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;relation_id&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">  SKIPPED: </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>Step 4: Run tests to verify they pass</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py -k "all_relations" -v -p no:nbmake</code>
+Expected: PASS (2 tests)</p>
+<p><strong>Step 5: Run full test suite</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/ -p no:nbmake -x -q</code>
+Expected: All passing</p>
+<p><strong>Step 6: Commit</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>git<span class="w"> </span>add<span class="w"> </span>coinjure/cli/engine_commands.py<span class="w"> </span>tests/test_trade_cli.py
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(cli): add --all-relations batch mode to engine paper-run&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="task-5-add-detach-and-all-relations-to-engine-live-run">Task 5: Add <code>--detach</code> and <code>--all-relations</code> to <code>engine live-run</code></h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>coinjure/cli/engine_commands.py:310-429</code></li>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+</ul>
+<p><strong>Step 1: Write the failing test</strong></p>
+<p>Add to <code>tests/test_trade_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_live_run_all_relations</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;--all-relations spawns one detached process per deployed relation.&quot;&quot;&quot;</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>    <span class="n">spawned</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">FakeProcess</span><span class="p">:</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>        <span class="n">pid_counter</span> <span class="o">=</span> <span class="mi">200</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>            <span class="n">FakeProcess</span><span class="o">.</span><span class="n">pid_counter</span> <span class="o">+=</span> <span class="mi">1</span>
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">FakeProcess</span><span class="o">.</span><span class="n">pid_counter</span>
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">fake_popen</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>        <span class="n">spawned</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>        <span class="k">return</span> <span class="n">FakeProcess</span><span class="p">()</span>
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a>
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a>    <span class="n">fake_relations</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>        <span class="n">MarketRelation</span><span class="p">(</span><span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;rel-d1&#39;</span><span class="p">,</span> <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;implication&#39;</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="s1">&#39;deployed&#39;</span><span class="p">),</span>
+<a id="__codelineno-17-19" name="__codelineno-17-19" href="#__codelineno-17-19"></a>    <span class="p">]</span>
+<a id="__codelineno-17-20" name="__codelineno-17-20" href="#__codelineno-17-20"></a>
+<a id="__codelineno-17-21" name="__codelineno-17-21" href="#__codelineno-17-21"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="s1">&#39;coinjure.cli.engine_commands.subprocess.Popen&#39;</span><span class="p">,</span> <span class="n">fake_popen</span><span class="p">)</span>
+<a id="__codelineno-17-22" name="__codelineno-17-22" href="#__codelineno-17-22"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-17-23" name="__codelineno-17-23" href="#__codelineno-17-23"></a>        <span class="s1">&#39;coinjure.cli.engine_commands.REGISTRY_PATH&#39;</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;portfolio.json&#39;</span>
+<a id="__codelineno-17-24" name="__codelineno-17-24" href="#__codelineno-17-24"></a>    <span class="p">)</span>
+<a id="__codelineno-17-25" name="__codelineno-17-25" href="#__codelineno-17-25"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-17-26" name="__codelineno-17-26" href="#__codelineno-17-26"></a>        <span class="s1">&#39;coinjure.cli.engine_commands._load_relations_for_batch&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-27" name="__codelineno-17-27" href="#__codelineno-17-27"></a>        <span class="k">lambda</span> <span class="n">status</span><span class="p">:</span> <span class="n">fake_relations</span> <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="s1">&#39;deployed&#39;</span> <span class="k">else</span> <span class="p">[],</span>
+<a id="__codelineno-17-28" name="__codelineno-17-28" href="#__codelineno-17-28"></a>    <span class="p">)</span>
+<a id="__codelineno-17-29" name="__codelineno-17-29" href="#__codelineno-17-29"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-17-30" name="__codelineno-17-30" href="#__codelineno-17-30"></a>        <span class="s1">&#39;coinjure.cli.engine_commands.HUB_SOCKET_PATH&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-31" name="__codelineno-17-31" href="#__codelineno-17-31"></a>        <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;hub.sock&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-32" name="__codelineno-17-32" href="#__codelineno-17-32"></a>    <span class="p">)</span>
+<a id="__codelineno-17-33" name="__codelineno-17-33" href="#__codelineno-17-33"></a>    <span class="p">(</span><span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;hub.sock&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">touch</span><span class="p">()</span>
+<a id="__codelineno-17-34" name="__codelineno-17-34" href="#__codelineno-17-34"></a>    <span class="c1"># Skip live trading confirmation</span>
+<a id="__codelineno-17-35" name="__codelineno-17-35" href="#__codelineno-17-35"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-17-36" name="__codelineno-17-36" href="#__codelineno-17-36"></a>        <span class="s1">&#39;coinjure.cli.engine_commands._confirm_live_trading&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-37" name="__codelineno-17-37" href="#__codelineno-17-37"></a>        <span class="k">lambda</span> <span class="n">as_json</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-17-38" name="__codelineno-17-38" href="#__codelineno-17-38"></a>    <span class="p">)</span>
+<a id="__codelineno-17-39" name="__codelineno-17-39" href="#__codelineno-17-39"></a>
+<a id="__codelineno-17-40" name="__codelineno-17-40" href="#__codelineno-17-40"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-17-41" name="__codelineno-17-41" href="#__codelineno-17-41"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-17-42" name="__codelineno-17-42" href="#__codelineno-17-42"></a>
+<a id="__codelineno-17-43" name="__codelineno-17-43" href="#__codelineno-17-43"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-17-44" name="__codelineno-17-44" href="#__codelineno-17-44"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span>
+<a id="__codelineno-17-45" name="__codelineno-17-45" href="#__codelineno-17-45"></a>        <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;live-run&#39;</span><span class="p">,</span> <span class="s1">&#39;--all-relations&#39;</span><span class="p">,</span> <span class="s1">&#39;--json&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-46" name="__codelineno-17-46" href="#__codelineno-17-46"></a>    <span class="p">])</span>
+<a id="__codelineno-17-47" name="__codelineno-17-47" href="#__codelineno-17-47"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span>
+<a id="__codelineno-17-48" name="__codelineno-17-48" href="#__codelineno-17-48"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">spawned</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+<a id="__codelineno-17-49" name="__codelineno-17-49" href="#__codelineno-17-49"></a>
+<a id="__codelineno-17-50" name="__codelineno-17-50" href="#__codelineno-17-50"></a>
+<a id="__codelineno-17-51" name="__codelineno-17-51" href="#__codelineno-17-51"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_live_run_all_relations_mutually_exclusive_with_strategy_ref</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+<a id="__codelineno-17-52" name="__codelineno-17-52" href="#__codelineno-17-52"></a>    <span class="c1"># Skip confirmation</span>
+<a id="__codelineno-17-53" name="__codelineno-17-53" href="#__codelineno-17-53"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+<a id="__codelineno-17-54" name="__codelineno-17-54" href="#__codelineno-17-54"></a>        <span class="s1">&#39;coinjure.cli.engine_commands._confirm_live_trading&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-55" name="__codelineno-17-55" href="#__codelineno-17-55"></a>        <span class="k">lambda</span> <span class="n">as_json</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-17-56" name="__codelineno-17-56" href="#__codelineno-17-56"></a>    <span class="p">)</span>
+<a id="__codelineno-17-57" name="__codelineno-17-57" href="#__codelineno-17-57"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-17-58" name="__codelineno-17-58" href="#__codelineno-17-58"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-17-59" name="__codelineno-17-59" href="#__codelineno-17-59"></a>
+<a id="__codelineno-17-60" name="__codelineno-17-60" href="#__codelineno-17-60"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-17-61" name="__codelineno-17-61" href="#__codelineno-17-61"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span>
+<a id="__codelineno-17-62" name="__codelineno-17-62" href="#__codelineno-17-62"></a>        <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;live-run&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-63" name="__codelineno-17-63" href="#__codelineno-17-63"></a>        <span class="s1">&#39;--all-relations&#39;</span><span class="p">,</span> <span class="s1">&#39;--strategy-ref&#39;</span><span class="p">,</span> <span class="s1">&#39;foo:Bar&#39;</span><span class="p">,</span>
+<a id="__codelineno-17-64" name="__codelineno-17-64" href="#__codelineno-17-64"></a>    <span class="p">])</span>
+<a id="__codelineno-17-65" name="__codelineno-17-65" href="#__codelineno-17-65"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">!=</span> <span class="mi">0</span>
+</code></pre></div>
+<p><strong>Step 2: Run tests to verify they fail</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_live_run_all_relations tests/test_trade_cli.py::test_live_run_all_relations_mutually_exclusive_with_strategy_ref -v -p no:nbmake</code>
+Expected: FAIL</p>
+<p><strong>Step 3: Write minimal implementation</strong></p>
+<p>Mirror the paper-run pattern for <code>engine_live_run</code>:</p>
+<ol>
+<li>Add <code>--all-relations</code>, <code>--detach/--no-detach</code> options.</li>
+<li>Add <code>all_relations: bool</code>, <code>detach: bool</code> to signature.</li>
+<li>Add mutual exclusion check.</li>
+<li>Add <code>_run_batch_live()</code> function (similar to <code>_run_batch_paper</code> but uses <code>deployed</code> status and <code>live_trading</code> lifecycle, passes through wallet/API key env vars).</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">_run_batch_live</span><span class="p">(</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="n">initial_capital</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>    <span class="n">as_json</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>    <span class="n">exchange</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Spawn one detached live-run per deployed relation.&quot;&quot;&quot;</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.strategy.builtin</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_strategy_ref_for_relation</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>    <span class="n">relations</span> <span class="o">=</span> <span class="n">_load_relations_for_batch</span><span class="p">(</span><span class="s1">&#39;deployed&#39;</span><span class="p">)</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">relations</span><span class="p">:</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a>        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">ClickException</span><span class="p">(</span><span class="s1">&#39;No relations with status deployed.&#39;</span><span class="p">)</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>    <span class="n">_ensure_hub_running</span><span class="p">(</span><span class="n">as_json</span><span class="o">=</span><span class="n">as_json</span><span class="p">)</span>
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a>
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a>    <span class="n">reg</span> <span class="o">=</span> <span class="n">_load_registry</span><span class="p">()</span>
+<a id="__codelineno-18-18" name="__codelineno-18-18" href="#__codelineno-18-18"></a>    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-18-19" name="__codelineno-18-19" href="#__codelineno-18-19"></a>
+<a id="__codelineno-18-20" name="__codelineno-18-20" href="#__codelineno-18-20"></a>    <span class="k">for</span> <span class="n">rel</span> <span class="ow">in</span> <span class="n">relations</span><span class="p">:</span>
+<a id="__codelineno-18-21" name="__codelineno-18-21" href="#__codelineno-18-21"></a>        <span class="n">ref</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">build_strategy_ref_for_relation</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-18-22" name="__codelineno-18-22" href="#__codelineno-18-22"></a>        <span class="k">if</span> <span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-18-23" name="__codelineno-18-23" href="#__codelineno-18-23"></a>            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-18-24" name="__codelineno-18-24" href="#__codelineno-18-24"></a>                <span class="s1">&#39;relation_id&#39;</span><span class="p">:</span> <span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-18-25" name="__codelineno-18-25" href="#__codelineno-18-25"></a>                <span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-18-26" name="__codelineno-18-26" href="#__codelineno-18-26"></a>                <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;No strategy for spread_type: </span><span class="si">{</span><span class="n">rel</span><span class="o">.</span><span class="n">spread_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+<a id="__codelineno-18-27" name="__codelineno-18-27" href="#__codelineno-18-27"></a>            <span class="p">})</span>
+<a id="__codelineno-18-28" name="__codelineno-18-28" href="#__codelineno-18-28"></a>            <span class="k">continue</span>
+<a id="__codelineno-18-29" name="__codelineno-18-29" href="#__codelineno-18-29"></a>
+<a id="__codelineno-18-30" name="__codelineno-18-30" href="#__codelineno-18-30"></a>        <span class="n">cmd</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">_coinjure_cmd</span><span class="p">())</span> <span class="o">+</span> <span class="p">[</span>
+<a id="__codelineno-18-31" name="__codelineno-18-31" href="#__codelineno-18-31"></a>            <span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;live-run&#39;</span><span class="p">,</span>
+<a id="__codelineno-18-32" name="__codelineno-18-32" href="#__codelineno-18-32"></a>            <span class="s1">&#39;--strategy-ref&#39;</span><span class="p">,</span> <span class="n">ref</span><span class="p">,</span>
+<a id="__codelineno-18-33" name="__codelineno-18-33" href="#__codelineno-18-33"></a>            <span class="s1">&#39;--strategy-kwargs-json&#39;</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">kwargs</span><span class="p">),</span>
+<a id="__codelineno-18-34" name="__codelineno-18-34" href="#__codelineno-18-34"></a>            <span class="s1">&#39;--initial-capital&#39;</span><span class="p">,</span> <span class="n">initial_capital</span><span class="p">,</span>
+<a id="__codelineno-18-35" name="__codelineno-18-35" href="#__codelineno-18-35"></a>            <span class="s1">&#39;--exchange&#39;</span><span class="p">,</span> <span class="n">exchange</span><span class="p">,</span>
+<a id="__codelineno-18-36" name="__codelineno-18-36" href="#__codelineno-18-36"></a>            <span class="s1">&#39;--no-detach&#39;</span><span class="p">,</span>
+<a id="__codelineno-18-37" name="__codelineno-18-37" href="#__codelineno-18-37"></a>        <span class="p">]</span>
+<a id="__codelineno-18-38" name="__codelineno-18-38" href="#__codelineno-18-38"></a>        <span class="k">if</span> <span class="n">duration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-18-39" name="__codelineno-18-39" href="#__codelineno-18-39"></a>            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;--duration&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">duration</span><span class="p">)]</span>
+<a id="__codelineno-18-40" name="__codelineno-18-40" href="#__codelineno-18-40"></a>
+<a id="__codelineno-18-41" name="__codelineno-18-41" href="#__codelineno-18-41"></a>        <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+<a id="__codelineno-18-42" name="__codelineno-18-42" href="#__codelineno-18-42"></a>            <span class="n">cmd</span><span class="p">,</span> <span class="n">start_new_session</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-18-43" name="__codelineno-18-43" href="#__codelineno-18-43"></a>            <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DEVNULL</span><span class="p">,</span>
+<a id="__codelineno-18-44" name="__codelineno-18-44" href="#__codelineno-18-44"></a>        <span class="p">)</span>
+<a id="__codelineno-18-45" name="__codelineno-18-45" href="#__codelineno-18-45"></a>
+<a id="__codelineno-18-46" name="__codelineno-18-46" href="#__codelineno-18-46"></a>        <span class="n">socket</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">SOCKET_DIR</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;engine-</span><span class="si">{</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="si">}</span><span class="s1">.sock&#39;</span><span class="p">)</span>
+<a id="__codelineno-18-47" name="__codelineno-18-47" href="#__codelineno-18-47"></a>        <span class="n">entry</span> <span class="o">=</span> <span class="n">StrategyEntry</span><span class="p">(</span>
+<a id="__codelineno-18-48" name="__codelineno-18-48" href="#__codelineno-18-48"></a>            <span class="n">strategy_id</span><span class="o">=</span><span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-18-49" name="__codelineno-18-49" href="#__codelineno-18-49"></a>            <span class="n">strategy_ref</span><span class="o">=</span><span class="n">ref</span><span class="p">,</span>
+<a id="__codelineno-18-50" name="__codelineno-18-50" href="#__codelineno-18-50"></a>            <span class="n">strategy_kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+<a id="__codelineno-18-51" name="__codelineno-18-51" href="#__codelineno-18-51"></a>            <span class="n">relation_id</span><span class="o">=</span><span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-18-52" name="__codelineno-18-52" href="#__codelineno-18-52"></a>            <span class="n">lifecycle</span><span class="o">=</span><span class="s1">&#39;live_trading&#39;</span><span class="p">,</span>
+<a id="__codelineno-18-53" name="__codelineno-18-53" href="#__codelineno-18-53"></a>            <span class="n">exchange</span><span class="o">=</span><span class="n">exchange</span><span class="p">,</span>
+<a id="__codelineno-18-54" name="__codelineno-18-54" href="#__codelineno-18-54"></a>            <span class="n">pid</span><span class="o">=</span><span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+<a id="__codelineno-18-55" name="__codelineno-18-55" href="#__codelineno-18-55"></a>            <span class="n">socket_path</span><span class="o">=</span><span class="n">socket</span><span class="p">,</span>
+<a id="__codelineno-18-56" name="__codelineno-18-56" href="#__codelineno-18-56"></a>        <span class="p">)</span>
+<a id="__codelineno-18-57" name="__codelineno-18-57" href="#__codelineno-18-57"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-18-58" name="__codelineno-18-58" href="#__codelineno-18-58"></a>            <span class="n">reg</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-18-59" name="__codelineno-18-59" href="#__codelineno-18-59"></a>        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+<a id="__codelineno-18-60" name="__codelineno-18-60" href="#__codelineno-18-60"></a>            <span class="n">entry_existing</span> <span class="o">=</span> <span class="n">reg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-18-61" name="__codelineno-18-61" href="#__codelineno-18-61"></a>            <span class="k">if</span> <span class="n">entry_existing</span><span class="p">:</span>
+<a id="__codelineno-18-62" name="__codelineno-18-62" href="#__codelineno-18-62"></a>                <span class="n">entry_existing</span><span class="o">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">pid</span>
+<a id="__codelineno-18-63" name="__codelineno-18-63" href="#__codelineno-18-63"></a>                <span class="n">entry_existing</span><span class="o">.</span><span class="n">socket_path</span> <span class="o">=</span> <span class="n">socket</span>
+<a id="__codelineno-18-64" name="__codelineno-18-64" href="#__codelineno-18-64"></a>                <span class="n">entry_existing</span><span class="o">.</span><span class="n">lifecycle</span> <span class="o">=</span> <span class="s1">&#39;live_trading&#39;</span>
+<a id="__codelineno-18-65" name="__codelineno-18-65" href="#__codelineno-18-65"></a>                <span class="n">reg</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">entry_existing</span><span class="p">)</span>
+<a id="__codelineno-18-66" name="__codelineno-18-66" href="#__codelineno-18-66"></a>
+<a id="__codelineno-18-67" name="__codelineno-18-67" href="#__codelineno-18-67"></a>        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-18-68" name="__codelineno-18-68" href="#__codelineno-18-68"></a>            <span class="s1">&#39;relation_id&#39;</span><span class="p">:</span> <span class="n">rel</span><span class="o">.</span><span class="n">relation_id</span><span class="p">,</span>
+<a id="__codelineno-18-69" name="__codelineno-18-69" href="#__codelineno-18-69"></a>            <span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-18-70" name="__codelineno-18-70" href="#__codelineno-18-70"></a>            <span class="s1">&#39;pid&#39;</span><span class="p">:</span> <span class="n">proc</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+<a id="__codelineno-18-71" name="__codelineno-18-71" href="#__codelineno-18-71"></a>            <span class="s1">&#39;strategy_ref&#39;</span><span class="p">:</span> <span class="n">ref</span><span class="p">,</span>
+<a id="__codelineno-18-72" name="__codelineno-18-72" href="#__codelineno-18-72"></a>            <span class="s1">&#39;socket&#39;</span><span class="p">:</span> <span class="n">socket</span><span class="p">,</span>
+<a id="__codelineno-18-73" name="__codelineno-18-73" href="#__codelineno-18-73"></a>        <span class="p">})</span>
+<a id="__codelineno-18-74" name="__codelineno-18-74" href="#__codelineno-18-74"></a>
+<a id="__codelineno-18-75" name="__codelineno-18-75" href="#__codelineno-18-75"></a>    <span class="k">if</span> <span class="n">as_json</span><span class="p">:</span>
+<a id="__codelineno-18-76" name="__codelineno-18-76" href="#__codelineno-18-76"></a>        <span class="n">_emit_json</span><span class="p">({</span><span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;launched&#39;</span><span class="p">:</span> <span class="n">results</span><span class="p">,</span> <span class="s1">&#39;count&#39;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)})</span>
+<a id="__codelineno-18-77" name="__codelineno-18-77" href="#__codelineno-18-77"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-18-78" name="__codelineno-18-78" href="#__codelineno-18-78"></a>        <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">Launched </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="si">}</span><span class="s1"> live trading instances:</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<a id="__codelineno-18-79" name="__codelineno-18-79" href="#__codelineno-18-79"></a>        <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+<a id="__codelineno-18-80" name="__codelineno-18-80" href="#__codelineno-18-80"></a>            <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ok&#39;</span><span class="p">):</span>
+<a id="__codelineno-18-81" name="__codelineno-18-81" href="#__codelineno-18-81"></a>                <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span>
+<a id="__codelineno-18-82" name="__codelineno-18-82" href="#__codelineno-18-82"></a>                    <span class="sa">f</span><span class="s1">&#39;  </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;relation_id&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">  pid=</span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;pid&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">  </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;strategy_ref&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
+<a id="__codelineno-18-83" name="__codelineno-18-83" href="#__codelineno-18-83"></a>                <span class="p">)</span>
+<a id="__codelineno-18-84" name="__codelineno-18-84" href="#__codelineno-18-84"></a>            <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-18-85" name="__codelineno-18-85" href="#__codelineno-18-85"></a>                <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;relation_id&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">  SKIPPED: </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</code></pre></div>
+<ol>
+<li>Add detach logic (same pattern as paper-run detach).</li>
+</ol>
+<p><strong>Step 4: Run tests to verify they pass</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py -k "live_run_all" -v -p no:nbmake</code>
+Expected: PASS (2 tests)</p>
+<p><strong>Step 5: Run full test suite</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/ -p no:nbmake -x -q</code>
+Expected: All passing</p>
+<p><strong>Step 6: Commit</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>git<span class="w"> </span>add<span class="w"> </span>coinjure/cli/engine_commands.py<span class="w"> </span>tests/test_trade_cli.py
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(cli): add --detach and --all-relations to engine live-run&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="task-6-add-engine-promote-command">Task 6: Add <code>engine promote</code> command</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>coinjure/cli/engine_commands.py</code></li>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+</ul>
+<p><strong>Step 1: Write the failing test</strong></p>
+<p>Add to <code>tests/test_trade_cli.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_engine_promote_single</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Promote a single relation from backtest_passed to deployed.&quot;&quot;&quot;</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarketRelation</span><span class="p">,</span> <span class="n">RelationStore</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.engine.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyEntry</span><span class="p">,</span> <span class="n">StrategyRegistry</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>    <span class="n">rel_path</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;relations.json&#39;</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>    <span class="n">reg_path</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s1">&#39;portfolio.json&#39;</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>    <span class="c1"># Seed a backtest_passed relation</span>
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>    <span class="n">store</span> <span class="o">=</span> <span class="n">RelationStore</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">rel_path</span><span class="p">)</span>
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>    <span class="n">store</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">MarketRelation</span><span class="p">(</span>
+<a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a>        <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;rel-p1&#39;</span><span class="p">,</span> <span class="n">spread_type</span><span class="o">=</span><span class="s1">&#39;implication&#39;</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="s1">&#39;backtest_passed&#39;</span><span class="p">,</span>
+<a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a>    <span class="p">))</span>
+<a id="__codelineno-20-14" name="__codelineno-20-14" href="#__codelineno-20-14"></a>
+<a id="__codelineno-20-15" name="__codelineno-20-15" href="#__codelineno-20-15"></a>    <span class="c1"># Seed a paper_trading registry entry</span>
+<a id="__codelineno-20-16" name="__codelineno-20-16" href="#__codelineno-20-16"></a>    <span class="n">reg</span> <span class="o">=</span> <span class="n">StrategyRegistry</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">reg_path</span><span class="p">)</span>
+<a id="__codelineno-20-17" name="__codelineno-20-17" href="#__codelineno-20-17"></a>    <span class="n">reg</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">StrategyEntry</span><span class="p">(</span>
+<a id="__codelineno-20-18" name="__codelineno-20-18" href="#__codelineno-20-18"></a>        <span class="n">strategy_id</span><span class="o">=</span><span class="s1">&#39;rel-p1&#39;</span><span class="p">,</span>
+<a id="__codelineno-20-19" name="__codelineno-20-19" href="#__codelineno-20-19"></a>        <span class="n">strategy_ref</span><span class="o">=</span><span class="s1">&#39;mod:Cls&#39;</span><span class="p">,</span>
+<a id="__codelineno-20-20" name="__codelineno-20-20" href="#__codelineno-20-20"></a>        <span class="n">relation_id</span><span class="o">=</span><span class="s1">&#39;rel-p1&#39;</span><span class="p">,</span>
+<a id="__codelineno-20-21" name="__codelineno-20-21" href="#__codelineno-20-21"></a>        <span class="n">lifecycle</span><span class="o">=</span><span class="s1">&#39;paper_trading&#39;</span><span class="p">,</span>
+<a id="__codelineno-20-22" name="__codelineno-20-22" href="#__codelineno-20-22"></a>    <span class="p">))</span>
+<a id="__codelineno-20-23" name="__codelineno-20-23" href="#__codelineno-20-23"></a>
+<a id="__codelineno-20-24" name="__codelineno-20-24" href="#__codelineno-20-24"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="s1">&#39;coinjure.cli.engine_commands.REGISTRY_PATH&#39;</span><span class="p">,</span> <span class="n">reg_path</span><span class="p">)</span>
+<a id="__codelineno-20-25" name="__codelineno-20-25" href="#__codelineno-20-25"></a>    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="s1">&#39;coinjure.cli.engine_commands._get_relation_store_path&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">rel_path</span><span class="p">)</span>
+<a id="__codelineno-20-26" name="__codelineno-20-26" href="#__codelineno-20-26"></a>
+<a id="__codelineno-20-27" name="__codelineno-20-27" href="#__codelineno-20-27"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-20-28" name="__codelineno-20-28" href="#__codelineno-20-28"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-20-29" name="__codelineno-20-29" href="#__codelineno-20-29"></a>
+<a id="__codelineno-20-30" name="__codelineno-20-30" href="#__codelineno-20-30"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-20-31" name="__codelineno-20-31" href="#__codelineno-20-31"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;promote&#39;</span><span class="p">,</span> <span class="s1">&#39;rel-p1&#39;</span><span class="p">,</span> <span class="s1">&#39;--json&#39;</span><span class="p">])</span>
+<a id="__codelineno-20-32" name="__codelineno-20-32" href="#__codelineno-20-32"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span>
+<a id="__codelineno-20-33" name="__codelineno-20-33" href="#__codelineno-20-33"></a>
+<a id="__codelineno-20-34" name="__codelineno-20-34" href="#__codelineno-20-34"></a>    <span class="n">out</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+<a id="__codelineno-20-35" name="__codelineno-20-35" href="#__codelineno-20-35"></a>    <span class="k">assert</span> <span class="n">out</span><span class="p">[</span><span class="s1">&#39;ok&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span>
+<a id="__codelineno-20-36" name="__codelineno-20-36" href="#__codelineno-20-36"></a>
+<a id="__codelineno-20-37" name="__codelineno-20-37" href="#__codelineno-20-37"></a>    <span class="c1"># Verify relation status updated</span>
+<a id="__codelineno-20-38" name="__codelineno-20-38" href="#__codelineno-20-38"></a>    <span class="n">updated</span> <span class="o">=</span> <span class="n">RelationStore</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">rel_path</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rel-p1&#39;</span><span class="p">)</span>
+<a id="__codelineno-20-39" name="__codelineno-20-39" href="#__codelineno-20-39"></a>    <span class="k">assert</span> <span class="n">updated</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s1">&#39;deployed&#39;</span>
+<a id="__codelineno-20-40" name="__codelineno-20-40" href="#__codelineno-20-40"></a>
+<a id="__codelineno-20-41" name="__codelineno-20-41" href="#__codelineno-20-41"></a>
+<a id="__codelineno-20-42" name="__codelineno-20-42" href="#__codelineno-20-42"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_engine_promote_not_found</span><span class="p">():</span>
+<a id="__codelineno-20-43" name="__codelineno-20-43" href="#__codelineno-20-43"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">click.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliRunner</span>
+<a id="__codelineno-20-44" name="__codelineno-20-44" href="#__codelineno-20-44"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.cli.cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">cli</span>
+<a id="__codelineno-20-45" name="__codelineno-20-45" href="#__codelineno-20-45"></a>
+<a id="__codelineno-20-46" name="__codelineno-20-46" href="#__codelineno-20-46"></a>    <span class="n">runner</span> <span class="o">=</span> <span class="n">CliRunner</span><span class="p">()</span>
+<a id="__codelineno-20-47" name="__codelineno-20-47" href="#__codelineno-20-47"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">cli</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;engine&#39;</span><span class="p">,</span> <span class="s1">&#39;promote&#39;</span><span class="p">,</span> <span class="s1">&#39;nonexistent&#39;</span><span class="p">])</span>
+<a id="__codelineno-20-48" name="__codelineno-20-48" href="#__codelineno-20-48"></a>    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">!=</span> <span class="mi">0</span>
+</code></pre></div>
+<p><strong>Step 2: Run tests to verify they fail</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py::test_engine_promote_single tests/test_trade_cli.py::test_engine_promote_not_found -v -p no:nbmake</code>
+Expected: FAIL — no <code>promote</code> command</p>
+<p><strong>Step 3: Write minimal implementation</strong></p>
+<p>Add helper near top of <code>engine_commands.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">_get_relation_store_path</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">RELATIONS_PATH</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>    <span class="k">return</span> <span class="n">RELATIONS_PATH</span>
+</code></pre></div>
+<p>Add <code>promote</code> command:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nd">@engine</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="s1">&#39;promote&#39;</span><span class="p">)</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nd">@click</span><span class="o">.</span><span class="n">argument</span><span class="p">(</span><span class="s1">&#39;relation_id&#39;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a>    <span class="s1">&#39;--all&#39;</span><span class="p">,</span> <span class="s1">&#39;promote_all&#39;</span><span class="p">,</span> <span class="n">is_flag</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>    <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Promote all paper_trading entries with positive PnL.&#39;</span><span class="p">,</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="p">)</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s1">&#39;--json&#39;</span><span class="p">,</span> <span class="s1">&#39;as_json&#39;</span><span class="p">,</span> <span class="n">is_flag</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">engine_promote</span><span class="p">(</span>
+<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>    <span class="n">relation_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>    <span class="n">promote_all</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a>    <span class="n">as_json</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Promote relation(s) from paper_trading to deployed.&quot;&quot;&quot;</span>
+<a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">coinjure.market.relations</span><span class="w"> </span><span class="kn">import</span> <span class="n">RelationStore</span>
+<a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a>
+<a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">relation_id</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">promote_all</span><span class="p">:</span>
+<a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a>        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">ClickException</span><span class="p">(</span><span class="s1">&#39;Provide &lt;relation-id&gt; or --all.&#39;</span><span class="p">)</span>
+<a id="__codelineno-22-18" name="__codelineno-22-18" href="#__codelineno-22-18"></a>
+<a id="__codelineno-22-19" name="__codelineno-22-19" href="#__codelineno-22-19"></a>    <span class="n">store</span> <span class="o">=</span> <span class="n">RelationStore</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">_get_relation_store_path</span><span class="p">())</span>
+<a id="__codelineno-22-20" name="__codelineno-22-20" href="#__codelineno-22-20"></a>    <span class="n">reg</span> <span class="o">=</span> <span class="n">_load_registry</span><span class="p">()</span>
+<a id="__codelineno-22-21" name="__codelineno-22-21" href="#__codelineno-22-21"></a>
+<a id="__codelineno-22-22" name="__codelineno-22-22" href="#__codelineno-22-22"></a>    <span class="k">if</span> <span class="n">promote_all</span><span class="p">:</span>
+<a id="__codelineno-22-23" name="__codelineno-22-23" href="#__codelineno-22-23"></a>        <span class="n">entries</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-22-24" name="__codelineno-22-24" href="#__codelineno-22-24"></a>            <span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">reg</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+<a id="__codelineno-22-25" name="__codelineno-22-25" href="#__codelineno-22-25"></a>            <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">lifecycle</span> <span class="o">==</span> <span class="s1">&#39;paper_trading&#39;</span> <span class="ow">and</span> <span class="n">e</span><span class="o">.</span><span class="n">relation_id</span>
+<a id="__codelineno-22-26" name="__codelineno-22-26" href="#__codelineno-22-26"></a>        <span class="p">]</span>
+<a id="__codelineno-22-27" name="__codelineno-22-27" href="#__codelineno-22-27"></a>        <span class="n">promoted</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-22-28" name="__codelineno-22-28" href="#__codelineno-22-28"></a>        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+<a id="__codelineno-22-29" name="__codelineno-22-29" href="#__codelineno-22-29"></a>            <span class="n">rel</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-22-30" name="__codelineno-22-30" href="#__codelineno-22-30"></a>            <span class="k">if</span> <span class="n">rel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-22-31" name="__codelineno-22-31" href="#__codelineno-22-31"></a>                <span class="k">continue</span>
+<a id="__codelineno-22-32" name="__codelineno-22-32" href="#__codelineno-22-32"></a>            <span class="n">rel</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="s1">&#39;deployed&#39;</span>
+<a id="__codelineno-22-33" name="__codelineno-22-33" href="#__codelineno-22-33"></a>            <span class="n">store</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-22-34" name="__codelineno-22-34" href="#__codelineno-22-34"></a>            <span class="n">entry</span><span class="o">.</span><span class="n">lifecycle</span> <span class="o">=</span> <span class="s1">&#39;deployed&#39;</span>
+<a id="__codelineno-22-35" name="__codelineno-22-35" href="#__codelineno-22-35"></a>            <span class="n">reg</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-22-36" name="__codelineno-22-36" href="#__codelineno-22-36"></a>            <span class="n">promoted</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-22-37" name="__codelineno-22-37" href="#__codelineno-22-37"></a>
+<a id="__codelineno-22-38" name="__codelineno-22-38" href="#__codelineno-22-38"></a>        <span class="k">if</span> <span class="n">as_json</span><span class="p">:</span>
+<a id="__codelineno-22-39" name="__codelineno-22-39" href="#__codelineno-22-39"></a>            <span class="n">_emit_json</span><span class="p">({</span><span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;promoted&#39;</span><span class="p">:</span> <span class="n">promoted</span><span class="p">,</span> <span class="s1">&#39;count&#39;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">promoted</span><span class="p">)})</span>
+<a id="__codelineno-22-40" name="__codelineno-22-40" href="#__codelineno-22-40"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-22-41" name="__codelineno-22-41" href="#__codelineno-22-41"></a>            <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Promoted </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">promoted</span><span class="p">)</span><span class="si">}</span><span class="s1"> relation(s) to deployed.&#39;</span><span class="p">)</span>
+<a id="__codelineno-22-42" name="__codelineno-22-42" href="#__codelineno-22-42"></a>        <span class="k">return</span>
+<a id="__codelineno-22-43" name="__codelineno-22-43" href="#__codelineno-22-43"></a>
+<a id="__codelineno-22-44" name="__codelineno-22-44" href="#__codelineno-22-44"></a>    <span class="c1"># Single relation</span>
+<a id="__codelineno-22-45" name="__codelineno-22-45" href="#__codelineno-22-45"></a>    <span class="n">rel</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-22-46" name="__codelineno-22-46" href="#__codelineno-22-46"></a>    <span class="k">if</span> <span class="n">rel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-22-47" name="__codelineno-22-47" href="#__codelineno-22-47"></a>        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">ClickException</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Relation not found: </span><span class="si">{</span><span class="n">relation_id</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+<a id="__codelineno-22-48" name="__codelineno-22-48" href="#__codelineno-22-48"></a>
+<a id="__codelineno-22-49" name="__codelineno-22-49" href="#__codelineno-22-49"></a>    <span class="n">rel</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="s1">&#39;deployed&#39;</span>
+<a id="__codelineno-22-50" name="__codelineno-22-50" href="#__codelineno-22-50"></a>    <span class="n">store</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">rel</span><span class="p">)</span>
+<a id="__codelineno-22-51" name="__codelineno-22-51" href="#__codelineno-22-51"></a>
+<a id="__codelineno-22-52" name="__codelineno-22-52" href="#__codelineno-22-52"></a>    <span class="n">entry</span> <span class="o">=</span> <span class="n">reg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">relation_id</span><span class="p">)</span>
+<a id="__codelineno-22-53" name="__codelineno-22-53" href="#__codelineno-22-53"></a>    <span class="k">if</span> <span class="n">entry</span><span class="p">:</span>
+<a id="__codelineno-22-54" name="__codelineno-22-54" href="#__codelineno-22-54"></a>        <span class="n">entry</span><span class="o">.</span><span class="n">lifecycle</span> <span class="o">=</span> <span class="s1">&#39;deployed&#39;</span>
+<a id="__codelineno-22-55" name="__codelineno-22-55" href="#__codelineno-22-55"></a>        <span class="n">reg</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-22-56" name="__codelineno-22-56" href="#__codelineno-22-56"></a>
+<a id="__codelineno-22-57" name="__codelineno-22-57" href="#__codelineno-22-57"></a>    <span class="k">if</span> <span class="n">as_json</span><span class="p">:</span>
+<a id="__codelineno-22-58" name="__codelineno-22-58" href="#__codelineno-22-58"></a>        <span class="n">_emit_json</span><span class="p">({</span><span class="s1">&#39;ok&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;relation_id&#39;</span><span class="p">:</span> <span class="n">relation_id</span><span class="p">,</span> <span class="s1">&#39;status&#39;</span><span class="p">:</span> <span class="s1">&#39;deployed&#39;</span><span class="p">})</span>
+<a id="__codelineno-22-59" name="__codelineno-22-59" href="#__codelineno-22-59"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-22-60" name="__codelineno-22-60" href="#__codelineno-22-60"></a>        <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Promoted </span><span class="si">{</span><span class="n">relation_id</span><span class="si">}</span><span class="s1"> to deployed.&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>Step 4: Run tests to verify they pass</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/test_trade_cli.py -k "promote" -v -p no:nbmake</code>
+Expected: PASS (2 tests)</p>
+<p><strong>Step 5: Run full test suite</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/ -p no:nbmake -x -q</code>
+Expected: All passing</p>
+<p><strong>Step 6: Commit</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>git<span class="w"> </span>add<span class="w"> </span>coinjure/cli/engine_commands.py<span class="w"> </span>tests/test_trade_cli.py
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(cli): add engine promote command for relation lifecycle&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="task-7-final-integration-test-and-cleanup">Task 7: Final integration test and cleanup</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Test: <code>tests/test_trade_cli.py</code></li>
+<li>Verify: all files modified in Tasks 1-6</li>
+</ul>
+<p><strong>Step 1: Run full test suite</strong></p>
+<p>Run: <code>poetry run python -m pytest tests/ -p no:nbmake -v</code>
+Expected: All passing (244+ tests)</p>
+<p><strong>Step 2: Verify CLI help text</strong></p>
+<p>Run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>poetry<span class="w"> </span>run<span class="w"> </span>coinjure<span class="w"> </span>engine<span class="w"> </span>paper-run<span class="w"> </span>--help
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>poetry<span class="w"> </span>run<span class="w"> </span>coinjure<span class="w"> </span>engine<span class="w"> </span>live-run<span class="w"> </span>--help
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>poetry<span class="w"> </span>run<span class="w"> </span>coinjure<span class="w"> </span>engine<span class="w"> </span>promote<span class="w"> </span>--help
+</code></pre></div>
+<p>Verify <code>--all-relations</code>, <code>--detach</code>, and promote args appear correctly.</p>
+<p><strong>Step 3: Commit any final fixes</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>git<span class="w"> </span>add<span class="w"> </span>-A
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;test: add integration tests for batch paper/live trading&quot;</span>
+</code></pre></div>
+<p><strong>Step 4: Push branch</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>git<span class="w"> </span>push<span class="w"> </span>-u<span class="w"> </span>origin<span class="w"> </span>&lt;branch-name&gt;
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
