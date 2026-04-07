@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>
-      Coinjure: An Agent-Native Trading System for Prediction Markets
+      Coinjure: An Agent-Native Trading Harness for Prediction Markets
     </title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap");
@@ -877,7 +877,7 @@
           <h1>
             <span style="color: #d4a017">Coin</span
             ><span style="color: #2c5f8a">jure</span>: An Agent-Native
-            Trading<br />System for Prediction Markets
+            Trading<br />Harness for Prediction Markets
           </h1>
           <img
             src="../assets/coinjure_mascot.png"
@@ -931,13 +931,13 @@
       <div class="tldr">
         <div class="tldr-body">
           <strong>TL;DR</strong> &mdash; <span style="color: #d4a017">Coin</span
-          ><span style="color: #2c5f8a">jure</span> is a full-stack, CLI-native
-          trading framework designed for LLM agents in prediction markets. It
-          empowers agents to drive the entire strategy lifecycle purely by
-          interacting with a command-line interface. By simply issuing CLI
-          commands, an agent can autonomously discover cross-market relations,
-          compile executable strategies, run large-scale backtests, and deploy
-          to live execution. Using <span style="color: #d4a017">Coin</span
+          ><span style="color: #2c5f8a">jure</span> is a CLI-based harness for
+          trading agents in prediction markets. It empowers agents to drive the
+          entire strategy lifecycle purely by interacting with a command-line
+          interface. By simply issuing CLI commands, an agent can autonomously
+          discover cross-market relations, compile executable strategies, run
+          large-scale backtests, and deploy to live execution. Using
+          <span style="color: #d4a017">Coin</span
           ><span style="color: #2c5f8a">jure</span>, agents like Claude Code or
           Codex can discover over 100 backtest-positive strategies in a single
           hour&mdash;a capability we have validated by deploying to live trading
@@ -956,8 +956,8 @@
         <a href="#coinjure-solution" data-section="coinjure-solution"
           >The Coinjure Solution</a
         >
-        <a href="#system-overview" data-section="system-overview"
-          >System Overview</a
+        <a href="#harness-overview" data-section="harness-overview"
+          >Harness Overview</a
         >
         <a
           href="#strategy-discovery"
@@ -1152,12 +1152,12 @@
         <p>
           <strong
             >What AI-native trading needs is not better Claude skills, but an
-            agent-native trading system.</strong
+            agent-native trading harness.</strong
           >
           There are two fundamental reasons for this. First, generic
           tool-calling skills do not make strategy discovery scalable. While
           they teach an agent how to invoke APIs, they cannot elevate the
-          abstraction level of the underlying system. If trading actions remain
+          abstraction level of the underlying harness. If trading actions remain
           bound to raw, low-level endpoints, the agent squanders its context
           budget on execution boilerplate instead of strategic market reasoning,
           rendering large-scale strategy search slow, brittle, and inefficient.
@@ -2113,7 +2113,7 @@
           monitoring layer for oversight and emergency control.
         </p>
 
-        <h2 id="system-overview">System Overview</h2>
+        <h2 id="harness-overview">Harness Overview</h2>
 
         <div
           id="fig3"
@@ -2614,7 +2614,7 @@
           ><span style="color: #2c5f8a">jure</span> ships with 8 relation types,
           each paired with a pre-built strategy (<a href="#tab1">Table 1</a>).
           The framework is extensible: defining a new relation type and its
-          strategy class is all that is needed to teach the system a new
+          strategy class is all that is needed to teach the harness a new
           category of opportunities.
         </p>
 
@@ -2737,7 +2737,7 @@
         </p>
 
         <p>
-          <strong>Risk Management and Process Isolation.</strong> The system
+          <strong>Risk Management and Process Isolation.</strong> The harness
           forces a strategy into read-only mode after consecutive failures or
           drawdown breaches. Each engine instance runs as an independent OS
           process, allowing hundreds of strategies to execute in parallel
@@ -3722,7 +3722,7 @@
           limited real capital and let
           <span style="color: #d4a017">Coin</span
           ><span style="color: #2c5f8a">jure</span> autonomously allocate
-          positions. The system automatically sized each position to roughly
+          positions. The harness automatically sized each position to roughly
           <strong>$20</strong>, identified opportunities, and executed trades
           without manual intervention. Within a short initial period the
           portfolio reached <strong>$53.97</strong> ($22.08 in open positions,
@@ -4178,10 +4178,10 @@
           window&mdash;assembling a near-risk-free position: regardless of which
           outcome resolved, at least one contract would pay out, yielding a
           locked-in profit once the full basket was in place. This trade was
-          triggered while the system was running roughly
+          triggered while the harness was running roughly
           <strong>50 strategies concurrently</strong>&mdash;just one of many
           opportunities being monitored in parallel. With more strategies
-          deployed, the system can surface and execute a proportionally larger
+          deployed, the harness can surface and execute a proportionally larger
           number of such opportunities.
         </p>
 
@@ -4196,7 +4196,7 @@
         <div class="bibtex-block">
           <pre>
 @software{coinjure2026,
-  title   = {Coinjure: An Agent-Native Trading System for Prediction Markets},
+  title   = {Coinjure: An Agent-Native Trading Harness for Prediction Markets},
   author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
   year    = {2026},
   url     = {https://github.com/ulab-uiuc/prediction-market-cli},

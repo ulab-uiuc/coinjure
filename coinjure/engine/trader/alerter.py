@@ -3,7 +3,7 @@
 ``Alerter`` is the abstract interface every alerter must implement.
 ``LogAlerter`` writes JSON lines to ``alerts.log`` in the data directory.
 ``CompositeAlerter`` fans out to multiple inner alerters, swallowing
-individual failures so one broken alerter cannot crash the system.
+individual failures so one broken alerter cannot crash the harness.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from coinjure.trading.types import Order, OrderFailureReason, Trade
 from coinjure.ticker import Ticker
+from coinjure.trading.types import Order, OrderFailureReason, Trade
 
 logger = logging.getLogger(__name__)
 

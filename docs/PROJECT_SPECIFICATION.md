@@ -4,7 +4,7 @@
 
 ### 1.1 Core Features
 
-**Coinjure** (Social World Model Trading Agent) is an intelligent trading agent system designed for the **Polymarket prediction market**, built on the Social World Model concept. Its core features include:
+**Coinjure** (Social World Model Trading Agent) is an intelligent trading agent harness designed for the **Polymarket prediction market**, built on the Social World Model concept. Its core features include:
 
 | Module                           | Description                                                                          |
 | -------------------------------- | ------------------------------------------------------------------------------------ |
