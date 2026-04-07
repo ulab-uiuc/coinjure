@@ -27,33 +27,21 @@ The CLI is available via the `coinjure` command.
 ### Monitor Command
 
 ```bash
-coinjure monitor [OPTIONS]
+coinjure engine monitor [OPTIONS]
 ```
-
-#### Options
-
-- `--watch`, `-w`: Enable live monitoring mode with continuous updates
-- `--refresh FLOAT`, `-r FLOAT`: Refresh rate in seconds for watch mode (default: 2.0)
-- `--config PATH`, `-c PATH`: Path to trading engine config file (optional)
 
 #### Examples
 
-**Single snapshot:**
+**Attach live Textual monitor to all running engines:**
 
 ```bash
-coinjure monitor
+coinjure engine monitor
 ```
 
-**Live monitoring mode:**
+**Monitor a specific engine:**
 
 ```bash
-coinjure monitor --watch
-```
-
-**Live mode with custom refresh rate:**
-
-```bash
-coinjure monitor -w -r 1.0  # Update every 1 second
+coinjure engine monitor --engine-id <ID>
 ```
 
 ## Integration with Trading Engine
@@ -63,7 +51,7 @@ coinjure monitor -w -r 1.0  # Update every 1 second
 The simplest way to add monitoring to your trading workflow:
 
 ```python
-from coinjure.core.trading_engine import TradingEngine
+from coinjure.engine.engine import TradingEngine
 from coinjure.cli.utils import add_monitoring_to_engine
 
 # Create your trading engine

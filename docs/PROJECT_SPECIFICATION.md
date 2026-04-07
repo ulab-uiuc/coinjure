@@ -61,77 +61,82 @@
 ## 3. Project Directory Structure
 
 ```
-qfj/
-├── coinjure/                    # Main package
-│   ├── cli/                     # CLI
-│   │   ├── cli.py               # CLI entry point
-│   │   ├── monitor.py           # Trading monitor command
-│   │   └── utils.py
-│   ├── core/                    # Core engine
-│   │   └── trading_engine.py    # Trading engine (event loop and driver)
-│   ├── strategy/                # Strategy layer
-│   │   ├── strategy.py         # Strategy abstract base class
-│   │   ├── agent.py            # Agent strategy (LLM/tool-driven)
-│   │   └── demo.py             # Demo strategy
-│   ├── trader/                  # Trade execution layer
-│   │   ├── trader.py           # Trader abstract base class
-│   │   ├── paper_trader.py     # Paper trading (simulation)
-│   │   ├── polymarket_trader.py # Polymarket live trading
-│   │   └── types.py            # Trade type definitions
-│   ├── data/                    # Data layer
-│   │   ├── data_source.py      # Data source abstract base class
-│   │   ├── market_data_manager.py # Market data management
-│   │   ├── backtest/
-│   │   │   └── historical_data_source.py # Historical backtest data source
-│   │   └── live/
-│   │       └── polymarket_data_source.py # Polymarket live data source
-│   ├── events/                  # Event system
-│   │   └── events.py           # OrderBookEvent, NewsEvent, PriceChangeEvent
-│   ├── ticker/                  # Instrument identifiers
-│   │   └── ticker.py           # Ticker, PolyMarketTicker, CashTicker
-│   ├── order/                   # Orders
-│   │   └── order_book.py       # Order book management
-│   ├── position/                # Positions
-│   │   └── position_manager.py # Position and PnL management
-│   ├── risk/                    # Risk control
-│   │   └── risk_manager.py     # NoRisk/Standard/Conservative/Aggressive
-│   ├── analytics/                # Analytics
-│   │   └── performance_analyzer.py # Performance analysis
-│   ├── backtest/                # Backtesting
-│   │   └── backtester.py       # Backtest orchestration
-│   └── live/                    # Live trading
-│       └── live_trader.py      # Live/paper trading entry point
-├── examples/                     # Examples
-│   ├── backtest_example.py
-│   ├── live_paper_trading_example.py
-│   ├── custom_strategy_example.py
-│   ├── performance_analysis_example.py
-│   ├── monitor_example.py
-│   └── demo_monitor.py
-├── scripts/                      # Utility scripts
-│   ├── get_live_polymarket_data.py
-│   └── get_live_news_data.py
-├── tests/                        # Unit tests
-├── docs/                         # Documentation
-├── .github/                      # CI/CD and issue templates
-├── pyproject.toml               # Poetry configuration
+prediction-market-cli/
+├── coinjure/                        # Main package
+│   ├── ticker.py                    # Ticker, PolyMarketTicker, KalshiTicker, CashTicker
+│   ├── events.py                    # Event, PriceChangeEvent, OrderBookEvent, NewsEvent
+│   ├── trading/                     # Shared trading abstractions
+│   │   ├── types.py                 # TradeSide, Order, Trade, OrderStatus, PlaceOrderResult
+│   │   ├── trader.py                # Trader ABC
+│   │   ├── position.py              # PositionManager, Position
+│   │   └── risk.py                  # RiskManager ABC, Standard/Conservative/Aggressive
+│   ├── data/                        # Data infrastructure
+│   │   ├── source.py                # DataSource ABC, CompositeDataSource
+│   │   ├── order_book.py            # Level, OrderBook
+│   │   ├── manager.py               # DataManager, DataPoint
+│   │   ├── fetcher.py               # Polymarket Gamma API + Kalshi REST fetching
+│   │   ├── news.py                  # fetch_google_news, fetch_rss, fetch_thenewsapi
+│   │   ├── live/
+│   │   │   ├── polymarket.py        # LivePolyMarketDataSource (CLOB)
+│   │   │   └── kalshi.py            # LiveKalshiDataSource (REST)
+│   │   └── backtest/
+│   │       └── parquet.py           # ParquetDataSource (replay)
+│   ├── market/                      # Market analysis
+│   │   ├── relations.py             # MarketRelation + RelationStore
+│   │   └── auto_pair.py             # Auto-pair detection
+│   ├── strategy/                    # Strategy framework
+│   │   ├── strategy.py              # Strategy ABC + IdleStrategy
+│   │   ├── demo.py                  # DemoStrategy (example momentum)
+│   │   ├── agent.py                 # AgentStrategy (LLM-powered)
+│   │   ├── loader.py                # load_strategy() — dynamic class loading
+│   │   ├── relation_mixin.py        # RelationArbMixin
+│   │   └── builtin/                 # 8 built-in strategies (DirectArb, EventSumArb, etc.)
+│   ├── engine/                      # Trading engine + concrete traders
+│   │   ├── engine.py                # TradingEngine (main event loop)
+│   │   ├── runner.py                # run_live_paper_trading, run_live_polymarket_trading
+│   │   ├── backtester.py            # run_backtest_parquet
+│   │   ├── performance.py           # PerformanceAnalyzer
+│   │   ├── registry.py              # StrategyRegistry (portfolio state)
+│   │   ├── control.py               # ControlServer (Unix socket RPC)
+│   │   └── trader/                  # Concrete trader implementations
+│   │       ├── paper.py             # PaperTrader
+│   │       ├── polymarket.py        # PolymarketTrader
+│   │       ├── kalshi.py            # KalshiTrader
+│   │       └── alerter.py           # Alerter ABC + LogAlerter
+│   ├── hub/                         # Optional: fan-out Unix socket server
+│   │   ├── hub.py                   # MarketDataHub + send_hub_command()
+│   │   └── subscriber.py            # HubDataSource
+│   ├── storage/                     # Persistence
+│   │   ├── serializers.py           # JSON serialization for trading types
+│   │   └── state_store.py           # StateStore (JSON file persistence)
+│   └── cli/                         # Click CLI (thin wrappers)
+│       ├── cli.py                   # Main entry point
+│       ├── market_commands.py       # market info, discover, news, relations
+│       ├── engine_commands.py       # engine paper-run, live-run, hub-*, list, add, etc.
+│       ├── monitor.py               # TradingMonitor
+│       ├── textual_monitor.py       # TUI dashboard
+│       └── utils.py                 # CLI utilities
+├── tests/                           # Unit tests
+├── docs/                            # Documentation
+├── .github/                         # CI/CD and issue templates
+├── pyproject.toml                   # Poetry configuration
 ├── README.md
 └── .pre-commit-config.yaml
 ```
 
 ### 3.1 Key Directory Descriptions
 
-| Directory             | Purpose                                                                                         |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| `coinjure/core/`      | Trading engine: event loop, strategy invocation, trade execution scheduling                     |
-| `coinjure/strategy/`  | Strategy definitions: implements `process_event` and calls `trader.place_order`                 |
-| `coinjure/trader/`    | Trade execution: includes simulation (PaperTrader) and live (PolymarketTrader)                  |
-| `coinjure/data/`      | Data source abstraction: historical, Polymarket, news, and RSS implementations                  |
-| `coinjure/events/`    | Event types: OrderBookEvent, NewsEvent, PriceChangeEvent                                        |
-| `coinjure/risk/`      | Risk control layer: per-trade, per-instrument, total exposure, drawdown, and daily loss limits  |
-| `coinjure/position/`  | Position tracking and PnL computation                                                           |
-| `coinjure/analytics/` | Sharpe ratio, win rate, maximum drawdown, profit/loss ratio, and other performance metrics      |
-| `coinjure/live/`      | Live/paper trading entry points (`run_live_paper_trading`, `run_live_polymarket_trading`, etc.) |
+| Directory                 | Purpose                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| `coinjure/trading/`       | Shared trading abstractions: Trader ABC, types, position management, risk managers           |
+| `coinjure/data/`          | Data source abstraction: live (Polymarket CLOB, Kalshi REST), backtest (Parquet), news, RSS  |
+| `coinjure/market/`        | Market analysis: relation graph, auto-pair detection                                         |
+| `coinjure/strategy/`      | Strategy definitions: Strategy ABC, demo, agent, loader, and 8 built-in arbitrage strategies |
+| `coinjure/engine/`        | Trading engine: event loop, runner, backtester, performance analyzer, control server         |
+| `coinjure/engine/trader/` | Concrete trader implementations: PaperTrader, PolymarketTrader, KalshiTrader                 |
+| `coinjure/hub/`           | Optional fan-out Unix socket server for shared market data                                   |
+| `coinjure/storage/`       | Persistence: JSON serialization, state store                                                 |
+| `coinjure/cli/`           | Click CLI: market commands, engine commands, monitor, TUI dashboard                          |
 
 ---
 
@@ -151,27 +156,28 @@ The main entry point is: **`coinjure.cli.cli:cli`**.
 After installation, the CLI can be invoked directly:
 
 ```bash
-coinjure monitor           # Monitor
-coinjure monitor --watch   # Live refresh
+coinjure engine monitor    # Attach live TUI monitor
+coinjure engine paper-run  # Paper trading
+coinjure engine live-run   # Live trading
 ```
 
 ### 4.2 Entry Point Overview
 
-| Entry Point       | File                                                                       | Description                                  |
-| ----------------- | -------------------------------------------------------------------------- | -------------------------------------------- |
-| **CLI**           | `coinjure/cli/cli.py`                                                      | `cli()` — registers the `monitor` subcommand |
-| **Backtesting**   | `examples/backtest_example.py`                                             | Run this script directly for backtesting     |
-| **Paper Trading** | `examples/live_paper_trading_example.py` or `coinjure/live/live_trader.py` | Run via `run_live_paper_trading()`           |
-| **Live Trading**  | `coinjure/live/live_trader.py`                                             | Run via `run_live_polymarket_trading()`      |
+| Entry Point       | File                            | Description                                                       |
+| ----------------- | ------------------------------- | ----------------------------------------------------------------- |
+| **CLI**           | `coinjure/cli/cli.py`           | `cli()` — registers `market`, `engine`, and `hub` command groups  |
+| **Backtesting**   | `coinjure/engine/backtester.py` | `run_backtest_parquet()` or via `coinjure engine backtest`        |
+| **Paper Trading** | `coinjure/engine/runner.py`     | `run_live_paper_trading()` or via `coinjure engine paper-run`     |
+| **Live Trading**  | `coinjure/engine/runner.py`     | `run_live_polymarket_trading()` or via `coinjure engine live-run` |
 
 ### 4.3 Execution Flow Overview
 
 ```
-User command / script
+User command (coinjure engine paper-run / live-run / backtest)
     ↓
-CLI (cli.py) or examples / live_trader
+CLI (cli.py → engine_commands.py)
     ↓
-TradingEngine(data_source, strategy, trader)
+runner.py → TradingEngine(data_source, strategy, trader)
     ↓
 engine.start(): loops calling data_source.get_next_event()
     ↓
@@ -182,7 +188,7 @@ strategy.process_event(event, trader)
     ↓
 Strategy internally calls trader.place_order()
     ↓
-PaperTrader or PolymarketTrader executes order and updates position_manager
+PaperTrader / PolymarketTrader / KalshiTrader executes order and updates position_manager
 ```
 
 ---
@@ -192,35 +198,25 @@ PaperTrader or PolymarketTrader executes order and updates position_manager
 ### Backtesting
 
 ```bash
-python examples/backtest_example.py
+coinjure engine backtest --relation-id <REL_ID>
 ```
 
-### Paper Trading (RSS News)
+### Paper Trading
 
 ```bash
-python examples/live_paper_trading_example.py
-# or
-python -c "
-import asyncio
-from decimal import Decimal
-from coinjure.data.live.polymarket_data_source import LiveRSSNewsDataSource
-from coinjure.live.live_trader import run_live_paper_trading
-from coinjure.strategy.demo import DemoStrategy
+coinjure engine paper-run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
+```
 
-asyncio.run(run_live_paper_trading(
-    data_source=LiveRSSNewsDataSource(polling_interval=60.0),
-    strategy=TestStrategy(),
-    initial_capital=Decimal('10000'),
-    duration=300,
-))
-"
+### Live Trading
+
+```bash
+coinjure engine live-run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
 ```
 
 ### Monitoring
 
 ```bash
-coinjure monitor
-coinjure monitor --watch --refresh 1.0
+coinjure engine monitor
 ```
 
 ---
