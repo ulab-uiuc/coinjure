@@ -4,7 +4,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/coinjure.svg)](https://pypi.org/project/coinjure/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
 
-**Coinjure** is an intelligent trading agent for [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) prediction markets, powered by Social World Models and LLM-driven decision making. It combines real-time market data, news sentiment analysis, and Large Language Models to automate trading decisions.
+**Coinjure** is a trading agent harness for [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) prediction markets. It empowers LLM agents to drive the entire strategy lifecycle purely through CLI commands — autonomously discovering cross-market relations, building executable strategies, running large-scale backtests, and deploying to live execution.
 
 ## Key Features
 

@@ -1,7 +1,7 @@
 ![Coinjure](assets/coinjure.png)
 
 <h1 align="center">
-  Agent-Native Trading Harness for Prediction Markets
+  Trading Agent Harness for Prediction Markets
 </h1>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <a href="https://ulab-uiuc.github.io/prediction-market-cli/docs/index.html"><img src="https://img.shields.io/badge/Docs-Read-blue" alt="Docs"></a>
 </p>
 
-**Coinjure** is an agent-native trading framework for prediction markets. It empowers LLM agents to drive the entire strategy lifecycle purely through CLI commands — autonomously discovering cross-market relations, building executable strategies, running large-scale backtests, and deploying to live execution.
+**Coinjure** is a trading agent harness for prediction markets. It empowers LLM agents to drive the entire strategy lifecycle purely through CLI commands — autonomously discovering cross-market relations, building executable strategies, running large-scale backtests, and deploying to live execution.
 
 Using Coinjure, LLM agents can discover over 100 backtest-positive strategies in a single hour — a capability validated by deploying to live trading and generating real profit on prediction market exchanges.
 
@@ -165,7 +165,7 @@ If you find Coinjure useful in your research or work, please cite:
 
 ```bibtex
 @software{coinjure2026,
-  title   = {Coinjure: An Agent-Native Trading Harness for Prediction Markets},
+  title   = {Coinjure: A Trading Agent Harness for Prediction Markets},
   author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
   year    = {2026},
   url     = {https://github.com/ulab-uiuc/prediction-market-cli},
