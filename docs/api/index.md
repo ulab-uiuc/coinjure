@@ -1,6 +1,6 @@
 # API Reference
 
-Coinjure's Python API is organized into a few key modules. Most users interact with Coinjure through the CLI, but the Python API is useful for writing custom strategies or extending the system programmatically.
+Coinjure's Python API is organized into a few key modules. Most users interact with Coinjure through the CLI, but the Python API is useful for writing custom strategies or extending the harness programmatically.
 
 ## Modules
 

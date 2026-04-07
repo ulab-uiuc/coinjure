@@ -546,8 +546,8 @@ class TradingMonitor:
             border_style=border_style,
         )
 
-    def _create_system_status_panel(self) -> Panel:
-        """Create compact system status bar."""
+    def _create_harness_status_panel(self) -> Panel:
+        """Create compact harness status bar."""
         event_count = getattr(self, 'event_count', 0)
         ob_count = getattr(self, 'ob_count', 0)
         news_count = len(getattr(self, 'news_headlines', []))
@@ -568,7 +568,7 @@ class TradingMonitor:
 
         return Panel(
             status_line,
-            title='[bold]System Status[/bold]',
+            title='[bold]Harness Status[/bold]',
             border_style='bright_green',
         )
 
@@ -652,8 +652,8 @@ class TradingMonitor:
             )
         )
 
-        # System status bar
-        layout['status_bar'].update(self._create_system_status_panel())
+        # Harness status bar
+        layout['status_bar'].update(self._create_harness_status_panel())
 
         # Footer with keyboard shortcuts
         panel_labels = {

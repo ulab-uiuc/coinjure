@@ -1,7 +1,7 @@
 ![Coinjure](assets/coinjure.png)
 
 <h1 align="center">
-  Agent-Native Trading System for Prediction Markets
+  Agent-Native Trading Harness for Prediction Markets
 </h1>
 
 <p align="center">
@@ -84,7 +84,7 @@ coinjure engine killswitch --on # emergency halt
 
 ![Coinjure Monitor](assets/coinjure_monitor.png)
 
-## System Overview
+## Architecture Overview
 
 The pipeline has four stages:
 
@@ -165,7 +165,7 @@ If you find Coinjure useful in your research or work, please cite:
 
 ```bibtex
 @software{coinjure2026,
-  title   = {Coinjure: An Agent-Native Trading System for Prediction Markets},
+  title   = {Coinjure: An Agent-Native Trading Harness for Prediction Markets},
   author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
   year    = {2026},
   url     = {https://github.com/ulab-uiuc/prediction-market-cli},
