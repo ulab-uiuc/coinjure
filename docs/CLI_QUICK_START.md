@@ -182,4 +182,4 @@ coinjure monitor > session_report.txt
 Issues? Questions? See:
 
 - [CLI Monitoring Documentation](CLI_MONITORING.md)
-- [GitHub Issues](https://github.com/ulab-uiuc/prediction-market-cli/issues)
+- [GitHub Issues](https://github.com/ulab-uiuc/coinjure/issues)
