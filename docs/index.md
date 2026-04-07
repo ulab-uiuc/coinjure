@@ -53,20 +53,20 @@ Python >= 3.10, < 3.12
 import asyncio
 from decimal import Decimal
 
-from coinjure.core.trading_engine import TradingEngine
-from coinjure.data.backtest.historical_data_source import HistoricalDataSource
-from coinjure.data.market_data_manager import MarketDataManager
-from coinjure.position.position_manager import Position, PositionManager
-from coinjure.risk.risk_manager import NoRiskManager
+from coinjure.engine.engine import TradingEngine
+from coinjure.data.backtest.parquet import ParquetDataSource
+from coinjure.data.manager import DataManager
+from coinjure.trading.position import Position, PositionManager
+from coinjure.trading.risk import NoRiskManager
 from coinjure.strategy.demo import DemoStrategy
-from coinjure.ticker.ticker import CashTicker, PolyMarketTicker
-from coinjure.trader.paper_trader import PaperTrader
+from coinjure.ticker import CashTicker, PolyMarketTicker
+from coinjure.engine.trader.paper import PaperTrader
 
 async def run():
     ticker = PolyMarketTicker(symbol="my_market", name="My Market",
                                market_id="123", event_id="456")
-    data_source = HistoricalDataSource("data.jsonl", ticker)
-    market_data = MarketDataManager()
+    data_source = ParquetDataSource("data.parquet", ticker)
+    market_data = DataManager()
     position_manager = PositionManager()
     position_manager.update_position(
         Position(ticker=CashTicker.POLYMARKET_USDC, quantity=Decimal("10000"),
@@ -76,7 +76,7 @@ async def run():
                          position_manager=position_manager,
                          min_fill_rate=Decimal("0.5"), max_fill_rate=Decimal("1.0"),
                          commission_rate=Decimal("0.0"))
-    engine = TradingEngine(data_source=data_source, strategy=TestStrategy(), trader=trader)
+    engine = TradingEngine(data_source=data_source, strategy=DemoStrategy(), trader=trader)
     await engine.start()
     print(f"Final PnL: {position_manager.get_total_realized_pnl()}")
 
@@ -87,8 +87,8 @@ asyncio.run(run())
 
 ```python
 from coinjure.strategy.strategy import Strategy
-from coinjure.events.events import Event
-from coinjure.trader.trader import Trader
+from coinjure.events import Event
+from coinjure.trading.trader import Trader
 
 class MyStrategy(Strategy):
     async def process_event(self, event: Event, trader: Trader) -> None:
@@ -99,30 +99,31 @@ class MyStrategy(Strategy):
 ## CLI Commands
 
 ```bash
-# Strategy scaffolding + validation
-coinjure strategy create --output ./strategies/my_strategy.py --class-name MyStrategy
-coinjure strategy validate --strategy-ref ./strategies/my_strategy.py:MyStrategy
+# Market discovery & relations
+coinjure market discover --exchange polymarket
+coinjure market info --exchange polymarket --market-id <ID>
+coinjure market news --source google --query "prediction markets"
+coinjure market relations list
+coinjure market relations add <RELATION_JSON>
 
 # Backtest mode
-coinjure backtest run \
-  --history-file ./data/history.jsonl \
-  --market-id M1 --event-id E1 \
-  --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure engine backtest --relation-id <REL_ID>
 
 # Paper trading (simulation with live data)
-coinjure paper run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
-coinjure paper run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure engine paper-run --exchange polymarket --strategy-ref ./strategies/my_strategy.py:MyStrategy
+coinjure engine paper-run --exchange kalshi --strategy-ref ./strategies/my_strategy.py:MyStrategy
 
 # Real trading
-coinjure live run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
-coinjure live run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
+coinjure engine live-run --exchange polymarket --wallet-private-key "$POLYMARKET_PRIVATE_KEY"
+coinjure engine live-run --exchange kalshi --kalshi-api-key-id "$KALSHI_API_KEY_ID" --kalshi-private-key-path "$KALSHI_PRIVATE_KEY_PATH"
 
 # Operator monitor + emergency control
-coinjure monitor
-coinjure trade status
-coinjure trade pause
-coinjure trade resume
-coinjure trade stop
+coinjure engine monitor
+coinjure engine status
+coinjure engine pause
+coinjure engine resume
+coinjure engine stop
+coinjure engine killswitch
 ```
 
 ## Risk Management

@@ -20,17 +20,9 @@ Using Coinjure, agents like Claude Code or Codex can discover over 100 backtest-
 
 ## Demos
 
-### 1min Introduction of Coinjure
-
-[![1min Introduction of Coinjure](https://img.youtube.com/vi/u5PdMAVDqiM/maxresdefault.jpg)](https://youtu.be/u5PdMAVDqiM)
-
-### Basic Functionality Demo of Coinjure
-
-[![Basic Functionality Demo of Coinjure](https://img.youtube.com/vi/1Iro-NPfFnY/maxresdefault.jpg)](https://youtu.be/1Iro-NPfFnY)
-
-### Claude Code + Coinjure Demo
-
-[![Claude Code + Coinjure Demo](https://img.youtube.com/vi/2gxla8qlrDU/maxresdefault.jpg)](https://youtu.be/2gxla8qlrDU)
+- [1min Introduction of Coinjure](https://youtu.be/u5PdMAVDqiM)
+- [Basic Functionality Demo of Coinjure](https://youtu.be/1Iro-NPfFnY)
+- [Claude Code + Coinjure Demo](https://youtu.be/2gxla8qlrDU)
 
 ## Why Agent-Native
 
