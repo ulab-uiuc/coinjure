@@ -1,4 +1,4 @@
-![Coinjure](assets/coinjure_mascot.png)
+![Coinjure](assets/coinjure.png)
 
 <h1 align="center">
   Trading Agent Harness for Prediction Markets
