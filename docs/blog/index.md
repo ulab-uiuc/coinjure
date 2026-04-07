@@ -7,7 +7,7 @@
 ### 1min Introduction of Coinjure
 
 <div class="video-container">
-  <iframe src="https://www.youtube.com/embed/NvRhYB-yWLM" title="1min Introduction of Coinjure" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+  <iframe src="https://www.youtube.com/embed/TbHq0bI6hvo" title="1min Introduction of Coinjure" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 </div>
 
 ### Basic Functionality Demo of Coinjure
