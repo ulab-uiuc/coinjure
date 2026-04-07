@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://img.shields.io/pypi/v/coinjure.svg)](https://pypi.org/project/coinjure/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/ulab-uiuc/coinjure/blob/main/LICENSE)
 
 **Coinjure** is a trading agent harness for [Polymarket](https://polymarket.com/) and [Kalshi](https://kalshi.com/) prediction markets. It empowers LLM agents to drive the entire strategy lifecycle purely through CLI commands — autonomously discovering cross-market relations, building executable strategies, running large-scale backtests, and deploying to live execution.
 
@@ -36,7 +36,7 @@ pip install coinjure
 Or install from source with [Poetry](https://python-poetry.org/):
 
 ```bash
-git clone https://github.com/ulab-uiuc/prediction-market-cli.git
+git clone https://github.com/ulab-uiuc/coinjure.git
 cd coinjure
 pip install poetry
 poetry install
@@ -148,7 +148,7 @@ export NEWS_API_KEY="your_news_api_key"             # Optional, for News API sou
 
 ## License
 
-[MIT](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
+[MIT](https://github.com/ulab-uiuc/coinjure/blob/main/LICENSE)
 
 !!! warning "Disclaimer"
 This software is for **educational and research purposes only**. Trading involves substantial risk of loss. Always test strategies with paper trading before using real funds.

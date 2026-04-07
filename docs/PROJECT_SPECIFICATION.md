@@ -61,7 +61,7 @@
 ## 3. Project Directory Structure
 
 ```
-prediction-market-cli/
+coinjure/
 ├── coinjure/                        # Main package
 │   ├── ticker.py                    # Ticker, PolyMarketTicker, KalshiTicker, CashTicker
 │   ├── events.py                    # Event, PriceChangeEvent, OrderBookEvent, NewsEvent

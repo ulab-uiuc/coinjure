@@ -5,8 +5,8 @@ description = "A trading agent harness for prediction markets"
 authors = ["Haofei Yu <yuhaofei44@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/ulab-uiuc/prediction-market-cli"
-homepage = "https://ulab-uiuc.github.io/prediction-market-cli"
+repository = "https://github.com/ulab-uiuc/coinjure"
+homepage = "https://ulab-uiuc.github.io/coinjure"
 keywords = [
     "polymarket",
     "kalshi",

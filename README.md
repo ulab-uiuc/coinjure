@@ -7,11 +7,11 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="https://pypi.org/project/coinjure/"><img src="https://img.shields.io/pypi/v/coinjure.svg" alt="PyPI version"></a>
-  <a href="https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <a href="https://github.com/ulab-uiuc/coinjure/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://join.slack.com/t/coinjure/shared_invite/zt-3uji79vht-thjQnb4LJtLrN13pifTIuw"><img src="https://img.shields.io/badge/Slack-Join%20Us-purple?logo=slack" alt="Slack"></a>
   <a href="assets/coinjure_wechat_link.jpg"><img src="https://img.shields.io/badge/WeChat-Join%20Us-green?logo=wechat" alt="WeChat"></a>
-  <a href="https://ulab-uiuc.github.io/prediction-market-cli/"><img src="https://img.shields.io/badge/Blog-Read-orange" alt="Blog"></a>
-  <a href="https://ulab-uiuc.github.io/prediction-market-cli/docs/index.html"><img src="https://img.shields.io/badge/Docs-Read-blue" alt="Docs"></a>
+  <a href="https://ulab-uiuc.github.io/coinjure/"><img src="https://img.shields.io/badge/Blog-Read-orange" alt="Blog"></a>
+  <a href="https://ulab-uiuc.github.io/coinjure/docs/index.html"><img src="https://img.shields.io/badge/Docs-Read-blue" alt="Docs"></a>
 </p>
 
 **Coinjure** is a trading agent harness for prediction markets. It empowers LLM agents to drive the entire strategy lifecycle purely through CLI commands — autonomously discovering cross-market relations, building executable strategies, running large-scale backtests, and deploying to live execution.
@@ -33,8 +33,8 @@ pip install coinjure
 From source:
 
 ```bash
-git clone https://github.com/ulab-uiuc/prediction-market-cli.git
-cd prediction-market-cli
+git clone https://github.com/ulab-uiuc/coinjure.git
+cd coinjure
 pip install poetry
 poetry install
 ```
@@ -168,14 +168,14 @@ If you find Coinjure useful in your research or work, please cite:
   title   = {Coinjure: A Trading Agent Harness for Prediction Markets},
   author  = {Yu, Haofei and Yang, Yicheng and Liu, Yuxiang and You, Jiaxuan},
   year    = {2026},
-  url     = {https://github.com/ulab-uiuc/prediction-market-cli},
+  url     = {https://github.com/ulab-uiuc/coinjure},
   note    = {University of Illinois Urbana-Champaign}
 }
 ```
 
 ## License
 
-[MIT](https://github.com/ulab-uiuc/prediction-market-cli/blob/main/LICENSE)
+[MIT](https://github.com/ulab-uiuc/coinjure/blob/main/LICENSE)
 
 ## Disclaimer
 

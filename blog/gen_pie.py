@@ -194,7 +194,7 @@ for ax in axes:
     ax.set_aspect('equal')
 
 plt.savefig(
-    '/Users/yuhaofei/Downloads/prediction-market-cli/blog/trading_loop.png',
+    '/Users/yuhaofei/Downloads/coinjure/blog/trading_loop.png',
     dpi=200,
     bbox_inches='tight',
     facecolor='#f3f6fb',
